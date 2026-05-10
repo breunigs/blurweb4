@@ -1,0 +1,19 @@
+{
+  "name": "blurweb4",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node build.mjs --dev",
+    "build": "node build.mjs",
+    "test": "playwright test"
+  },
+  "dependencies": {
+    "mediabunny": "^1.44.2"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.59.1",
+    "esbuild": "^0.28.0",
+    "typescript": "^6.0.3"
+  }
+}
