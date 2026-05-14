@@ -6,13 +6,17 @@
   "scripts": {
     "dev": "node build.mjs --dev",
     "build": "node build.mjs",
+    "build:hevc": "node scripts/build-hevc.mjs",
     "test": "playwright test"
   },
   "dependencies": {
-    "mediabunny": "^1.44.2"
+    "libav.js": "^6.8.8",
+    "mediabunny": "^1.44.2",
+    "onnxruntime-web": "^1.26.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.59.1",
+    "@types/node": "^25.7.0",
     "esbuild": "^0.28.0",
     "typescript": "^6.0.3"
   }
