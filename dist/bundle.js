@@ -17,9 +17,16 @@ function timestamp() {
   const ms2 = d.getMilliseconds().toString().padStart(3, "0");
   return `${h}:${m}:${s}.${ms2}`;
 }
+function safeStringify(a) {
+  try {
+    return JSON.stringify(a);
+  } catch {
+    return String(a);
+  }
+}
 function record(level, args) {
   const msg = args.map(
-    (a) => typeof a === "string" ? a : a instanceof Error ? `${a.message}` : typeof a === "object" ? JSON.stringify(a) : String(a)
+    (a) => typeof a === "string" ? a : a instanceof Error ? `${a.message}` : typeof a === "object" ? safeStringify(a) : String(a)
   ).join(" ");
   entries.push(`[${timestamp()}] ${level} ${msg}`);
   if (entries.length > MAX_ENTRIES) entries.shift();
@@ -40,6 +47,13 @@ console.error = (...args) => {
   origError(...args);
   record("ERROR", args);
 };
+record("LOG  ", [`userAgent: ${navigator.userAgent}`]);
+record("LOG  ", [`platform: ${navigator.platform ?? "n/a"}`]);
+record("LOG  ", [`screen: ${screen.width}\xD7${screen.height} devicePixelRatio=${window.devicePixelRatio}`]);
+record("LOG  ", [`language: ${navigator.language}`]);
+record("LOG  ", [`hardwareConcurrency: ${navigator.hardwareConcurrency ?? "n/a"}`]);
+record("LOG  ", [`WebCodecs: ${"VideoDecoder" in window ? "available" : "unavailable"}`]);
+record("LOG  ", [`WebGPU: ${"gpu" in navigator ? "available" : "unavailable"}`]);
 function setOnUpdate(cb2) {
   onUpdateCallback = cb2;
 }
@@ -50,7 +64,26 @@ function clearEntries() {
   entries.length = 0;
 }
 function copyToClipboard() {
-  return navigator.clipboard.writeText(entries.join("\n"));
+  const text = entries.join("\n");
+  if (navigator.clipboard?.writeText) {
+    return navigator.clipboard.writeText(text).catch(() => execCommandCopy(text));
+  }
+  return execCommandCopy(text);
+}
+function execCommandCopy(text) {
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.style.cssText = "position:fixed;top:0;left:0;opacity:0;pointer-events:none";
+  ta.readOnly = true;
+  document.body.appendChild(ta);
+  ta.focus();
+  ta.setSelectionRange(0, 999999);
+  try {
+    document.execCommand("copy");
+  } finally {
+    document.body.removeChild(ta);
+  }
+  return Promise.resolve();
 }
 window.__debugLog = { getEntries, copyToClipboard };
 
@@ -401,8 +434,8 @@ var computeRationalApproximation = (x, maxDenominator) => {
     const nextDenominator = integer * currDenominator + prevDenominator;
     if (nextDenominator > maxDenominator) {
       return {
-        numerator: sign * currNumerator,
-        denominator: currDenominator
+        num: sign * currNumerator,
+        den: currDenominator
       };
     }
     prevNumerator = currNumerator;
@@ -415,8 +448,8 @@ var computeRationalApproximation = (x, maxDenominator) => {
     }
   }
   return {
-    numerator: sign * currNumerator,
-    denominator: currDenominator
+    num: sign * currNumerator,
+    den: currDenominator
   };
 };
 var CallSerializer = class {
