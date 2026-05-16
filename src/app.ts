@@ -23,6 +23,7 @@ interface MediaItem {
   exportRow: HTMLElement;
   exportBarFill: HTMLElement;
   exportEtaEl: HTMLElement;
+  usesLibav: boolean;
 }
 
 function formatTime(s: number): string {
@@ -80,6 +81,7 @@ export class App {
   private trimDurationLabel!: HTMLElement;
   private detectStatusInline!: HTMLElement;
   private detectResultEl!: HTMLElement;
+  private libavWarningEl!: HTMLElement;
   private loadedSummary!: HTMLElement;
   private stepPreviewSubtitle!: HTMLElement;
 
@@ -108,6 +110,7 @@ export class App {
     this.trimDurationLabel  = document.getElementById('trim-duration-label')!;
     this.detectStatusInline = document.getElementById('detect-status-inline')!;
     this.detectResultEl     = document.getElementById('detect-result')!;
+    this.libavWarningEl     = document.getElementById('libav-warning')!;
     this.loadedSummary      = document.getElementById('loaded-summary')!;
     this.stepPreviewSubtitle= document.getElementById('step-preview-subtitle')!;
 
@@ -479,7 +482,7 @@ export class App {
     const item: MediaItem = {
       name: file.name, isVideo, file, wrapper, canvas,
       exportRow, exportBarFill: rowBarFill, exportEtaEl: rowEta,
-      loaded: false, exported: false,
+      loaded: false, exported: false, usesLibav: false,
     };
     this.items.push(item);
 
@@ -496,6 +499,11 @@ export class App {
       const player = new VideoPlayer(canvas, this.detectStatusInline);
       item.player = player;
       (window as unknown as Record<string, unknown>).__activePlayer = player;
+
+      player.onLibavFallback = () => {
+        item.usesLibav = true;
+        if (this.activeIndex === index) this.libavWarningEl.hidden = false;
+      };
 
       // Show detection result summary when this player's frame is detected.
       // Only update UI if this item is the active one.
@@ -581,6 +589,8 @@ export class App {
     } else {
       this.trimSection.classList.remove('visible');
     }
+
+    this.libavWarningEl.hidden = !item.usesLibav;
 
     this.updateFileNav();
     this.updateExportBtnState();

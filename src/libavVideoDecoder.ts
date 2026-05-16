@@ -137,6 +137,7 @@ export class LibavVideoFallbackDecoder extends CustomVideoDecoder {
       time_base: [1, 1_000_000],
     }) as [number, number, number, number];
 
+    window.dispatchEvent(new CustomEvent('libavfallback', { detail: codec }));
     console.log(`[libavVideoDecoder] ${codec} (${codecName}) decoder initialized`);
   }
 
