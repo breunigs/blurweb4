@@ -4,22 +4,16 @@ import { exportAsJpeg } from './imageExporter';
 export interface ExportItem {
   name: string;
   isVideo: boolean;
-  /** For images: the canvas already holding the decoded pixels. */
   canvas?: HTMLCanvasElement;
-  /** For videos: the original File object (re-read for encoding). */
   file?: File;
-  /** Element whose style.width we update during video encoding (0–100%). */
-  progressFill: HTMLElement | null;
-  /** Wrapper element to show/hide the progress bar track. */
-  progressTrack: HTMLElement | null;
+  trimStart?: number;
+  trimEnd?: number;
 }
 
 export interface BatchCallbacks {
-  /** Called when any file starts processing (0-based index). */
   onFileStart: (index: number) => void;
-  /** Called when a file finishes (successfully or not). */
+  onFileProgress: (index: number, progress: number) => void;
   onFileEnd: (index: number, error?: Error) => void;
-  /** Called after each completed file with overall count. Images complete instantly. */
   onGlobalProgress: (completed: number, total: number) => void;
 }
 
@@ -41,21 +35,19 @@ export async function runBatch(items: ExportItem[], cb: BatchCallbacks): Promise
 
     try {
       if (!item.isVideo) {
-        // ── Image: encode as JPEG (fast, no progress bar) ──────────────
+        cb.onFileProgress(i, 1);
         const { blob, filename } = await exportAsJpeg(item.canvas!, item.name);
         triggerDownload(blob, filename);
       } else {
-        // ── Video: re-encode ────────────────────────────────────────────
-        if (item.progressTrack) item.progressTrack.hidden = false;
-
-        const { buffer, filename } = await encodeVideo(item.file!, (p) => {
-          if (item.progressFill) item.progressFill.style.width = `${Math.round(p * 100)}%`;
-        });
-
-        if (item.progressFill) item.progressFill.style.width = '100%';
+        const { buffer, filename } = await encodeVideo(
+          item.file!,
+          (p) => cb.onFileProgress(i, p),
+          item.trimStart,
+          item.trimEnd,
+        );
+        cb.onFileProgress(i, 1);
         triggerDownload(buffer, filename);
       }
-
       cb.onFileEnd(i);
     } catch (err) {
       console.error(`Export failed for "${item.name}":`, err);

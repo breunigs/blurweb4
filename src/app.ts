@@ -3,131 +3,312 @@ import { VideoPlayer } from './videoPlayer';
 import { runBatch } from './batchExporter';
 import type { ExportItem } from './batchExporter';
 import {
-  getCachedDetections, scheduleInference, drawDetections,
-  makeImageKey, getAverageInferenceMs,
+  getCachedDetections, scheduleInference, applyDetections,
+  makeImageKey, getAverageInferenceMs, setModel,
 } from './detector';
+import { getConfig, setConfig, type AppConfig, type ModelChoice } from './config';
 
 interface MediaItem {
   name: string;
   isVideo: boolean;
   file: File;
-  tab: HTMLButtonElement;
   wrapper: HTMLDivElement;
   canvas: HTMLCanvasElement;
-  /** Status bar element showing "detecting…" while inference is pending. */
-  statusEl: HTMLElement;
   player?: VideoPlayer;
   loaded: boolean;
   exported: boolean;
-  /** Video-only: progress bar track element (hidden until export). */
-  progressTrack: HTMLElement | null;
-  /** Video-only: progress bar fill element. */
-  progressFill: HTMLElement | null;
+  trimStart?: number;
+  trimEnd?: number;
+  exportRow: HTMLElement;
+  exportBarFill: HTMLElement;
+  exportEtaEl: HTMLElement;
 }
 
-function formatTime(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
-  return `${m}:${s.toString().padStart(2, '0')}`;
+function formatTime(s: number): string {
+  const m = Math.floor(s / 60);
+  const sec = (s % 60).toFixed(3).padStart(6, '0');
+  return `${m}:${sec}`;
+}
+
+function formatEta(ms: number): string {
+  const s = Math.round(ms / 1000);
+  if (s < 5)  return 'almost done';
+  if (s < 60) return `~${s}s`;
+  const m = Math.floor(s / 60), rs = s % 60;
+  return `~${m}m ${rs.toString().padStart(2, '0')}s`;
 }
 
 export class App {
   private items: MediaItem[] = [];
   private activeIndex = -1;
-  private seeking = false;
   private exporting = false;
+  private prevModel: ModelChoice = getConfig().model;
 
-  private dropZone!: HTMLElement;
-  private tabBar!: HTMLElement;
+  // DOM refs
   private previewArea!: HTMLElement;
-  private emptyState!: HTMLElement;
-  private controls!: HTMLElement;
-  private playBtn!: HTMLButtonElement;
-  private seekBar!: HTMLInputElement;
-  private timeDisplay!: HTMLElement;
-  private fileInput!: HTMLInputElement;
+  private fileSelect!: HTMLSelectElement;
+  private fileNav!: HTMLElement;
+  private fileCounter!: HTMLElement;
+  private navPrev!: HTMLButtonElement;
+  private navNext!: HTMLButtonElement;
   private exportBtn!: HTMLButtonElement;
-  private globalProgress!: HTMLElement;
+  private exportAllBtn!: HTMLButtonElement;
   private globalProgressFill!: HTMLElement;
+  private globalEta!: HTMLElement;
+  private exportGlobalRow!: HTMLElement;
+  private exportFileRows!: HTMLElement;
+  private modelLoadProgress!: HTMLElement;
+  private modelLoadBarFill!: HTMLElement;
+  private modelLoadText!: HTMLElement;
+  private trimSection!: HTMLElement;
+  private trimStartInput!: HTMLInputElement;
+  private trimEndInput!: HTMLInputElement;
+  private trimTrackFill!: HTMLElement;
+  private trimStartLabel!: HTMLElement;
+  private trimEndLabel!: HTMLElement;
+  private trimDurationLabel!: HTMLElement;
+  private detectStatusInline!: HTMLElement;
+  private loadedSummary!: HTMLElement;
+  private stepPreviewSubtitle!: HTMLElement;
 
   init(): void {
-    this.dropZone          = document.getElementById('drop-zone')!;
-    this.tabBar            = document.getElementById('tab-bar')!;
-    this.previewArea       = document.getElementById('preview-area')!;
-    this.emptyState        = document.getElementById('empty-state')!;
-    this.controls          = document.getElementById('controls')!;
-    this.playBtn           = document.getElementById('play-btn') as HTMLButtonElement;
-    this.seekBar           = document.getElementById('seek-bar') as HTMLInputElement;
-    this.timeDisplay       = document.getElementById('time-display')!;
-    this.fileInput         = document.getElementById('file-input') as HTMLInputElement;
-    this.exportBtn         = document.getElementById('export-btn') as HTMLButtonElement;
-    this.globalProgress    = document.getElementById('global-progress')!;
+    this.previewArea        = document.getElementById('preview-area')!;
+    this.fileSelect         = document.getElementById('file-select') as HTMLSelectElement;
+    this.fileNav            = document.getElementById('file-nav')!;
+    this.fileCounter        = document.getElementById('file-counter')!;
+    this.navPrev            = document.getElementById('nav-prev') as HTMLButtonElement;
+    this.navNext            = document.getElementById('nav-next') as HTMLButtonElement;
+    this.exportBtn          = document.getElementById('export-btn') as HTMLButtonElement;
+    this.exportAllBtn       = document.getElementById('export-all-btn') as HTMLButtonElement;
     this.globalProgressFill = document.getElementById('global-progress-fill')!;
+    this.globalEta          = document.getElementById('global-eta')!;
+    this.exportGlobalRow    = document.getElementById('export-global-row')!;
+    this.exportFileRows     = document.getElementById('export-file-rows')!;
+    this.modelLoadProgress  = document.getElementById('model-load-progress')!;
+    this.modelLoadBarFill   = document.getElementById('model-load-bar-fill')!;
+    this.modelLoadText      = document.getElementById('model-load-text')!;
+    this.trimSection        = document.getElementById('trim-section')!;
+    this.trimStartInput     = document.getElementById('trim-start') as HTMLInputElement;
+    this.trimEndInput       = document.getElementById('trim-end') as HTMLInputElement;
+    this.trimTrackFill      = document.getElementById('trim-track-fill')!;
+    this.trimStartLabel     = document.getElementById('trim-start-label')!;
+    this.trimEndLabel       = document.getElementById('trim-end-label')!;
+    this.trimDurationLabel  = document.getElementById('trim-duration-label')!;
+    this.detectStatusInline = document.getElementById('detect-status-inline')!;
+    this.loadedSummary      = document.getElementById('loaded-summary')!;
+    this.stepPreviewSubtitle= document.getElementById('step-preview-subtitle')!;
 
     this.bindEvents();
+    this.syncConfigUI();
+
+    // Test globals
+    const w = window as unknown as Record<string, unknown>;
+    w.__setDrawMode  = (m: string) => setConfig({ drawMode: m as AppConfig['drawMode'] });
+    w.__setTrimStart = (t: number) => {
+      const item = this.items[this.activeIndex];
+      if (item?.isVideo) this.applyTrimStart(item, t);
+    };
+    // Sets trim without re-seeking (avoids triggering new inference for the test).
+    w.__setTrimStartSilent = (t: number) => {
+      const item = this.items[this.activeIndex];
+      if (item?.isVideo) { item.trimStart = t; }
+    };
   }
+
+  private syncConfigUI(): void {
+    const cfg = getConfig();
+    const mr = document.querySelector<HTMLInputElement>(`input[name="model"][value="${cfg.model}"]`);
+    if (mr) mr.checked = true;
+    const dr = document.querySelector<HTMLInputElement>(`input[name="drawMode"][value="${cfg.drawMode}"]`);
+    if (dr) dr.checked = true;
+  }
+
+  // ── Inference status ────────────────────────────────────────────────────────
+
+  private showDetecting(on: boolean): void {
+    if (on) {
+      const avg = getAverageInferenceMs();
+      this.detectStatusInline.textContent = avg === null
+        ? 'Detecting…'
+        : `Detecting… (~${(avg / 1000).toFixed(1)}s)`;
+      this.detectStatusInline.classList.add('visible');
+    } else {
+      this.detectStatusInline.classList.remove('visible');
+    }
+  }
+
+  // ── File nav ────────────────────────────────────────────────────────────────
+
+  private updateFileNav(): void {
+    const n = this.items.length;
+    const i = this.activeIndex;
+    if (n > 1) {
+      this.fileNav.classList.add('visible');
+      this.fileCounter.textContent = `${i + 1} / ${n}`;
+      this.navPrev.disabled = i <= 0;
+      this.navNext.disabled = i >= n - 1;
+    } else {
+      this.fileNav.classList.remove('visible');
+    }
+    // Update subtitle in step header
+    this.stepPreviewSubtitle.textContent = n > 0 ? this.items[i]?.name ?? '' : '';
+  }
+
+  private updateLoadedSummary(): void {
+    const n = this.items.length;
+    this.loadedSummary.textContent = n === 0 ? '' : `${n} file${n > 1 ? 's' : ''} loaded`;
+  }
+
+  // ── Trim slider ─────────────────────────────────────────────────────────────
+
+  private updateTrimFill(): void {
+    const s   = Number(this.trimStartInput.value);
+    const e   = Number(this.trimEndInput.value);
+    const max = Number(this.trimStartInput.max);
+    this.trimTrackFill.style.left  = `${(s / max) * 100}%`;
+    this.trimTrackFill.style.width = `${((e - s) / max) * 100}%`;
+  }
+
+  private updateTrimLabels(item: MediaItem): void {
+    const dur = item.player!.duration;
+    const s   = item.trimStart ?? 0;
+    const e   = item.trimEnd   ?? dur;
+    this.trimStartLabel.textContent    = formatTime(s);
+    this.trimEndLabel.textContent      = formatTime(e);
+    this.trimDurationLabel.textContent = `${(e - s).toFixed(2)}s selected`;
+  }
+
+  private applyTrimStart(item: MediaItem, sec: number): void {
+    item.trimStart = sec;
+    const steps = Number(this.trimStartInput.max);
+    const dur   = item.player!.duration;
+    this.trimStartInput.value = String(Math.round((sec / dur) * steps));
+    this.updateTrimFill();
+    this.updateTrimLabels(item);
+    item.player!.seekTo(sec);
+  }
+
+  // ── Events ──────────────────────────────────────────────────────────────────
 
   private bindEvents(): void {
     document.addEventListener('dragover', e => e.preventDefault());
     document.addEventListener('drop', e => {
       e.preventDefault();
-      this.dropZone.classList.remove('drag-over');
-      const files = e.dataTransfer?.files;
-      if (files?.length) this.addFiles(files);
+      document.getElementById('drop-zone')?.classList.remove('drag-over');
+      if (e.dataTransfer?.files?.length) this.addFiles(e.dataTransfer.files);
+    });
+    document.addEventListener('dragenter', () =>
+      document.getElementById('drop-zone')?.classList.add('drag-over'));
+    document.addEventListener('dragleave', e => {
+      if (e.relatedTarget === null)
+        document.getElementById('drop-zone')?.classList.remove('drag-over');
     });
 
-    this.dropZone.addEventListener('dragenter', () =>
-      this.dropZone.classList.add('drag-over'));
-    this.dropZone.addEventListener('dragleave', e => {
-      if (!this.dropZone.contains(e.relatedTarget as Node))
-        this.dropZone.classList.remove('drag-over');
+    // Drop zone click also opens picker
+    document.getElementById('drop-zone')!.addEventListener('click', () =>
+      (document.getElementById('file-input') as HTMLInputElement).click());
+
+    const openPicker = () => (document.getElementById('file-input') as HTMLInputElement).click();
+    document.getElementById('pick-btn')!.addEventListener('click', openPicker);
+    const fi = document.getElementById('file-input') as HTMLInputElement;
+    fi.addEventListener('change', () => {
+      if (fi.files?.length) this.addFiles(fi.files);
+      fi.value = '';
     });
 
-    document.getElementById('pick-btn')!.addEventListener('click', () =>
-      this.fileInput.click());
+    this.fileSelect.addEventListener('change', () => this.switchTo(this.fileSelect.selectedIndex));
+    this.navPrev.addEventListener('click', () => { if (this.activeIndex > 0) this.switchTo(this.activeIndex - 1); });
+    this.navNext.addEventListener('click', () => { if (this.activeIndex < this.items.length - 1) this.switchTo(this.activeIndex + 1); });
 
-    this.fileInput.addEventListener('change', () => {
-      if (this.fileInput.files?.length) this.addFiles(this.fileInput.files);
-      this.fileInput.value = '';
+    this.exportBtn.addEventListener('click',    () => this.startExport(false));
+    this.exportAllBtn.addEventListener('click', () => this.startExport(true));
+
+    this.trimStartInput.addEventListener('input', () => this.onTrimStartInput());
+    this.trimEndInput.addEventListener('input',   () => this.onTrimEndInput());
+
+    document.getElementById('model-radio-group')!.addEventListener('change', e => {
+      const t = e.target as HTMLInputElement;
+      if (t.name === 'model') setConfig({ model: t.value as ModelChoice });
+    });
+    document.getElementById('mode-radio-group')!.addEventListener('change', e => {
+      const t = e.target as HTMLInputElement;
+      if (t.name === 'drawMode') setConfig({ drawMode: t.value as AppConfig['drawMode'] });
     });
 
-    this.exportBtn.addEventListener('click', () => this.startExport());
+    window.addEventListener('configchange', (e) =>
+      void this.onConfigChange((e as CustomEvent<AppConfig>).detail));
+  }
 
-    // Play / pause
-    this.playBtn.addEventListener('click', () => {
-      const item = this.items[this.activeIndex];
-      if (!item?.player) return;
-      if (item.player.playing) {
-        item.player.pause();
-        this.playBtn.textContent = '▶';
+  private onTrimStartInput(): void {
+    const item = this.items[this.activeIndex];
+    if (!item?.isVideo || !item.player) return;
+    const max    = Number(this.trimStartInput.max);
+    const endVal = Number(this.trimEndInput.value);
+    if (Number(this.trimStartInput.value) >= endVal)
+      this.trimStartInput.value = String(Math.max(0, endVal - 1));
+    item.trimStart = (Number(this.trimStartInput.value) / max) * item.player.duration;
+    this.updateTrimFill();
+    this.updateTrimLabels(item);
+    item.player.seekTo(item.trimStart);
+  }
+
+  private onTrimEndInput(): void {
+    const item = this.items[this.activeIndex];
+    if (!item?.isVideo || !item.player) return;
+    const max      = Number(this.trimEndInput.max);
+    const startVal = Number(this.trimStartInput.value);
+    if (Number(this.trimEndInput.value) <= startVal)
+      this.trimEndInput.value = String(Math.min(max, startVal + 1));
+    item.trimEnd = (Number(this.trimEndInput.value) / max) * item.player.duration;
+    this.updateTrimFill();
+    this.updateTrimLabels(item);
+    item.player.seekTo(item.trimEnd);
+  }
+
+  private async onConfigChange(cfg: AppConfig): Promise<void> {
+    if (cfg.model !== this.prevModel) {
+      this.prevModel = cfg.model;
+      this.modelLoadProgress.classList.add('visible');
+      this.modelLoadBarFill.style.width = '0%';
+      this.modelLoadText.textContent = cfg.model === 'detect_x'
+        ? 'Loading chunks (0/9)…' : 'Loading model…';
+      try {
+        await setModel(cfg.model, (done, total) => {
+          this.modelLoadBarFill.style.width = `${Math.round(done / total * 100)}%`;
+          this.modelLoadText.textContent    = cfg.model === 'detect_x'
+            ? `Loading chunks (${done}/${total})…` : 'Loading model…';
+        });
+      } finally {
+        this.modelLoadProgress.classList.remove('visible');
+      }
+    }
+    await this.rerenderActive();
+  }
+
+  private async rerenderActive(): Promise<void> {
+    const item = this.items[this.activeIndex];
+    if (!item) return;
+    if (!item.isVideo) {
+      await renderImage(item.file, item.canvas);
+      const ctx = item.canvas.getContext('2d')!;
+      const key = makeImageKey(item.file, item.canvas.width, item.canvas.height);
+      const cached = await getCachedDetections(key);
+      if (cached !== null) {
+        this.showDetecting(false);
+        applyDetections(ctx, cached, getConfig().drawMode);
       } else {
-        this.playBtn.textContent = '⏸';
-        item.player.play().then(() => {
-          if (!item.player!.playing) this.playBtn.textContent = '▶';
+        this.showDetecting(true);
+        scheduleInference(item.canvas, key, dets => {
+          this.showDetecting(false);
+          applyDetections(ctx, dets, getConfig().drawMode);
         });
       }
-    });
-
-    // Seek
-    this.seekBar.addEventListener('mousedown', () => { this.seeking = true; });
-    this.seekBar.addEventListener('touchstart', () => { this.seeking = true; });
-    this.seekBar.addEventListener('change', () => {
-      this.seeking = false;
-      const item = this.items[this.activeIndex];
-      if (!item?.player) return;
-      const time = (Number(this.seekBar.value) / 1000) * item.player.duration;
-      const wasPlaying = item.player.playing;
-      if (wasPlaying) item.player.pause();
-      item.player.seekTo(time).then(() => {
-        if (wasPlaying) {
-          this.playBtn.textContent = '⏸';
-          item.player!.play().then(() => {
-            if (!item.player!.playing) this.playBtn.textContent = '▶';
-          });
-        }
-      });
-    });
+    } else {
+      await item.player?.seekTo(item.player.currentTime);
+    }
   }
+
+  // ── File management ─────────────────────────────────────────────────────────
 
   private addFiles(files: FileList): void {
     for (const file of files) {
@@ -139,65 +320,63 @@ export class App {
 
   private addFile(file: File): void {
     const isVideo = file.type.startsWith('video/');
-    const index = this.items.length;
+    const index   = this.items.length;
 
-    const tab = document.createElement('button');
-    tab.className = 'tab';
-    tab.textContent = file.name;
-    tab.addEventListener('click', () => this.switchTo(index));
-    this.tabBar.appendChild(tab);
-
+    // Canvas wrapper
     const wrapper = document.createElement('div');
     wrapper.className = 'canvas-wrapper';
     const canvas = document.createElement('canvas');
     wrapper.appendChild(canvas);
-
-    // Detection status bar — shown while inference is in progress.
-    const statusEl = document.createElement('div');
-    statusEl.className = 'detect-status';
-    statusEl.hidden = true;
-    wrapper.appendChild(statusEl);
-
-    // Per-video progress bar (hidden until export starts)
-    let progressTrack: HTMLElement | null = null;
-    let progressFill: HTMLElement | null = null;
-    if (isVideo) {
-      progressTrack = document.createElement('div');
-      progressTrack.className = 'file-progress';
-      progressTrack.hidden = true;
-      progressFill = document.createElement('div');
-      progressFill.className = 'file-progress-fill';
-      progressTrack.appendChild(progressFill);
-      wrapper.appendChild(progressTrack);
-    }
-
     this.previewArea.appendChild(wrapper);
 
+    // File select option
+    const opt = document.createElement('option');
+    opt.textContent = file.name;
+    this.fileSelect.appendChild(opt);
+
+    // Export row
+    const exportRow = document.createElement('div');
+    exportRow.className = 'export-file-row';
+    const rowName = document.createElement('span');
+    rowName.className = 'export-file-name';
+    rowName.textContent = file.name; rowName.title = file.name;
+    const rowBarTrack = document.createElement('div');
+    rowBarTrack.className = 'export-file-bar-track';
+    const rowBarFill = document.createElement('div');
+    rowBarFill.className = 'export-file-bar-fill';
+    rowBarTrack.appendChild(rowBarFill);
+    const rowEta = document.createElement('span');
+    rowEta.className = 'export-file-eta';
+    exportRow.append(rowName, rowBarTrack, rowEta);
+    this.exportFileRows.appendChild(exportRow);
+
     const item: MediaItem = {
-      name: file.name, isVideo, file, tab, wrapper, canvas, statusEl,
-      loaded: false, exported: false, progressTrack, progressFill,
+      name: file.name, isVideo, file, wrapper, canvas,
+      exportRow, exportBarFill: rowBarFill, exportEtaEl: rowEta,
+      loaded: false, exported: false,
     };
     this.items.push(item);
 
-    this.emptyState.style.display = 'none';
-    this.exportBtn.disabled = false;
+    // Reveal step cards on first file
+    if (this.items.length === 1) {
+      document.getElementById('step-preview')!.classList.add('active');
+      document.getElementById('step-settings')!.classList.add('active');
+      document.getElementById('step-export')!.classList.add('active');
+    }
+
+    this.exportBtn.disabled    = false;
+    this.exportAllBtn.disabled = false;
+    this.updateLoadedSummary();
 
     if (isVideo) {
-      const player = new VideoPlayer(canvas, statusEl);
+      const player = new VideoPlayer(canvas, this.detectStatusInline);
       item.player = player;
-
-      player.onTimeUpdate = () => {
-        if (this.activeIndex !== index || this.seeking) return;
-        this.refreshControls(player);
-      };
-      player.onEnd = () => {
-        if (this.activeIndex === index) this.playBtn.textContent = '▶';
-      };
+      (window as unknown as Record<string, unknown>).__activePlayer = player;
 
       player.load(file).then(() => {
         item.loaded = true;
         canvas.dataset.loaded = 'true';
-        if (this.activeIndex === index) this.refreshControls(player);
+        if (this.activeIndex === index) this.setupTrimSlider(item);
       }).catch(err => {
         console.error(`Failed to load video "${file.name}":`, err);
         this.showError(wrapper, canvas, err.message);
@@ -206,21 +385,16 @@ export class App {
       renderImage(file, canvas).then(async () => {
         item.loaded = true;
         canvas.dataset.loaded = 'true';
-
         const ctx = canvas.getContext('2d')!;
         const key = makeImageKey(file, canvas.width, canvas.height);
         const cached = await getCachedDetections(key);
         if (cached !== null) {
-          drawDetections(ctx, cached);
+          applyDetections(ctx, cached, getConfig().drawMode);
         } else {
-          const avg = getAverageInferenceMs();
-          statusEl.textContent = avg === null
-            ? ' detecting…'
-            : ` detecting… (~${(avg / 1000).toFixed(1)}s per frame)`;
-          statusEl.hidden = false;
-          scheduleInference(canvas, key, detections => {
-            statusEl.hidden = true;
-            drawDetections(ctx, detections);
+          this.showDetecting(true);
+          scheduleInference(canvas, key, dets => {
+            this.showDetecting(false);
+            applyDetections(ctx, dets, getConfig().drawMode);
           });
         }
       }).catch(err => {
@@ -240,91 +414,129 @@ export class App {
     wrapper.appendChild(p);
   }
 
+  private setupTrimSlider(item: MediaItem): void {
+    const dur   = item.player!.duration;
+    const STEPS = 1000;
+    this.trimStartInput.value = String(Math.round(((item.trimStart ?? 0)   / dur) * STEPS));
+    this.trimEndInput.value   = String(Math.round(((item.trimEnd   ?? dur) / dur) * STEPS));
+    this.updateTrimFill();
+    this.updateTrimLabels(item);
+  }
+
   private switchTo(index: number): void {
     if (this.activeIndex >= 0) {
-      const prev = this.items[this.activeIndex];
-      prev.tab.classList.remove('active');
-      prev.wrapper.classList.remove('active');
-      if (prev.player?.playing) {
-        prev.player.pause();
-        this.playBtn.textContent = '▶';
-      }
+      this.items[this.activeIndex].wrapper.classList.remove('active');
     }
-
     this.activeIndex = index;
+    this.fileSelect.selectedIndex = index;
+
     const item = this.items[index];
-    item.tab.classList.add('active');
     item.wrapper.classList.add('active');
 
-    if (item.isVideo) {
-      this.controls.classList.add('visible');
-      if (item.player) this.refreshControls(item.player);
-    } else {
-      this.controls.classList.remove('visible');
+    if (item.player) {
+      (window as unknown as Record<string, unknown>).__activePlayer = item.player;
     }
+
+    if (item.isVideo) {
+      this.trimSection.classList.add('visible');
+      if (item.loaded) this.setupTrimSlider(item);
+    } else {
+      this.trimSection.classList.remove('visible');
+    }
+
+    this.updateFileNav();
   }
 
-  private refreshControls(player: VideoPlayer): void {
-    const pct = player.duration > 0
-      ? Math.round((player.currentTime / player.duration) * 1000)
-      : 0;
-    this.seekBar.value = String(pct);
-    this.timeDisplay.textContent =
-      `${formatTime(player.currentTime)} / ${formatTime(player.duration)}`;
-    this.playBtn.textContent = player.playing ? '⏸' : '▶';
-  }
+  // ── Export ──────────────────────────────────────────────────────────────────
 
-  private async startExport(): Promise<void> {
+  private async startExport(forceAll: boolean): Promise<void> {
     if (this.exporting || this.items.length === 0) return;
     this.exporting = true;
-    this.exportBtn.disabled = true;
-    this.exportBtn.textContent = 'Exporting…';
+    this.exportBtn.disabled    = true;
+    this.exportAllBtn.disabled = true;
 
-    // Only export items that haven't been exported yet in a previous batch.
+    if (forceAll) this.items.forEach(it => { it.exported = false; });
+
     const pending = this.items.filter(it => !it.exported);
-    const showGlobal = pending.length > 1;
-    if (showGlobal) {
-      this.globalProgress.hidden = false;
-      this.globalProgressFill.style.width = '0%';
-    }
-
     if (pending.length === 0) {
       this.exporting = false;
-      this.exportBtn.disabled = false;
-      this.exportBtn.textContent = 'Export';
+      this.exportBtn.disabled    = false;
+      this.exportAllBtn.disabled = false;
       return;
     }
 
+    const showGlobal = pending.length > 1;
+    if (showGlobal) {
+      this.exportGlobalRow.classList.add('visible');
+      this.globalProgressFill.style.width = '0%';
+      this.globalEta.textContent = 'Estimating…';
+    }
+
+    pending.forEach(it => it.exportRow.classList.add('active'));
+
+    const exportStart    = performance.now();
+    let completedCount   = 0;
+    const total          = pending.length;
+    const fileStartTimes = new Array<number>(total).fill(0);
+
     const exportItems: ExportItem[] = pending.map(it => ({
-      name:          it.name,
-      isVideo:       it.isVideo,
-      canvas:        it.isVideo ? undefined : it.canvas,
-      file:          it.isVideo ? it.file : undefined,
-      progressFill:  it.progressFill,
-      progressTrack: it.progressTrack,
+      name:      it.name,
+      isVideo:   it.isVideo,
+      canvas:    it.isVideo ? undefined : it.canvas,
+      file:      it.isVideo ? it.file   : undefined,
+      trimStart: it.trimStart,
+      trimEnd:   it.trimEnd,
     }));
 
     await runBatch(exportItems, {
-      onFileStart: () => {},
-      onFileEnd: (index, error) => {
-        if (!error) pending[index].exported = true;
+      onFileStart: (i) => {
+        fileStartTimes[i] = performance.now();
+        pending[i].exportBarFill.style.width = '0%';
+        pending[i].exportEtaEl.textContent   = 'Estimating…';
       },
-      onGlobalProgress: (completed, total) => {
+      onFileProgress: (i, p) => {
+        pending[i].exportBarFill.style.width = `${Math.round(p * 100)}%`;
+        if (p > 0.01) {
+          const elapsed = performance.now() - fileStartTimes[i];
+          pending[i].exportEtaEl.textContent = formatEta(elapsed * (1 - p) / p);
+        }
         if (showGlobal) {
-          this.globalProgressFill.style.width = `${Math.round((completed / total) * 100)}%`;
+          const gp = (completedCount + p) / total;
+          this.globalProgressFill.style.width = `${Math.round(gp * 100)}%`;
+          const elapsed = performance.now() - exportStart;
+          if (gp > 0.01) this.globalEta.textContent = formatEta(elapsed * (1 - gp) / gp);
+        }
+      },
+      onFileEnd: (i, error) => {
+        if (!error) {
+          pending[i].exported = true;
+          pending[i].exportBarFill.style.width = '100%';
+          pending[i].exportEtaEl.textContent   = 'Done';
+        } else {
+          pending[i].exportEtaEl.textContent = 'Failed';
+        }
+      },
+      onGlobalProgress: (completed) => {
+        completedCount = completed;
+        if (showGlobal) {
+          const p = completed / total;
+          this.globalProgressFill.style.width = `${Math.round(p * 100)}%`;
+          const elapsed = performance.now() - exportStart;
+          this.globalEta.textContent = p >= 1 ? 'Done' : formatEta(elapsed * (1 - p) / p);
         }
       },
     });
 
-    this.exportBtn.textContent = 'Export';
-    this.exportBtn.disabled = false;
+    this.exportBtn.disabled    = false;
+    this.exportAllBtn.disabled = false;
     this.exporting = false;
 
     if (showGlobal) {
       setTimeout(() => {
-        this.globalProgress.hidden = true;
+        this.exportGlobalRow.classList.remove('visible');
         this.globalProgressFill.style.width = '0%';
-      }, 1500);
+      }, 3000);
     }
+    pending.forEach(it => setTimeout(() => it.exportRow.classList.remove('active'), 3000));
   }
 }
