@@ -167,6 +167,8 @@ export class App {
   private updateLoadedSummary(): void {
     const n = this.items.length;
     this.loadedSummary.textContent = n === 0 ? '' : `${n} file${n > 1 ? 's' : ''} loaded`;
+    // "Export all" is only meaningful when there are multiple files.
+    this.exportAllBtn.style.display = n > 1 ? '' : 'none';
   }
 
   // ── Trim slider ─────────────────────────────────────────────────────────────
@@ -502,9 +504,14 @@ export class App {
     this.exportBtn.disabled    = true;
     this.exportAllBtn.disabled = true;
 
-    if (forceAll) this.items.forEach(it => { it.exported = false; });
+    if (forceAll) {
+      this.items.forEach(it => { it.exported = false; });
+    }
 
-    const pending = this.items.filter(it => !it.exported);
+    // "Export current file" exports only the active item; "Export all" exports everything.
+    const pending = forceAll
+      ? this.items.filter(it => !it.exported)
+      : [this.items[this.activeIndex]].filter(it => it !== undefined && !it.exported);
     if (pending.length === 0) {
       this.exporting = false;
       this.exportBtn.disabled    = false;
