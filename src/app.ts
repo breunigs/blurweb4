@@ -38,11 +38,21 @@ function formatEta(ms: number): string {
   return `~${m}m ${rs.toString().padStart(2, '0')}s`;
 }
 
+/** Simple debounce — returns a wrapper that fires `fn` only after `ms` ms of silence. */
+function debounce<T extends unknown[]>(fn: (...args: T) => void, ms: number): (...args: T) => void {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  return (...args: T) => {
+    if (timer !== null) clearTimeout(timer);
+    timer = setTimeout(() => { timer = null; fn(...args); }, ms);
+  };
+}
+
 export class App {
   private items: MediaItem[] = [];
   private activeIndex = -1;
   private exporting = false;
   private prevModel: ModelChoice = getConfig().model;
+
 
   // DOM refs
   private previewArea!: HTMLElement;
@@ -178,6 +188,28 @@ export class App {
     this.trimDurationLabel.textContent = `${(e - s).toFixed(2)}s selected`;
   }
 
+  /** Mark the canvas as stale (blurred/dimmed) while a seek is in flight. */
+  private setCanvasStale(stale: boolean): void {
+    this.previewArea.classList.toggle('stale', stale);
+  }
+
+  /** Seek to `sec`, marking canvas stale until the frame arrives. */
+  private async seekAndUpdate(item: MediaItem, sec: number): Promise<void> {
+    this.setCanvasStale(true);
+    const drawn = await item.player!.seekTo(sec);
+    // Only clear stale if this seek actually drew (not superseded by a newer one).
+    if (drawn) this.setCanvasStale(false);
+  }
+
+  // Debounced version — fires 120 ms after the last slider movement.
+  private readonly debouncedSeekStart = debounce((item: MediaItem, sec: number) => {
+    void this.seekAndUpdate(item, sec);
+  }, 120);
+
+  private readonly debouncedSeekEnd = debounce((item: MediaItem, sec: number) => {
+    void this.seekAndUpdate(item, sec);
+  }, 120);
+
   private applyTrimStart(item: MediaItem, sec: number): void {
     item.trimStart = sec;
     const steps = Number(this.trimStartInput.max);
@@ -185,7 +217,13 @@ export class App {
     this.trimStartInput.value = String(Math.round((sec / dur) * steps));
     this.updateTrimFill();
     this.updateTrimLabels(item);
-    item.player!.seekTo(sec);
+    this.setActiveThumb('start');
+    this.debouncedSeekStart(item, sec);
+  }
+
+  private setActiveThumb(which: 'start' | 'end'): void {
+    this.trimStartInput.classList.toggle('active-thumb', which === 'start');
+    this.trimEndInput.classList.toggle('active-thumb',   which === 'end');
   }
 
   // ── Events ──────────────────────────────────────────────────────────────────
@@ -204,7 +242,6 @@ export class App {
         document.getElementById('drop-zone')?.classList.remove('drag-over');
     });
 
-    // Drop zone click also opens picker
     document.getElementById('drop-zone')!.addEventListener('click', () =>
       (document.getElementById('file-input') as HTMLInputElement).click());
 
@@ -222,6 +259,10 @@ export class App {
 
     this.exportBtn.addEventListener('click',    () => this.startExport(false));
     this.exportAllBtn.addEventListener('click', () => this.startExport(true));
+
+    // Active-thumb highlight: set on pointerdown, so even a single tap highlights.
+    this.trimStartInput.addEventListener('pointerdown', () => this.setActiveThumb('start'));
+    this.trimEndInput.addEventListener('pointerdown',   () => this.setActiveThumb('end'));
 
     this.trimStartInput.addEventListener('input', () => this.onTrimStartInput());
     this.trimEndInput.addEventListener('input',   () => this.onTrimEndInput());
@@ -249,7 +290,9 @@ export class App {
     item.trimStart = (Number(this.trimStartInput.value) / max) * item.player.duration;
     this.updateTrimFill();
     this.updateTrimLabels(item);
-    item.player.seekTo(item.trimStart);
+    // Mark stale immediately; debounced seek fires after 120 ms of silence.
+    this.setCanvasStale(true);
+    this.debouncedSeekStart(item, item.trimStart);
   }
 
   private onTrimEndInput(): void {
@@ -262,7 +305,8 @@ export class App {
     item.trimEnd = (Number(this.trimEndInput.value) / max) * item.player.duration;
     this.updateTrimFill();
     this.updateTrimLabels(item);
-    item.player.seekTo(item.trimEnd);
+    this.setCanvasStale(true);
+    this.debouncedSeekEnd(item, item.trimEnd);
   }
 
   private async onConfigChange(cfg: AppConfig): Promise<void> {
@@ -421,6 +465,9 @@ export class App {
     this.trimEndInput.value   = String(Math.round(((item.trimEnd   ?? dur) / dur) * STEPS));
     this.updateTrimFill();
     this.updateTrimLabels(item);
+    // Default: start thumb is active (highlighted).
+    this.setActiveThumb('start');
+    this.setCanvasStale(false);
   }
 
   private switchTo(index: number): void {
