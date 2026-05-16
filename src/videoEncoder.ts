@@ -48,6 +48,9 @@ export async function encodeVideo(
       input,
       output,
       ...(trim ? { trim } : {}),
+      // Don't copy input metadata — proprietary tags (e.g. GoPro GPMF) produce
+      // output that some parsers reject as "invalid data".
+      tags: {},
       video: {
         codec:                enc.codec,
         hardwareAcceleration: enc.hardwareAcceleration,

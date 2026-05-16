@@ -11,7 +11,8 @@
 
 import { test, expect, Page } from '@playwright/test';
 import type { Detection } from '../src/detector';
-import { execFileSync } from 'child_process';
+import { execFileSync, spawnSync } from 'child_process';
+import { existsSync } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -797,3 +798,138 @@ for (const { file, codec, wasmFallback } of DETECTION_VIDEO_CASES) {
     });
   });
 }
+
+// ── Large source file export (GoPro) ─────────────────────────────────────────
+// Regression test for broken MP4 output (corrupt dref atom) when exporting a
+// trimmed segment from a large GoPro file.
+// Skipped automatically if the source file is not present on this machine.
+
+const GOPRO_SOURCE = '/home/stefan/test/veloroute/videos/source/2024-05-03-bici2/GX027403.MP4';
+const GOPRO_TRIM_END = 0.133; // seconds — short enough to keep the test fast
+
+/**
+ * Check whether ffprobe can parse a file without errors.
+ * Returns { valid, duration } where valid=false means ffprobe exited non-zero
+ * (i.e. "Invalid data found when processing input" or similar).
+ */
+function ffprobeCheck(filePath: string): { valid: boolean; duration: number | null } {
+  const result = spawnSync('ffprobe', [
+    '-v', 'quiet',
+    '-print_format', 'json',
+    '-show_format',
+    filePath,
+  ], { encoding: 'utf8' });
+  if (result.status !== 0) return { valid: false, duration: null };
+  try {
+    const fmt = (JSON.parse(result.stdout) as { format?: { duration?: string } }).format;
+    return { valid: true, duration: fmt?.duration ? parseFloat(fmt.duration) : null };
+  } catch {
+    return { valid: false, duration: null };
+  }
+}
+
+test.describe('AV export from large GoPro source file', () => {
+  // Large file + software AV1 encode at 4K can be slow; allow 15 minutes total.
+  test.setTimeout(900_000);
+
+  test('trimmed export produces a valid, parseable MP4', async ({ page }) => {
+    if (!existsSync(GOPRO_SOURCE)) {
+      test.skip(true, `Source file not found: ${GOPRO_SOURCE}`);
+      return;
+    }
+
+    await page.goto('http://localhost:3100');
+    if (!(await page.evaluate(() => typeof VideoDecoder !== 'undefined'))) {
+      test.skip(true, 'WebCodecs not available');
+      return;
+    }
+
+    // Capture browser console errors for diagnostics.
+    const consoleErrors: string[] = [];
+    page.on('console', msg => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
+
+    await loadFile(page, GOPRO_SOURCE);
+
+    // Wait for the first frame or a decode error.
+    await page.waitForFunction(() => {
+      const wrapper = document.querySelector('.canvas-wrapper.active');
+      if (!wrapper) return false;
+      const canvas = wrapper.querySelector<HTMLCanvasElement>('canvas[data-loaded="true"]');
+      if (canvas && canvas.width > 0) return true;
+      return !!wrapper.querySelector('.error-msg');
+    }, { timeout: 120_000 });
+
+    const hasError = await page.evaluate(
+      () => !!document.querySelector('.canvas-wrapper.active .error-msg'),
+    );
+    if (hasError) {
+      const msg = await page.evaluate(
+        () => document.querySelector('.canvas-wrapper.active .error-msg')?.textContent ?? '',
+      );
+      test.skip(true, `Decode failed: ${msg}`);
+      return;
+    }
+
+    // Set trim end to GOPRO_TRIM_END without seeking (no extra inference needed).
+    await page.evaluate((trimEnd) => {
+      const fn = (window as unknown as Record<string, unknown>).__setTrimEndSilent as
+        ((t: number) => void) | undefined;
+      fn?.(trimEnd);
+    }, GOPRO_TRIM_END);
+
+    // Verify the export button is enabled before clicking.
+    const btnDisabled = await page.locator('#export-btn').isDisabled();
+    expect(btnDisabled, 'Export button should be enabled after setting trim').toBe(false);
+
+    // Start export and wait for either a download or the row showing "Failed".
+    const downloadPromise = page.waitForEvent('download', { timeout: 800_000 });
+    await page.locator('#export-btn').click();
+
+    // Also watch for the export row showing "Failed" (encoding error, no download).
+    const failedPromise = page.waitForFunction(
+      () => {
+        const etas = document.querySelectorAll('.export-file-eta');
+        return Array.from(etas).some(el => el.textContent === 'Failed');
+      },
+      { timeout: 800_000 },
+    ).then(() => null as null); // resolve to null on failure
+
+    const outcome = await Promise.race([
+      downloadPromise.then(dl => ({ kind: 'download' as const, dl })),
+      failedPromise.then(() => ({ kind: 'failed' as const })),
+    ]);
+
+    if (outcome.kind === 'failed') {
+      throw new Error(
+        `Export reported "Failed" without producing a download.\n` +
+        `Console errors: ${consoleErrors.slice(-10).join('\n') || '(none)'}`,
+      );
+    }
+
+    const tmpPath = path.join(
+      path.dirname(fileURLToPath(import.meta.url)),
+      '../.tmp-gopro-export',
+    );
+    await outcome.dl.saveAs(tmpPath);
+
+    let result: { valid: boolean; duration: number | null };
+    try {
+      result = ffprobeCheck(tmpPath);
+    } finally {
+      import('fs').then(fs => fs.unlinkSync(tmpPath)).catch(() => {});
+    }
+
+    expect(
+      result.valid,
+      'Exported file must be a valid MP4 parseable by ffprobe (no "Invalid data found" error)',
+    ).toBe(true);
+
+    // Duration should be ≤ trim end + a small GOP tolerance.
+    if (result.duration !== null) {
+      expect(
+        result.duration,
+        `Duration ${result.duration.toFixed(3)} s should be at most ${GOPRO_TRIM_END + 2} s`,
+      ).toBeLessThanOrEqual(GOPRO_TRIM_END + 2);
+    }
+  });
+});
