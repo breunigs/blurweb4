@@ -30,7 +30,7 @@ import { areAllWebCodecsFailed } from './softwareDecoder';
 
 // ── Vendor file path ───────────────────────────────────────────────────────
 
-const LIBAV_MJS = '/vendor/libav-avc-av1/libav-6.8.8.0-avc-av1.wasm.mjs';
+const LIBAV_MJS = new URL('../vendor/libav-avc-av1/libav-6.8.8.0-avc-av1.wasm.mjs', import.meta.url).href;
 
 // ── Pixel format maps (same as hevcDecoder.ts) ─────────────────────────────
 
@@ -73,8 +73,7 @@ let wasmAvailable: boolean | null = null;
 
 (async () => {
   try {
-    const url = new URL(LIBAV_MJS, document.baseURI).href;
-    const resp = await fetch(url, { method: 'HEAD' });
+    const resp = await fetch(LIBAV_MJS, { method: 'HEAD' });
     wasmAvailable = resp.ok;
   } catch {
     wasmAvailable = false;
@@ -111,10 +110,9 @@ export class LibavVideoFallbackDecoder extends CustomVideoDecoder {
       throw new Error(`LibavVideoFallbackDecoder: unsupported codec ${codec}`);
     }
 
-    const libavUrl = new URL(LIBAV_MJS, document.baseURI).href;
     // Dynamic import via runtime string — prevents esbuild from bundling the vendor file.
     // eslint-disable-next-line @typescript-eslint/no-implied-eval
-    const { default: LibAVFactory } = await (new Function('u', 'return import(u)'))(libavUrl) as {
+    const { default: LibAVFactory } = await (new Function('u', 'return import(u)'))(LIBAV_MJS) as {
       default: (opts?: object) => Promise<unknown>;
     };
     this.libav = await LibAVFactory();

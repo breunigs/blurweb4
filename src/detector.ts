@@ -28,7 +28,7 @@ const MODEL_NAMES: Record<ModelChoice, string> = {
 };
 const DETECT_X_CHUNKS = 9;
 
-ort.env.wasm.wasmPaths = '/dist/ort/';
+ort.env.wasm.wasmPaths = new URL('./ort/', import.meta.url).href;
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
@@ -181,12 +181,12 @@ async function loadModelBuffer(
   onProgress?: (done: number, total: number) => void,
 ): Promise<string | ArrayBuffer> {
   if (model === 'detect_n') {
-    return `/models/detect_n_2024_04.onnx`;
+    return new URL('../models/detect_n_2024_04.onnx', import.meta.url).href;
   }
   // Fetch detect_x chunks and concatenate
   const chunks: ArrayBuffer[] = [];
   for (let i = 0; i < DETECT_X_CHUNKS; i++) {
-    const resp = await fetch(`/models/detect_x_2024_04.onnx.${i}`);
+    const resp = await fetch(new URL(`../models/detect_x_2024_04.onnx.${i}`, import.meta.url).href);
     if (!resp.ok) throw new Error(`Failed to fetch model chunk ${i}: ${resp.status}`);
     chunks.push(await resp.arrayBuffer());
     onProgress?.(i + 1, DETECT_X_CHUNKS);
