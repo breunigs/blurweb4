@@ -4,3 +4,4 @@ dist
 vendor/libav-hevc/
 # Large model chunks (detect_x) not yet used; commit only detect_n via direct git
 models/detect_x_*
+test-results/.last-run.json

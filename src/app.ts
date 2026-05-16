@@ -7,6 +7,7 @@ import {
   makeImageKey, getAverageInferenceMs, setModel,
 } from './detector';
 import { getConfig, setConfig, type AppConfig, type ModelChoice } from './config';
+import { getEntries, clearEntries, setOnUpdate, copyToClipboard } from './debugLog';
 
 interface MediaItem {
   name: string;
@@ -78,6 +79,7 @@ export class App {
   private trimEndLabel!: HTMLElement;
   private trimDurationLabel!: HTMLElement;
   private detectStatusInline!: HTMLElement;
+  private detectResultEl!: HTMLElement;
   private loadedSummary!: HTMLElement;
   private stepPreviewSubtitle!: HTMLElement;
 
@@ -105,11 +107,14 @@ export class App {
     this.trimEndLabel       = document.getElementById('trim-end-label')!;
     this.trimDurationLabel  = document.getElementById('trim-duration-label')!;
     this.detectStatusInline = document.getElementById('detect-status-inline')!;
+    this.detectResultEl     = document.getElementById('detect-result')!;
     this.loadedSummary      = document.getElementById('loaded-summary')!;
     this.stepPreviewSubtitle= document.getElementById('step-preview-subtitle')!;
 
     this.bindEvents();
     this.syncConfigUI();
+    this.initDebugLog();
+    this.bindDebugLogButtons();
 
     // Test globals
     const w = window as unknown as Record<string, unknown>;
@@ -133,6 +138,34 @@ export class App {
     if (dr) dr.checked = true;
   }
 
+  // ── Debug log ───────────────────────────────────────────────────────────────
+
+  private initDebugLog(): void {
+    const area = document.getElementById('debug-log-area');
+    if (!area) return;
+    const render = () => {
+      const entries = getEntries();
+      area.textContent = entries.join('\n');
+      area.scrollTop = area.scrollHeight;
+    };
+    setOnUpdate(render);
+    render(); // show any entries logged before init
+  }
+
+  private bindDebugLogButtons(): void {
+    document.getElementById('copy-log-btn')?.addEventListener('click', async () => {
+      await copyToClipboard();
+      const status = document.getElementById('copy-log-status')!;
+      status.textContent = 'Copied!';
+      setTimeout(() => { status.textContent = ''; }, 2000);
+    });
+    document.getElementById('clear-log-btn')?.addEventListener('click', () => {
+      clearEntries();
+      const area = document.getElementById('debug-log-area');
+      if (area) area.textContent = '';
+    });
+  }
+
   // ── Inference status ────────────────────────────────────────────────────────
 
   private showDetecting(on: boolean): void {
@@ -142,9 +175,21 @@ export class App {
         ? 'Detecting…'
         : `Detecting… (~${(avg / 1000).toFixed(1)}s)`;
       this.detectStatusInline.classList.add('visible');
+      this.detectResultEl.classList.remove('visible');
     } else {
       this.detectStatusInline.classList.remove('visible');
     }
+  }
+
+  private showDetectionResult(dets: import('./detector').Detection[]): void {
+    this.detectStatusInline.classList.remove('visible');
+    const counts: Record<string, number> = {};
+    for (const d of dets) counts[d.label] = (counts[d.label] ?? 0) + 1;
+    const parts = Object.entries(counts).map(([label, n]) => `${n} ${label}`);
+    this.detectResultEl.textContent = dets.length === 0
+      ? '0 detections'
+      : parts.join(', ');
+    this.detectResultEl.classList.add('visible');
   }
 
   // ── File nav ────────────────────────────────────────────────────────────────
@@ -342,11 +387,13 @@ export class App {
       if (cached !== null) {
         this.showDetecting(false);
         applyDetections(ctx, cached, getConfig().drawMode);
+        this.showDetectionResult(cached);
       } else {
         this.showDetecting(true);
         scheduleInference(item.canvas, key, dets => {
           this.showDetecting(false);
           applyDetections(ctx, dets, getConfig().drawMode);
+          this.showDetectionResult(dets);
         });
       }
     } else {
@@ -419,6 +466,12 @@ export class App {
       item.player = player;
       (window as unknown as Record<string, unknown>).__activePlayer = player;
 
+      // Show detection result summary when this player's frame is detected.
+      // Only update UI if this item is the active one.
+      player.onDetection = (dets) => {
+        if (this.activeIndex === index) this.showDetectionResult(dets);
+      };
+
       player.load(file).then(() => {
         item.loaded = true;
         canvas.dataset.loaded = 'true';
@@ -436,11 +489,13 @@ export class App {
         const cached = await getCachedDetections(key);
         if (cached !== null) {
           applyDetections(ctx, cached, getConfig().drawMode);
+          if (this.activeIndex === index) this.showDetectionResult(cached);
         } else {
           this.showDetecting(true);
           scheduleInference(canvas, key, dets => {
             this.showDetecting(false);
             applyDetections(ctx, dets, getConfig().drawMode);
+            if (this.activeIndex === index) this.showDetectionResult(dets);
           });
         }
       }).catch(err => {
@@ -478,6 +533,9 @@ export class App {
     }
     this.activeIndex = index;
     this.fileSelect.selectedIndex = index;
+    // Clear detection result when switching to a new file.
+    this.detectResultEl.classList.remove('visible');
+    this.detectStatusInline.classList.remove('visible');
 
     const item = this.items[index];
     item.wrapper.classList.add('active');

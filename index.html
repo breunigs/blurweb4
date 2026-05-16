@@ -266,34 +266,41 @@
       text-align: center;
     }
 
-    /* Detection spinner (absolutely positioned over canvas, top-left) */
+    /* Detection status row — below the canvas */
+    #detect-status-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 28px;
+      padding: 4px 2px;
+      font-size: 12px;
+      font-family: var(--mono);
+    }
+
     #detect-status-inline {
-      position: absolute;
-      top: 8px; left: 8px;
       display: flex;
       align-items: center;
       gap: 7px;
-      padding: 4px 10px;
-      background: rgba(0,0,0,0.7);
-      border-radius: 4px;
-      font-size: 11px;
-      font-family: var(--mono);
       color: var(--dim);
-      pointer-events: none;
-      z-index: 10;
       visibility: hidden;
     }
     #detect-status-inline.visible { visibility: visible; }
     #detect-status-inline::before {
       content: '';
       width: 11px; height: 11px;
-      border: 2px solid rgba(255,255,255,0.15);
+      border: 2px solid var(--border);
       border-top-color: var(--accent);
       border-radius: 50%;
       animation: spin 0.75s linear infinite;
       flex-shrink: 0;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
+
+    #detect-result {
+      color: var(--dim);
+      visibility: hidden;
+    }
+    #detect-result.visible { visibility: visible; }
 
     /* Trim controls */
     #trim-section {
@@ -683,8 +690,12 @@
       </div>
 
       <!-- Canvas preview -->
-      <div id="preview-area">
+      <div id="preview-area"></div>
+
+      <!-- Detection status row — below the canvas, always reserves height -->
+      <div id="detect-status-row">
         <div id="detect-status-inline">Detecting…</div>
+        <span id="detect-result"></span>
       </div>
 
       <!-- Trim (videos only) — visibility:hidden so it doesn't shift layout -->
@@ -773,6 +784,58 @@
         </div>
         <div id="export-file-rows"></div>
       </div>
+    </div>
+  </div>
+
+  <!-- ──────────────────────────── STEP 5: DEBUG LOG ─────────────────── -->
+  <div class="step-card" id="step-debug">
+    <div class="step-header">
+      <div class="step-number" style="background:var(--muted)">5</div>
+      <span class="step-title">Debug log</span>
+      <span class="step-subtitle">All console output captured here</span>
+    </div>
+    <div class="step-body">
+      <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+        <button id="copy-log-btn" style="
+          padding:7px 16px;
+          background:var(--card2);
+          color:var(--dim);
+          border:1px solid var(--border);
+          border-radius:6px;
+          cursor:pointer;
+          font-size:13px;
+          font-family:inherit;">
+          Copy to clipboard
+        </button>
+        <button id="clear-log-btn" style="
+          padding:7px 16px;
+          background:var(--card2);
+          color:var(--dim);
+          border:1px solid var(--border);
+          border-radius:6px;
+          cursor:pointer;
+          font-size:13px;
+          font-family:inherit;">
+          Clear
+        </button>
+        <span id="copy-log-status" style="font-size:12px;color:var(--muted);align-self:center;"></span>
+      </div>
+      <div id="debug-log-area" style="
+        background:var(--card2);
+        border:1px solid var(--border);
+        border-radius:6px;
+        padding:10px 12px;
+        height:220px;
+        overflow-y:auto;
+        font-family:var(--mono);
+        font-size:11px;
+        line-height:1.55;
+        color:var(--dim);
+        white-space:pre-wrap;
+        word-break:break-all;
+        scrollbar-width:thin;
+        scrollbar-color:var(--border) transparent;
+      "></div>
     </div>
   </div>
 
