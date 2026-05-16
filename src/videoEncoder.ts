@@ -48,9 +48,17 @@ export async function encodeVideo(
       input,
       output,
       ...(trim ? { trim } : {}),
-      // Don't copy input metadata — proprietary tags (e.g. GoPro GPMF) produce
-      // output that some parsers reject as "invalid data".
-      tags: {},
+      // Copy normalised tags (title, date, etc.) but strip raw Uint8Array blobs.
+      // GoPro writes ~25 KB of proprietary GPMF telemetry as raw ilst atoms; if
+      // copied verbatim they produce output that ffprobe rejects as invalid data.
+      tags: (input) => {
+        const { raw, ...rest } = input;
+        const safeRaw: typeof raw = {};
+        for (const [k, v] of Object.entries(raw ?? {})) {
+          if (typeof v === 'string') safeRaw[k] = v;
+        }
+        return { ...rest, ...(Object.keys(safeRaw).length ? { raw: safeRaw } : {}) };
+      },
       video: {
         codec:                enc.codec,
         hardwareAcceleration: enc.hardwareAcceleration,
