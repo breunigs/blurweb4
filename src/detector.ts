@@ -18,8 +18,8 @@ import { blurrer } from './blurrer';
 const MODEL_W = 1280;
 const MODEL_H = 736;
 const LABELS = ['plate', 'person'] as const;
-const THRESHOLD_IOU   = 0.45;
-const THRESHOLD_CONF  = 0.1;
+const THRESHOLD_IOU = 0.45;
+const THRESHOLD_CONF = 0.1;
 const THRESHOLD_CLASS = 0.1;
 
 const MODEL_NAMES: Record<ModelChoice, string> = {
@@ -59,7 +59,10 @@ interface Snapshot {
 }
 
 interface PendingItem {
-  snap: Snapshot;
+  // Store source reference rather than an eager snapshot so that captureSnapshot
+  // (which blocks the main thread for ~130 ms on 4K sources) runs inside drainQueue
+  // after a yield, not synchronously on the hot seek-completion path.
+  source: HTMLCanvasElement | OffscreenCanvas;
   key: string;
   callback: (d: Detection[]) => void;
 }
@@ -76,7 +79,7 @@ export function makeVideoKey(file: File, width: number, height: number, microsec
 
 // ── IndexedDB ─────────────────────────────────────────────────────────────────
 
-const DB_NAME    = 'blurweb4-detections';
+const DB_NAME = 'blurweb4-detections';
 const DB_VERSION = 1;
 
 function openDB(): Promise<IDBDatabase> {
@@ -85,10 +88,10 @@ function openDB(): Promise<IDBDatabase> {
     req.onupgradeneeded = () => {
       const db = req.result;
       if (!db.objectStoreNames.contains('frames')) db.createObjectStore('frames', { keyPath: 'key' });
-      if (!db.objectStoreNames.contains('stats'))  db.createObjectStore('stats',  { keyPath: 'id'  });
+      if (!db.objectStoreNames.contains('stats')) db.createObjectStore('stats', { keyPath: 'id' });
     };
     req.onsuccess = () => resolve(req.result);
-    req.onerror   = () => reject(req.error);
+    req.onerror = () => reject(req.error);
   });
 }
 
@@ -96,7 +99,7 @@ function idbGet<T>(store: string, key: string): Promise<T | undefined> {
   return openDB().then(db => new Promise((resolve, reject) => {
     const req = db.transaction(store, 'readonly').objectStore(store).get(key);
     req.onsuccess = () => resolve(req.result as T | undefined);
-    req.onerror   = () => reject(req.error);
+    req.onerror = () => reject(req.error);
   }));
 }
 
@@ -105,7 +108,7 @@ function idbPut(store: string, value: unknown): Promise<void> {
     const tx = db.transaction(store, 'readwrite');
     tx.objectStore(store).put(value);
     tx.oncomplete = () => resolve();
-    tx.onerror    = () => reject(tx.error);
+    tx.onerror = () => reject(tx.error);
   }));
 }
 
@@ -129,7 +132,7 @@ const inferenceStats: Record<ModelChoice, ModelStats> = {
 
 function persistStats(model: ModelChoice): void {
   const s = inferenceStats[model];
-  idbPut('stats', { id: `inference-${model}`, count: s.count, totalMs: s.totalMs }).catch(() => {});
+  idbPut('stats', { id: `inference-${model}`, count: s.count, totalMs: s.totalMs }).catch(() => { });
 }
 
 export function getAverageInferenceMs(model?: ModelChoice): number | null {
@@ -233,27 +236,32 @@ export function setModel(
   sessionPromise = null;
   memCache.clear();
   // Pre-warm the session so the UI can show progress before the first inference
-  return getSession(onProgress).then(() => {});
+  return getSession(onProgress).then(() => { });
 }
 
 // ── Preprocessing ─────────────────────────────────────────────────────────────
 
 function captureSnapshot(source: HTMLCanvasElement | OffscreenCanvas): Snapshot {
+  const t0 = performance.now();
   const tmp = new OffscreenCanvas(MODEL_W, MODEL_H);
   const ctx = tmp.getContext('2d')!;
   ctx.drawImage(source as CanvasImageSource, 0, 0, MODEL_W, MODEL_H);
-  return { data: ctx.getImageData(0, 0, MODEL_W, MODEL_H).data, origW: source.width, origH: source.height };
+  const data = ctx.getImageData(0, 0, MODEL_W, MODEL_H).data;
+  console.log(`[detector] captureSnapshot ${(performance.now() - t0).toFixed(1)}ms`);
+  return { data, origW: source.width, origH: source.height };
 }
 
 function buildTensor(snap: Snapshot): ort.Tensor {
+  const t0 = performance.now();
   const { data } = snap;
   const pixels = MODEL_W * MODEL_H;
   const tensor = new Float32Array(3 * pixels);
   for (let i = 0; i < pixels; i++) {
-    tensor[i]             = data[i * 4]     / 255;
-    tensor[pixels + i]     = data[i * 4 + 1] / 255;
+    tensor[i] = data[i * 4] / 255;
+    tensor[pixels + i] = data[i * 4 + 1] / 255;
     tensor[pixels * 2 + i] = data[i * 4 + 2] / 255;
   }
+  console.log(`[detector] buildTensor ${(performance.now() - t0).toFixed(1)}ms`);
   return new ort.Tensor('float32', tensor, [1, 3, MODEL_H, MODEL_W]);
 }
 
@@ -278,8 +286,10 @@ function postprocess(output: ort.Tensor, origW: number, origH: number): Detectio
     const base = r * cols;
     const objConf = data[base + 4], pc = data[base + 5], nc = data[base + 6];
     if (objConf < THRESHOLD_CONF || Math.max(pc, nc) < THRESHOLD_CLASS) continue;
-    raw.push({ label: pc >= nc ? LABELS[0] : LABELS[1], conf: objConf * Math.max(pc, nc),
-      cx: data[base], cy: data[base + 1], w: data[base + 2], h: data[base + 3] });
+    raw.push({
+      label: pc >= nc ? LABELS[0] : LABELS[1], conf: objConf * Math.max(pc, nc),
+      cx: data[base], cy: data[base + 1], w: data[base + 2], h: data[base + 3]
+    });
   }
   raw.sort((a, b) => b.conf - a.conf);
   const kept: RawBox[] = [], sup = new Uint8Array(raw.length);
@@ -289,9 +299,11 @@ function postprocess(output: ort.Tensor, origW: number, origH: number): Detectio
     for (let j = i + 1; j < raw.length; j++) if (!sup[j] && iou(raw[i], raw[j]) > THRESHOLD_IOU) sup[j] = 1;
   }
   const sx = origW / MODEL_W, sy = origH / MODEL_H;
-  return kept.map(b => ({ label: b.label, conf: b.conf,
+  return kept.map(b => ({
+    label: b.label, conf: b.conf,
     x: Math.round((b.cx - b.w / 2) * sx), y: Math.round((b.cy - b.h / 2) * sy),
-    w: Math.round(b.w * sx), h: Math.round(b.h * sy) }));
+    w: Math.round(b.w * sx), h: Math.round(b.h * sy)
+  }));
 }
 
 // ── Serialised ONNX execution ─────────────────────────────────────────────────
@@ -300,12 +312,17 @@ let onnxChain: Promise<unknown> = Promise.resolve();
 
 async function runOnnx(snap: Snapshot): Promise<Detection[]> {
   const result = onnxChain.then(async () => {
+    const t0 = performance.now();
     const session = await getSession();
-    const tensor  = buildTensor(snap);
+    const tensor = buildTensor(snap);
+    const tRun = performance.now();
     const results = await session.run({ [session.inputNames[0]]: tensor });
-    return postprocess(results[session.outputNames[0]], snap.origW, snap.origH);
+    console.log(`[detector] session.run ${(performance.now() - tRun).toFixed(1)}ms (ep=${currentEP})`);
+    const detections = postprocess(results[session.outputNames[0]], snap.origW, snap.origH);
+    console.log(`[detector] runOnnx total ${(performance.now() - t0).toFixed(1)}ms`);
+    return detections;
   });
-  onnxChain = result.catch(() => {});
+  onnxChain = result.catch(() => { });
   return result;
 }
 
@@ -340,15 +357,27 @@ async function drainQueue(): Promise<void> {
   while (nextPending) {
     const req = nextPending;
     nextPending = null;
+
+    // Yield the main thread so slider/pointer events can process before we spend
+    // ~130 ms in captureSnapshot.  If a newer inference was scheduled during the
+    // yield, nextPending will be non-null → skip this (now stale) request.
+    await new Promise<void>(resolve => setTimeout(resolve, 0));
+    if (nextPending !== null) continue;
+
+    console.log(`[detector] drainQueue: starting inference key="${req.key}"`);
+    const snap = captureSnapshot(req.source);
     const t0 = performance.now();
-    const detections = await runOnnx(req.snap);
+    const detections = await runOnnx(snap);
     const ms = performance.now() - t0;
     inferenceStats[currentModel].count++;
     inferenceStats[currentModel].totalMs += ms;
     const avg = inferenceStats[currentModel].totalMs / inferenceStats[currentModel].count;
     console.log(`[detector] inference model=${currentModel} key="${req.key}" ${ms.toFixed(0)}ms detections=${detections.length} avg=${avg.toFixed(0)}ms`);
+    const tIdb = performance.now();
     memCache.set(req.key, detections);
-    idbPut('frames', { key: req.key, detections, cachedAt: Date.now() }).catch(() => {});
+    idbPut('frames', { key: req.key, detections, cachedAt: Date.now() })
+      .then(() => console.log(`[detector] idbPut ${(performance.now() - tIdb).toFixed(1)}ms`))
+      .catch(() => { });
     persistStats(currentModel);
     (window as unknown as Record<string, unknown>).__lastDetections = detections;
     req.callback(detections);
@@ -362,8 +391,11 @@ export function scheduleInference(
   callback: (d: Detection[]) => void,
 ): void {
   (window as unknown as Record<string, unknown>).__lastDetections = undefined;
-  const snap = captureSnapshot(source);
-  nextPending = { snap, key, callback };
+  const replacing = nextPending !== null;
+  // Store source reference only — snapshot is taken lazily inside drainQueue
+  // after a main-thread yield, so this call is non-blocking.
+  nextPending = { source, key, callback };
+  console.log(`[detector] scheduleInference key="${key}" replacing=${replacing} queueRunning=${queueRunning}`);
   if (!queueRunning) drainQueue().catch(err => console.error('[detector] queue error:', err));
 }
 
@@ -394,7 +426,7 @@ export async function detectForExport(
   const avg = inferenceStats[currentModel].totalMs / inferenceStats[currentModel].count;
   console.log(`[detector] export inference model=${currentModel} key="${key}" ${ms.toFixed(0)}ms detections=${detections.length} avg=${avg.toFixed(0)}ms`);
   memCache.set(key, detections);
-  idbPut('frames', { key, detections, cachedAt: Date.now() }).catch(() => {});
+  idbPut('frames', { key, detections, cachedAt: Date.now() }).catch(() => { });
   persistStats(currentModel);
   return detections;
 }
