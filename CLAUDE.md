@@ -133,10 +133,15 @@ const conversion = await Conversion.init({
     },
   },
   // audio: omitted → automatic passthrough
+  tags: {},  // suppress metadata copy — proprietary tags (e.g. GoPro GPMF) break parsers
 });
 ```
 
 Audio is passed through automatically when no `audio:` options are specified.
+
+**Metadata pitfall:** mediabunny copies input metadata tags to the output by default. For
+GoPro files this includes ~25 KB of GPMF telemetry in a proprietary `ilst` format that
+ffprobe and other parsers reject. Always pass `tags: {}` to suppress metadata copying.
 
 ## WebCodecs hardware-acceleration fallback chain (src/softwareDecoder.ts)
 
