@@ -34,9 +34,15 @@ const AV_PIX_FMT_MAP: Record<number, VideoSamplePixelFormat> = {
   4:  'I422',     // AV_PIX_FMT_YUV422P
   5:  'I444',     // AV_PIX_FMT_YUV444P
   12: 'I420',     // AV_PIX_FMT_YUVJ420P  (full-range, same layout as I420)
+  13: 'I422',     // AV_PIX_FMT_YUVJ422P  (full-range)
+  14: 'I444',     // AV_PIX_FMT_YUVJ444P  (full-range)
   23: 'NV12',     // AV_PIX_FMT_NV12
   63: 'I420P10',  // AV_PIX_FMT_YUV420P10LE
 };
+
+// AVPixelFormats where the data is inherently full-range (JPEG variants).
+// For these, fullRange must be true regardless of the color_range field.
+const AV_PIX_FMT_FULL_RANGE = new Set([12, 13, 14]); // YUVJ420P, YUVJ422P, YUVJ444P
 
 // Chroma plane counts per format (planes beyond the first luma plane)
 const CHROMA_PLANES: Partial<Record<VideoSamplePixelFormat, 1 | 2>> = {
@@ -45,6 +51,52 @@ const CHROMA_PLANES: Partial<Record<VideoSamplePixelFormat, 1 | 2>> = {
   'I444': 2, 'I444P10': 2, 'I444P12': 2,
   'NV12': 1,  // NV12 has one interleaved UV plane
 };
+
+// ── Color space maps (FFmpeg enum → WebCodecs string) ────────────────────────
+// Stable across FFmpeg 4–8. Values from avutil/pixfmt.h and colorspace.h.
+
+// AVColorPrimaries → VideoColorSpaceInit.primaries
+// DOM types only list a subset; cast to string to allow runtime values (bt2020 etc.)
+const AV_COL_PRI: Record<number, string> = {
+  1:  'bt709',
+  4:  'bt470m',
+  5:  'bt470bg',
+  6:  'smpte170m',
+  7:  'smpte240m',
+  9:  'bt2020',
+  11: 'smpte431',
+  12: 'smpte432',
+};
+
+// AVColorTransferCharacteristic → VideoColorSpaceInit.transfer
+const AV_COL_TRC: Record<number, string> = {
+  1:  'bt709',
+  4:  'gamma22',
+  5:  'gamma28',
+  6:  'smpte170m',
+  7:  'smpte240m',
+  8:  'linear',
+  13: 'iec61966-2-1',  // sRGB
+  14: 'bt2020-10',
+  15: 'bt2020-12',
+  16: 'pq',            // SMPTE ST 2084 (HDR10)
+  18: 'hlg',           // ARIB STD-B67 (HLG HDR)
+};
+
+// AVColorSpace → VideoColorSpaceInit.matrix
+const AV_COL_SPC: Record<number, string> = {
+  0:  'rgb',
+  1:  'bt709',
+  4:  'fcc',
+  5:  'bt470bg',
+  6:  'smpte170m',
+  7:  'smpte240m',
+  9:  'bt2020-ncl',
+  10: 'bt2020-cl',
+};
+
+// AVColorRange: 1 = limited (MPEG/TV), 2 = full (JPEG/PC)
+const AV_COL_RANGE_FULL    = 2;
 
 // FFmpeg constants (stable across FFmpeg 4–8)
 const AVMEDIA_TYPE_VIDEO = 0;
@@ -131,10 +183,24 @@ export class HevcFallbackDecoder extends CustomVideoDecoder {
     this.c = this.pkt = this.frame = 0;
   }
 
+  private _loggedFirstFrame = false;
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private emitFrames(frames: any[]): void {
     for (const frame of frames) {
       const format = AV_PIX_FMT_MAP[frame.format as number];
+      if (!this._loggedFirstFrame && format) {
+        this._loggedFirstFrame = true;
+        console.log(
+          '[hevcDecoder] first frame:',
+          `pix_fmt=${frame.format as number}(${format})`,
+          `primaries=${frame.color_primaries as number}`,
+          `trc=${frame.color_trc as number}`,
+          `space=${frame.color_space as number}`,
+          `range=${frame.color_range as number}`,
+          `config.colorSpace=${JSON.stringify(this.config.colorSpace ?? null)}`,
+        );
+      }
       if (!format) {
         console.warn(`HevcFallbackDecoder: unsupported pixel format ${frame.format as number}; skipping`);
         continue;
@@ -164,6 +230,23 @@ export class HevcFallbackDecoder extends CustomVideoDecoder {
         }
       }
 
+      // Use the color space from the container's colr atom (parsed by mediabunny
+      // and passed in this.config.colorSpace) — it is more reliable than the
+      // per-frame metadata returned by libav.js's video_packed copyout, which
+      // often leaves color_primaries/trc/space/range as undefined/0.
+      // Fall back to per-frame metadata only when the container has no colr atom.
+      const pixelFmtIdx = frame.format as number;
+      const fullRange = AV_PIX_FMT_FULL_RANGE.has(pixelFmtIdx)
+        || (frame.color_range as number) === AV_COL_RANGE_FULL;
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const colorSpace: VideoColorSpaceInit = this.config.colorSpace ?? {
+        primaries: AV_COL_PRI[frame.color_primaries as number] as any,
+        transfer:  AV_COL_TRC[frame.color_trc       as number] as any,
+        matrix:    AV_COL_SPC[frame.color_space     as number] as any,
+        fullRange,
+      };
+
       const sample = new VideoSample(frame.data as Uint8Array, {
         format,
         codedWidth:    w,
@@ -173,6 +256,7 @@ export class HevcFallbackDecoder extends CustomVideoDecoder {
         timestamp:     ((frame.pts as number) ?? 0) / 1_000_000,
         duration:      0,
         layout,
+        colorSpace,
       });
 
       this.onSample(sample);

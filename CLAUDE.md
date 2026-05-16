@@ -266,6 +266,15 @@ if (aspect > 1) displayWidth  = Math.round(w * aspect);
 Pass `displayWidth` / `displayHeight` to the `VideoSample` constructor so
 mediabunny reports the correct display size.
 
+**Color space in emitFrames:**
+libav.js returns `frame.color_primaries`, `frame.color_trc`, `frame.color_space`, and
+`frame.color_range` using stable FFmpeg enum values. These are mapped to WebCodecs
+`VideoColorSpaceInit` and passed to the `VideoSample` constructor. Without this,
+Chromium assumes BT.601 limited-range for unknown frames, causing x265 content encoded
+with BT.709 to appear overly bright or washed out compared to Firefox (which defaults
+to BT.709). The maps live in `hevcDecoder.ts` as `AV_COL_PRI`, `AV_COL_TRC`,
+`AV_COL_SPC`; `AV_COL_RANGE_FULL = 2` (JPEG/PC range).
+
 **Building the hevc-aac libav.js variant:**
 The hevc-aac variant is NOT published to npm (MPEG patent reasons). Build it
 from the source tarball inside the npm package:
