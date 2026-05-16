@@ -29,6 +29,9 @@ const MODEL_NAMES: Record<ModelChoice, string> = {
 const DETECT_X_CHUNKS = 9;
 
 ort.env.wasm.wasmPaths = '/dist/ort/';
+// Run WASM inference in a dedicated worker so the main thread stays responsive
+// during the 1-3s WASM execution.  (No effect when WebGPU/WebGL is used instead.)
+ort.env.wasm.proxy = true;
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
