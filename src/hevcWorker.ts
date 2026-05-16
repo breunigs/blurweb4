@@ -19,7 +19,7 @@
  *  Worker → Main  { type:'error', message:string }       (any of the above fail)
  */
 
-const LIBAV_MJS = '/vendor/libav-hevc/libav-6.8.8.0-hevc-aac.wasm.mjs';
+const LIBAV_MJS = new URL('../vendor/libav-hevc/libav-6.8.8.0-hevc-aac.wasm.mjs', import.meta.url).href;
 const AVMEDIA_TYPE_VIDEO = 0;
 const AV_CODEC_ID_HEVC   = 173;
 
@@ -48,9 +48,8 @@ self.addEventListener('message', (e: MessageEvent) => {
     const msg = e.data as Record<string, any>;
     try {
       if (msg.type === 'init') {
-        const libavUrl = new URL(LIBAV_MJS, self.location.href).href;
         // eslint-disable-next-line @typescript-eslint/no-implied-eval
-        const { default: LibAVFactory } = await (new Function('u', 'return import(u)'))(libavUrl) as {
+        const { default: LibAVFactory } = await (new Function('u', 'return import(u)'))(LIBAV_MJS) as {
           default: (opts?: object) => Promise<unknown>;
         };
         libav = await LibAVFactory();
