@@ -1,7 +1,7 @@
 import { Input, ALL_FORMATS, BlobSource, VideoSampleSink } from 'mediabunny';
 import {
   getCachedDetections, scheduleInference, applyDetections,
-  makeVideoKey, getAverageInferenceMs,
+  makeVideoKey, getAverageInferenceMs, type Detection,
 } from './detector';
 import { getConfig } from './config';
 
@@ -32,11 +32,17 @@ export class VideoPlayer {
 
   onTimeUpdate: ((time: number) => void) | null = null;
   onEnd: (() => void) | null = null;
+  onDetection: ((dets: Detection[]) => void) | null = null;
 
   constructor(canvas: HTMLCanvasElement, statusEl: HTMLElement) {
     this.canvas   = canvas;
     this.ctx      = canvas.getContext('2d')!;
     this.statusEl = statusEl;
+  }
+
+  private applyAndNotify(dets: Detection[]): void {
+    applyDetections(this.ctx, dets, getConfig().drawMode);
+    this.onDetection?.(dets);
   }
 
   async load(file: File): Promise<void> {
@@ -70,14 +76,14 @@ export class VideoPlayer {
       const cached = await getCachedDetections(key);
       if (gen !== this.inferenceGen) return;
       if (cached !== null) {
-        applyDetections(this.ctx, cached, getConfig().drawMode);
+        this.applyAndNotify(cached);
       } else {
         this.statusEl.textContent = detStatusText();
         this.statusEl.hidden = false;
         scheduleInference(this.canvas, key, (dets) => {
           if (this.inferenceGen !== gen) return;
           this.statusEl.hidden = true;
-          applyDetections(this.ctx, dets, getConfig().drawMode);
+          this.applyAndNotify(dets);
         });
       }
     }
@@ -118,14 +124,14 @@ export class VideoPlayer {
       const cached = await getCachedDetections(key);
       if (gen !== this.inferenceGen) return true; // frame was drawn even if inference skipped
       if (cached !== null) {
-        applyDetections(this.ctx, cached, getConfig().drawMode);
+        this.applyAndNotify(cached);
       } else {
         this.statusEl.textContent = detStatusText();
         this.statusEl.hidden = false;
         scheduleInference(this.canvas, key, (dets) => {
           if (this.inferenceGen !== gen) return;
           this.statusEl.hidden = true;
-          applyDetections(this.ctx, dets, getConfig().drawMode);
+          this.applyAndNotify(dets);
         });
       }
     }
@@ -165,14 +171,14 @@ export class VideoPlayer {
       const cached = await getCachedDetections(key);
       if (gen !== this.inferenceGen || !this.playing) continue;
       if (cached !== null) {
-        applyDetections(this.ctx, cached, getConfig().drawMode);
+        this.applyAndNotify(cached);
       } else {
         this.statusEl.textContent = detStatusText();
         this.statusEl.hidden = false;
         scheduleInference(this.canvas, key, (dets) => {
           if (this.inferenceGen !== gen) return;
           this.statusEl.hidden = true;
-          applyDetections(this.ctx, dets, getConfig().drawMode);
+          this.applyAndNotify(dets);
         });
       }
     }

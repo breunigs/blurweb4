@@ -117,10 +117,10 @@ export class SoftwareWebCodecsDecoder extends CustomVideoDecoder {
   async decode(packet: EncodedPacket): Promise<void> {
     if (!this.decoder) return;
     this.decoder.decode(new EncodedVideoChunk({
-      type:      packet.type === 'key' ? 'key' : 'delta',
+      type: packet.type === 'key' ? 'key' : 'delta',
       timestamp: Math.round(packet.timestamp * 1_000_000),
-      duration:  Math.round(packet.duration  * 1_000_000),
-      data:      packet.data,
+      duration: Math.round(packet.duration * 1_000_000),
+      data: packet.data,
     }));
   }
 
