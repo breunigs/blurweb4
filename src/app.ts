@@ -335,6 +335,8 @@ export class App {
     if (Number(this.trimStartInput.value) >= endVal)
       this.trimStartInput.value = String(Math.max(0, endVal - 1));
     item.trimStart = (Number(this.trimStartInput.value) / max) * item.player.duration;
+    item.exported = false;
+    this.updateExportBtnState();
     this.updateTrimFill();
     this.updateTrimLabels(item);
     // Mark stale immediately; debounced seek fires after 120 ms of silence.
@@ -350,6 +352,8 @@ export class App {
     if (Number(this.trimEndInput.value) <= startVal)
       this.trimEndInput.value = String(Math.min(max, startVal + 1));
     item.trimEnd = (Number(this.trimEndInput.value) / max) * item.player.duration;
+    item.exported = false;
+    this.updateExportBtnState();
     this.updateTrimFill();
     this.updateTrimLabels(item);
     this.setCanvasStale(true);
@@ -457,8 +461,6 @@ export class App {
       document.getElementById('step-export')!.classList.add('active');
     }
 
-    this.exportBtn.disabled    = false;
-    this.exportAllBtn.disabled = false;
     this.updateLoadedSummary();
 
     if (isVideo) {
@@ -552,9 +554,17 @@ export class App {
     }
 
     this.updateFileNav();
+    this.updateExportBtnState();
   }
 
   // ── Export ──────────────────────────────────────────────────────────────────
+
+  private updateExportBtnState(): void {
+    if (this.exporting) return;
+    const active = this.items[this.activeIndex];
+    this.exportBtn.disabled    = !active || active.exported;
+    this.exportAllBtn.disabled = this.items.length === 0 || this.items.every(it => it.exported);
+  }
 
   private async startExport(forceAll: boolean): Promise<void> {
     if (this.exporting || this.items.length === 0) return;
@@ -572,8 +582,7 @@ export class App {
       : [this.items[this.activeIndex]].filter(it => it !== undefined && !it.exported);
     if (pending.length === 0) {
       this.exporting = false;
-      this.exportBtn.disabled    = false;
-      this.exportAllBtn.disabled = false;
+      this.updateExportBtnState();
       return;
     }
 
@@ -621,7 +630,10 @@ export class App {
       },
       onFileEnd: (i, error) => {
         if (!error) {
-          pending[i].exported = true;
+          // Only mark as exported if trim wasn't changed during the export run.
+          const trimUnchanged = pending[i].trimStart === exportItems[i].trimStart
+            && pending[i].trimEnd === exportItems[i].trimEnd;
+          if (trimUnchanged) pending[i].exported = true;
           pending[i].exportBarFill.style.width = '100%';
           pending[i].exportEtaEl.textContent   = 'Done';
         } else {
@@ -639,9 +651,8 @@ export class App {
       },
     });
 
-    this.exportBtn.disabled    = false;
-    this.exportAllBtn.disabled = false;
     this.exporting = false;
+    this.updateExportBtnState();
 
     if (showGlobal) {
       setTimeout(() => {
