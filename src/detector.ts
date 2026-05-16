@@ -408,15 +408,16 @@ function drawOutline(ctx: AnyCtx, detections: Detection[]): void {
   ctx.save();
   ctx.strokeStyle = '#ff0000';
   ctx.lineWidth = 2;
-  ctx.font = '14px monospace';
+  const fontSize = 28;
+  ctx.font = `${fontSize}px monospace`;
   for (const d of detections) {
     ctx.strokeRect(d.x, d.y, d.w, d.h);
     const label = `${d.label} ${d.conf.toFixed(2)}`;
     const tw = ctx.measureText(label).width;
     ctx.fillStyle = 'rgba(0,0,0,0.6)';
-    ctx.fillRect(d.x, d.y - 18, tw + 4, 18);
+    ctx.fillRect(d.x, d.y - fontSize, tw + 4, fontSize);
     ctx.fillStyle = '#ff0000';
-    ctx.fillText(label, d.x + 2, d.y - 4);
+    ctx.fillText(label, d.x + 2, d.y - 5);
   }
   ctx.restore();
 }
