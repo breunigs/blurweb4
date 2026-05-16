@@ -128,6 +128,35 @@ export class App {
       const item = this.items[this.activeIndex];
       if (item?.isVideo) { item.trimStart = t; }
     };
+    w.__setTrimEnd = (t: number) => {
+      const item = this.items[this.activeIndex];
+      if (item?.isVideo && item.player) {
+        item.trimEnd = t;
+        item.exported = false;
+        this.updateExportBtnState();
+        const dur   = item.player.duration;
+        const steps = Number(this.trimEndInput.max);
+        this.trimEndInput.value = String(Math.round((t / dur) * steps));
+        this.updateTrimFill();
+        this.updateTrimLabels(item);
+        this.setActiveThumb('end');
+        this.debouncedSeekEnd(item, t);
+      }
+    };
+    // Sets trim end without re-seeking (for tests that don't need the preview frame).
+    w.__setTrimEndSilent = (t: number) => {
+      const item = this.items[this.activeIndex];
+      if (item?.isVideo && item.player) {
+        item.trimEnd = t;
+        item.exported = false;
+        this.updateExportBtnState();
+        const dur   = item.player.duration;
+        const steps = Number(this.trimEndInput.max);
+        this.trimEndInput.value = String(Math.round((t / dur) * steps));
+        this.updateTrimFill();
+        this.updateTrimLabels(item);
+      }
+    };
   }
 
   private syncConfigUI(): void {
