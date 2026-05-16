@@ -19,6 +19,12 @@ export class VideoPlayer {
   private file: File | null = null;
   /** Incremented on every new frame draw; callbacks check against their captured value. */
   private inferenceGen = 0;
+  /**
+   * Incremented each time seekTo() is called. Any in-flight seekTo() that
+   * finds a newer generation aborts before drawing — the seek result is
+   * discarded because a more recent seek has already superseded it.
+   */
+  private seekGen = 0;
 
   playing = false;
   currentTime = 0;  // seconds
@@ -77,9 +83,24 @@ export class VideoPlayer {
     }
   }
 
-  async seekTo(time: number): Promise<void> {
-    if (!this.sink || !this.file) return;
+  /**
+   * Seek to `time` and draw the frame. Returns true if the seek completed
+   * and the frame was drawn; false if it was superseded by a newer seekTo().
+   */
+  async seekTo(time: number): Promise<boolean> {
+    if (!this.sink || !this.file) return false;
+
+    this.seekGen++;
+    const myGen = this.seekGen;
+
     const sample = await this.sink.getSample(time);
+
+    // If another seekTo() was called while we awaited, discard this result.
+    if (myGen !== this.seekGen) {
+      sample?.close();
+      return false;
+    }
+
     if (sample) {
       this.canvas.width  = sample.displayWidth;
       this.canvas.height = sample.displayHeight;
@@ -95,7 +116,7 @@ export class VideoPlayer {
       sample.close();
 
       const cached = await getCachedDetections(key);
-      if (gen !== this.inferenceGen) return;
+      if (gen !== this.inferenceGen) return true; // frame was drawn even if inference skipped
       if (cached !== null) {
         applyDetections(this.ctx, cached, getConfig().drawMode);
       } else {
@@ -108,6 +129,7 @@ export class VideoPlayer {
         });
       }
     }
+    return true;
   }
 
   async play(): Promise<void> {
@@ -165,6 +187,7 @@ export class VideoPlayer {
 
   dispose(): void {
     this.playing = false;
+    this.seekGen++;   // invalidate any in-flight seek
     this.statusEl.hidden = true;
     this.input?.dispose();
     this.input = null;

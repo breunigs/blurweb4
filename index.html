@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Media Redactor</title>
   <style>
+    /* ── Dark theme (default) ───────────────────────────────────── */
     :root {
       --bg:        #0d1117;
       --card:      #161b22;
@@ -18,7 +19,28 @@
       --green:     #22c55e;
       --green-dk:  #166534;
       --step-num:  #3b82f6;
+      --canvas-bg: #080b0f;
       --mono:      ui-monospace, 'SFMono-Regular', Consolas, monospace;
+    }
+
+    /* ── Light theme ────────────────────────────────────────────── */
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg:        #f6f8fa;
+        --card:      #ffffff;
+        --card2:     #f0f2f5;
+        --border:    #d0d7de;
+        --text:      #1f2328;
+        --dim:       #57606a;
+        --muted:     #8c959f;
+        --accent:    #2563eb;
+        --accent-h:  #1d4ed8;
+        --green:     #16a34a;
+        --green-dk:  #dcfce7;
+        --step-num:  #2563eb;
+        --canvas-bg: #1a1a1a;
+        --mono:      ui-monospace, 'SFMono-Regular', Consolas, monospace;
+      }
     }
 
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -182,7 +204,7 @@
       flex-shrink: 0;
       transition: color 0.1s, background 0.1s;
     }
-    .nav-btn:hover:not(:disabled) { background: #2d3748; color: var(--text); }
+    .nav-btn:hover:not(:disabled) { background: var(--card2); color: var(--text); }
     .nav-btn:disabled { opacity: 0.3; cursor: default; }
 
     #file-select {
@@ -210,7 +232,7 @@
       position: relative;
       width: 100%;
       aspect-ratio: 16/9;
-      background: #080b0f;
+      background: var(--canvas-bg);
       border-radius: 8px;
       overflow: hidden;
       min-height: 180px;
@@ -230,6 +252,12 @@
       max-width: 100%;
       max-height: 100%;
       flex-shrink: 0;
+      /* Stale frame indicator: applied when canvas doesn't yet show the seeked position */
+      transition: filter 0.15s ease;
+    }
+    /* When #preview-area has .stale, dim and blur the canvas to signal loading */
+    #preview-area.stale .canvas-wrapper.active canvas {
+      filter: blur(3px) brightness(0.55);
     }
     .canvas-wrapper .error-msg {
       color: #f87171;
@@ -366,6 +394,8 @@
       cursor: ew-resize;
       pointer-events: all;
       box-shadow: 0 1px 5px rgba(0,0,0,0.6);
+      outline: 2px solid transparent;
+      outline-offset: 2px;
     }
     .trim-slider input[type=range]::-moz-range-thumb {
       width: 20px; height: 20px;
@@ -375,6 +405,16 @@
       cursor: ew-resize;
       pointer-events: all;
       box-shadow: 0 1px 5px rgba(0,0,0,0.6);
+    }
+    /* Active (currently being dragged or last used) slider thumb */
+    .trim-slider input[type=range].active-thumb::-webkit-slider-thumb {
+      outline: 3px solid rgba(255,255,255,0.9);
+      outline-offset: 2px;
+      box-shadow: 0 0 0 5px rgba(255,255,255,0.18), 0 1px 5px rgba(0,0,0,0.6);
+    }
+    .trim-slider input[type=range].active-thumb::-moz-range-thumb {
+      box-shadow: 0 0 0 4px rgba(255,255,255,0.22), 0 1px 5px rgba(0,0,0,0.6);
+      border: 3px solid #fff;
     }
 
     /* ── 3. Settings ───────────────────────────────────────────── */
@@ -496,7 +536,7 @@
       font-family: inherit;
       font-weight: 500;
     }
-    #export-all-btn:hover:not(:disabled) { background: #2d3748; color: var(--text); }
+    #export-all-btn:hover:not(:disabled) { background: var(--card2); color: var(--text); }
     #export-all-btn:disabled { opacity: 0.35; cursor: default; }
 
     /* Progress — fixed height rows to prevent layout shift */
