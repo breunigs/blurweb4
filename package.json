@@ -12,7 +12,8 @@
   "dependencies": {
     "libav.js": "^6.8.8",
     "mediabunny": "^1.44.2",
-    "onnxruntime-web": "^1.26.0"
+    "onnxruntime-web": "^1.26.0",
+    "stackblur-canvas": "^3.0.1"
   },
   "devDependencies": {
     "@playwright/test": "^1.59.1",

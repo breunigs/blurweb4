@@ -1,12 +1,13 @@
 import { Input, ALL_FORMATS, BlobSource, VideoSampleSink } from 'mediabunny';
 import {
-  getCachedDetections, scheduleInference, drawDetections,
+  getCachedDetections, scheduleInference, applyDetections,
   makeVideoKey, getAverageInferenceMs,
 } from './detector';
+import { getConfig } from './config';
 
-function formatAvg(avgMs: number | null): string {
-  if (avgMs === null) return ' detecting…';
-  return ` detecting… (~${(avgMs / 1000).toFixed(1)}s per frame)`;
+function detStatusText(): string {
+  const avg = getAverageInferenceMs();
+  return avg === null ? ' detecting…' : ` detecting… (~${(avg / 1000).toFixed(1)}s per frame)`;
 }
 
 export class VideoPlayer {
@@ -61,16 +62,16 @@ export class VideoPlayer {
       firstSample.close();
 
       const cached = await getCachedDetections(key);
-      if (gen !== this.inferenceGen) return; // stale: another frame was drawn
+      if (gen !== this.inferenceGen) return;
       if (cached !== null) {
-        drawDetections(this.ctx, cached);
+        applyDetections(this.ctx, cached, getConfig().drawMode);
       } else {
-        this.statusEl.textContent = formatAvg(getAverageInferenceMs());
+        this.statusEl.textContent = detStatusText();
         this.statusEl.hidden = false;
         scheduleInference(this.canvas, key, (dets) => {
           if (this.inferenceGen !== gen) return;
           this.statusEl.hidden = true;
-          drawDetections(this.ctx, dets);
+          applyDetections(this.ctx, dets, getConfig().drawMode);
         });
       }
     }
@@ -96,14 +97,14 @@ export class VideoPlayer {
       const cached = await getCachedDetections(key);
       if (gen !== this.inferenceGen) return;
       if (cached !== null) {
-        drawDetections(this.ctx, cached);
+        applyDetections(this.ctx, cached, getConfig().drawMode);
       } else {
-        this.statusEl.textContent = formatAvg(getAverageInferenceMs());
+        this.statusEl.textContent = detStatusText();
         this.statusEl.hidden = false;
         scheduleInference(this.canvas, key, (dets) => {
           if (this.inferenceGen !== gen) return;
           this.statusEl.hidden = true;
-          drawDetections(this.ctx, dets);
+          applyDetections(this.ctx, dets, getConfig().drawMode);
         });
       }
     }
@@ -117,23 +118,15 @@ export class VideoPlayer {
     const mediaStart = this.currentTime;
 
     for await (const sample of this.sink.samples(this.currentTime)) {
-      if (!this.playing) {
-        sample.close();
-        break;
-      }
+      if (!this.playing) { sample.close(); break; }
 
       const targetWall = wallStart + (sample.timestamp - mediaStart) * 1000;
       const delay = targetWall - performance.now();
-      if (delay > 16) {
-        await new Promise<void>(resolve => setTimeout(resolve, delay - 8));
-      }
+      if (delay > 16) await new Promise<void>(resolve => setTimeout(resolve, delay - 8));
 
       await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
 
-      if (!this.playing) {
-        sample.close();
-        break;
-      }
+      if (!this.playing) { sample.close(); break; }
 
       sample.draw(this.ctx, 0, 0);
       this.currentTime = sample.timestamp;
@@ -150,14 +143,14 @@ export class VideoPlayer {
       const cached = await getCachedDetections(key);
       if (gen !== this.inferenceGen || !this.playing) continue;
       if (cached !== null) {
-        drawDetections(this.ctx, cached);
+        applyDetections(this.ctx, cached, getConfig().drawMode);
       } else {
-        this.statusEl.textContent = formatAvg(getAverageInferenceMs());
+        this.statusEl.textContent = detStatusText();
         this.statusEl.hidden = false;
         scheduleInference(this.canvas, key, (dets) => {
           if (this.inferenceGen !== gen) return;
           this.statusEl.hidden = true;
-          drawDetections(this.ctx, dets);
+          applyDetections(this.ctx, dets, getConfig().drawMode);
         });
       }
     }
@@ -168,9 +161,7 @@ export class VideoPlayer {
     }
   }
 
-  pause(): void {
-    this.playing = false;
-  }
+  pause(): void { this.playing = false; }
 
   dispose(): void {
     this.playing = false;

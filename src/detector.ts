@@ -1,19 +1,20 @@
 /**
  * YOLOv5 object detection using onnxruntime-web.
  *
- * - ONNX session created once, reused (WebGPU → WebGL → WASM).
+ * - ONNX session created once per model choice, reused (WebGPU → WebGL → WASM).
  * - Results cached in IndexedDB (persists browser restarts) + in-memory Map.
  * - Only one inference runs at a time; a queue of size 1 holds the next request.
- *   In-flight inference always runs to completion (ensures the result gets cached).
+ *   In-flight inference always runs to completion (ensures cache is populated).
  * - Running inference statistics (count, totalMs) persist in IDB.
+ * - Model selection (detect_n = single file, detect_x = 9 chunks) via setModel().
  */
 
 import * as ort from 'onnxruntime-web';
+import { getConfig, type DrawMode, type ModelChoice } from './config';
+import { blurrer } from './blurrer';
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
-export const MODEL_NAME = 'detect_n_2024_04';
-const MODEL_PATH = '/models/detect_n_2024_04.onnx';
 const MODEL_W = 1280;
 const MODEL_H = 736;
 const LABELS = ['plate', 'person'] as const;
@@ -21,7 +22,24 @@ const THRESHOLD_IOU   = 0.45;
 const THRESHOLD_CONF  = 0.1;
 const THRESHOLD_CLASS = 0.1;
 
+const MODEL_NAMES: Record<ModelChoice, string> = {
+  detect_n: 'detect_n_2024_04',
+  detect_x: 'detect_x_2024_04',
+};
+const DETECT_X_CHUNKS = 9;
+
 ort.env.wasm.wasmPaths = '/dist/ort/';
+
+// ── State ─────────────────────────────────────────────────────────────────────
+
+let currentModel: ModelChoice = getConfig().model;
+let currentEP: string | null = null;
+
+/** Human-readable model identifier (used in cache keys). */
+export function getModelName(): string { return MODEL_NAMES[currentModel]; }
+
+/** Execution provider used by the active session, or null if not yet loaded. */
+export function getCurrentEP(): string | null { return currentEP; }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -48,14 +66,12 @@ interface PendingItem {
 
 // ── Cache keys ────────────────────────────────────────────────────────────────
 
-/** Key for a still image: MODEL|filename|size|WxH|img */
 export function makeImageKey(file: File, width: number, height: number): string {
-  return `${MODEL_NAME}|${file.name}|${file.size}|${width}x${height}|img`;
+  return `${getModelName()}|${file.name}|${file.size}|${width}x${height}|img`;
 }
 
-/** Key for a video frame: MODEL|filename|size|WxH|t{microseconds} */
 export function makeVideoKey(file: File, width: number, height: number, microsecondTimestamp: number): string {
-  return `${MODEL_NAME}|${file.name}|${file.size}|${width}x${height}|t${Math.round(microsecondTimestamp)}`;
+  return `${getModelName()}|${file.name}|${file.size}|${width}x${height}|t${Math.round(microsecondTimestamp)}`;
 }
 
 // ── IndexedDB ─────────────────────────────────────────────────────────────────
@@ -68,61 +84,70 @@ function openDB(): Promise<IDBDatabase> {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onupgradeneeded = () => {
       const db = req.result;
-      if (!db.objectStoreNames.contains('frames')) {
-        db.createObjectStore('frames', { keyPath: 'key' });
-      }
-      if (!db.objectStoreNames.contains('stats')) {
-        db.createObjectStore('stats', { keyPath: 'id' });
-      }
+      if (!db.objectStoreNames.contains('frames')) db.createObjectStore('frames', { keyPath: 'key' });
+      if (!db.objectStoreNames.contains('stats'))  db.createObjectStore('stats',  { keyPath: 'id'  });
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror   = () => reject(req.error);
   });
 }
 
-function idbGet<T>(storeName: string, key: string): Promise<T | undefined> {
+function idbGet<T>(store: string, key: string): Promise<T | undefined> {
   return openDB().then(db => new Promise((resolve, reject) => {
-    const tx = db.transaction(storeName, 'readonly');
-    const req = tx.objectStore(storeName).get(key);
+    const req = db.transaction(store, 'readonly').objectStore(store).get(key);
     req.onsuccess = () => resolve(req.result as T | undefined);
     req.onerror   = () => reject(req.error);
   }));
 }
 
-function idbPut(storeName: string, value: unknown): Promise<void> {
+function idbPut(store: string, value: unknown): Promise<void> {
   return openDB().then(db => new Promise((resolve, reject) => {
-    const tx = db.transaction(storeName, 'readwrite');
-    tx.objectStore(storeName).put(value);
+    const tx = db.transaction(store, 'readwrite');
+    tx.objectStore(store).put(value);
     tx.oncomplete = () => resolve();
     tx.onerror    = () => reject(tx.error);
   }));
 }
 
-// ── Statistics (persistent) ───────────────────────────────────────────────────
+// ── Statistics (per-model) ────────────────────────────────────────────────────
 
-let inferenceCount = 0;
-let totalInferenceMs = 0;
+type ModelStats = { count: number; totalMs: number };
+const inferenceStats: Record<ModelChoice, ModelStats> = {
+  detect_n: { count: 0, totalMs: 0 },
+  detect_x: { count: 0, totalMs: 0 },
+};
 
-// Load persisted stats from IDB at startup (non-blocking).
+// Load persisted stats from IDB at startup.
 (async () => {
-  try {
-    const rec = await idbGet<{ id: string; count: number; totalMs: number }>('stats', 'inference');
-    if (rec) {
-      inferenceCount   = rec.count;
-      totalInferenceMs = rec.totalMs;
-      console.log(`[detector] loaded stats: count=${rec.count} avg=${(rec.totalMs / rec.count).toFixed(0)}ms`);
-    }
-  } catch { /* IDB not available */ }
+  for (const model of ['detect_n', 'detect_x'] as ModelChoice[]) {
+    try {
+      const rec = await idbGet<{ id: string; count: number; totalMs: number }>('stats', `inference-${model}`);
+      if (rec) { inferenceStats[model].count = rec.count; inferenceStats[model].totalMs = rec.totalMs; }
+    } catch { /* ok */ }
+  }
 })();
 
-function persistStats(): void {
-  idbPut('stats', { id: 'inference', count: inferenceCount, totalMs: totalInferenceMs }).catch(() => {});
+function persistStats(model: ModelChoice): void {
+  const s = inferenceStats[model];
+  idbPut('stats', { id: `inference-${model}`, count: s.count, totalMs: s.totalMs }).catch(() => {});
 }
 
-/** Returns the running average inference time in ms, or null if no data yet. */
-export function getAverageInferenceMs(): number | null {
-  return inferenceCount > 0 ? totalInferenceMs / inferenceCount : null;
+export function getAverageInferenceMs(model?: ModelChoice): number | null {
+  const s = inferenceStats[model ?? currentModel];
+  return s.count > 0 ? s.totalMs / s.count : null;
 }
+
+export interface InferenceModelStats { count: number; totalMs: number; avgMs: number | null; }
+export function getInferenceStats(): Record<ModelChoice, InferenceModelStats> {
+  return {
+    detect_n: { ...inferenceStats.detect_n, avgMs: inferenceStats.detect_n.count > 0 ? inferenceStats.detect_n.totalMs / inferenceStats.detect_n.count : null },
+    detect_x: { ...inferenceStats.detect_x, avgMs: inferenceStats.detect_x.count > 0 ? inferenceStats.detect_x.totalMs / inferenceStats.detect_x.count : null },
+  };
+}
+
+// Expose for Playwright tests.
+(window as unknown as Record<string, unknown>).__getInferenceStats = getInferenceStats;
+(window as unknown as Record<string, unknown>).__makeVideoKey = makeVideoKey;
 
 // ── In-memory cache ───────────────────────────────────────────────────────────
 
@@ -132,51 +157,92 @@ const memCache = new Map<string, Detection[]>();
 
 let sessionPromise: Promise<ort.InferenceSession> | null = null;
 
-export function getSession(): Promise<ort.InferenceSession> {
+async function resolveEps(): Promise<string[]> {
+  const eps: string[] = [];
+  if (typeof navigator !== 'undefined' && 'gpu' in navigator) {
+    try {
+      const adapter = await (navigator as unknown as { gpu: { requestAdapter(): Promise<unknown> } }).gpu.requestAdapter();
+      if (adapter) eps.push('webgpu');
+    } catch { /* skip */ }
+  }
+  try {
+    const canvas = document.createElement('canvas');
+    if (canvas.getContext('webgl2') ?? canvas.getContext('webgl')) eps.push('webgl');
+  } catch { /* skip */ }
+  eps.push('wasm');
+  return eps;
+}
+
+async function loadModelBuffer(
+  model: ModelChoice,
+  onProgress?: (done: number, total: number) => void,
+): Promise<string | ArrayBuffer> {
+  if (model === 'detect_n') {
+    return `/models/detect_n_2024_04.onnx`;
+  }
+  // Fetch detect_x chunks and concatenate
+  const chunks: ArrayBuffer[] = [];
+  for (let i = 0; i < DETECT_X_CHUNKS; i++) {
+    const resp = await fetch(`/models/detect_x_2024_04.onnx.${i}`);
+    if (!resp.ok) throw new Error(`Failed to fetch model chunk ${i}: ${resp.status}`);
+    chunks.push(await resp.arrayBuffer());
+    onProgress?.(i + 1, DETECT_X_CHUNKS);
+  }
+  const totalBytes = chunks.reduce((s, c) => s + c.byteLength, 0);
+  const out = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const c of chunks) { out.set(new Uint8Array(c), offset); offset += c.byteLength; }
+  return out.buffer;
+}
+
+export function getSession(onProgress?: (done: number, total: number) => void): Promise<ort.InferenceSession> {
   if (!sessionPromise) {
     sessionPromise = (async () => {
-      const eps: string[] = [];
-      if (typeof navigator !== 'undefined' && 'gpu' in navigator) {
-        try {
-          const adapter = await (navigator as unknown as { gpu: { requestAdapter(): Promise<unknown> } }).gpu.requestAdapter();
-          if (adapter) eps.push('webgpu');
-        } catch { /* skip */ }
-      }
-      try {
-        const canvas = document.createElement('canvas');
-        if (canvas.getContext('webgl2') ?? canvas.getContext('webgl')) eps.push('webgl');
-      } catch { /* skip */ }
-      eps.push('wasm');
+      const eps = await resolveEps();
       console.log('[detector] execution providers:', eps);
+      const modelSrc = await loadModelBuffer(currentModel, onProgress);
       for (let i = 0; i < eps.length; i++) {
         const subset = eps.slice(i);
         try {
-          const session = await ort.InferenceSession.create(MODEL_PATH, { executionProviders: subset });
-          console.log(`[detector] session created with EPs: ${subset.join(', ')}`);
+          const session = await ort.InferenceSession.create(modelSrc as string, { executionProviders: subset });
+          currentEP = subset[0];
+          console.log(`[detector] session created (${getModelName()}) EPs: ${subset.join(', ')}`);
           return session;
         } catch (err) {
-          if (i < eps.length - 1) console.warn(`[detector] EP "${eps[i]}" failed, trying next:`, err);
+          if (i < eps.length - 1) console.warn(`[detector] EP "${eps[i]}" failed:`, err);
           else throw err;
         }
       }
-      throw new Error('No working execution provider found');
+      throw new Error('No working execution provider');
     })();
   }
   return sessionPromise;
 }
 
+/**
+ * Switch to a different model. Clears the current session; the next inference
+ * will load the new model. In-memory cache is cleared (IDB entries for the old
+ * model stay, keyed by model name, and won't be hit for the new model).
+ */
+export function setModel(
+  model: ModelChoice,
+  onProgress?: (done: number, total: number) => void,
+): Promise<void> {
+  if (model === currentModel && sessionPromise !== null) return Promise.resolve();
+  currentModel = model;
+  sessionPromise = null;
+  memCache.clear();
+  // Pre-warm the session so the UI can show progress before the first inference
+  return getSession(onProgress).then(() => {});
+}
+
 // ── Preprocessing ─────────────────────────────────────────────────────────────
 
-/** Capture a snapshot of the source canvas at MODEL_W×MODEL_H resolution. Synchronous. */
 function captureSnapshot(source: HTMLCanvasElement | OffscreenCanvas): Snapshot {
   const tmp = new OffscreenCanvas(MODEL_W, MODEL_H);
   const ctx = tmp.getContext('2d')!;
   ctx.drawImage(source as CanvasImageSource, 0, 0, MODEL_W, MODEL_H);
-  return {
-    data:  ctx.getImageData(0, 0, MODEL_W, MODEL_H).data,
-    origW: source.width,
-    origH: source.height,
-  };
+  return { data: ctx.getImageData(0, 0, MODEL_W, MODEL_H).data, origW: source.width, origH: source.height };
 }
 
 function buildTensor(snap: Snapshot): ort.Tensor {
@@ -184,30 +250,23 @@ function buildTensor(snap: Snapshot): ort.Tensor {
   const pixels = MODEL_W * MODEL_H;
   const tensor = new Float32Array(3 * pixels);
   for (let i = 0; i < pixels; i++) {
-    tensor[i]             = data[i * 4]     / 255; // R
-    tensor[pixels + i]     = data[i * 4 + 1] / 255; // G
-    tensor[pixels * 2 + i] = data[i * 4 + 2] / 255; // B
+    tensor[i]             = data[i * 4]     / 255;
+    tensor[pixels + i]     = data[i * 4 + 1] / 255;
+    tensor[pixels * 2 + i] = data[i * 4 + 2] / 255;
   }
   return new ort.Tensor('float32', tensor, [1, 3, MODEL_H, MODEL_W]);
 }
 
 // ── Postprocessing & NMS ──────────────────────────────────────────────────────
 
-interface RawBox {
-  label: 'plate' | 'person';
-  conf: number;
-  cx: number; cy: number; w: number; h: number;
-}
+interface RawBox { label: 'plate' | 'person'; conf: number; cx: number; cy: number; w: number; h: number; }
 
 function iou(a: RawBox, b: RawBox): number {
-  const ax1 = a.cx - a.w / 2, ay1 = a.cy - a.h / 2;
-  const ax2 = a.cx + a.w / 2, ay2 = a.cy + a.h / 2;
-  const bx1 = b.cx - b.w / 2, by1 = b.cy - b.h / 2;
-  const bx2 = b.cx + b.w / 2, by2 = b.cy + b.h / 2;
+  const ax1 = a.cx - a.w / 2, ay1 = a.cy - a.h / 2, ax2 = a.cx + a.w / 2, ay2 = a.cy + a.h / 2;
+  const bx1 = b.cx - b.w / 2, by1 = b.cy - b.h / 2, bx2 = b.cx + b.w / 2, by2 = b.cy + b.h / 2;
   const ix = Math.max(0, Math.min(ax2, bx2) - Math.max(ax1, bx1));
   const iy = Math.max(0, Math.min(ay2, by2) - Math.max(ay1, by1));
-  const inter = ix * iy;
-  const union = a.w * a.h + b.w * b.h - inter;
+  const inter = ix * iy, union = a.w * a.h + b.w * b.h - inter;
   return union > 0 ? inter / union : 0;
 }
 
@@ -217,40 +276,26 @@ function postprocess(output: ort.Tensor, origW: number, origH: number): Detectio
   const raw: RawBox[] = [];
   for (let r = 0; r < rows; r++) {
     const base = r * cols;
-    const objConf    = data[base + 4];
-    const plateConf  = data[base + 5];
-    const personConf = data[base + 6];
-    const classConf  = Math.max(plateConf, personConf);
-    if (objConf < THRESHOLD_CONF || classConf < THRESHOLD_CLASS) continue;
-    raw.push({
-      label: plateConf >= personConf ? LABELS[0] : LABELS[1],
-      conf: objConf * classConf,
-      cx: data[base], cy: data[base + 1], w: data[base + 2], h: data[base + 3],
-    });
+    const objConf = data[base + 4], pc = data[base + 5], nc = data[base + 6];
+    if (objConf < THRESHOLD_CONF || Math.max(pc, nc) < THRESHOLD_CLASS) continue;
+    raw.push({ label: pc >= nc ? LABELS[0] : LABELS[1], conf: objConf * Math.max(pc, nc),
+      cx: data[base], cy: data[base + 1], w: data[base + 2], h: data[base + 3] });
   }
   raw.sort((a, b) => b.conf - a.conf);
-  const kept: RawBox[] = [];
-  const suppressed = new Uint8Array(raw.length);
+  const kept: RawBox[] = [], sup = new Uint8Array(raw.length);
   for (let i = 0; i < raw.length; i++) {
-    if (suppressed[i]) continue;
+    if (sup[i]) continue;
     kept.push(raw[i]);
-    for (let j = i + 1; j < raw.length; j++) {
-      if (!suppressed[j] && iou(raw[i], raw[j]) > THRESHOLD_IOU) suppressed[j] = 1;
-    }
+    for (let j = i + 1; j < raw.length; j++) if (!sup[j] && iou(raw[i], raw[j]) > THRESHOLD_IOU) sup[j] = 1;
   }
-  const scaleX = origW / MODEL_W, scaleY = origH / MODEL_H;
-  return kept.map(b => ({
-    label: b.label, conf: b.conf,
-    x: Math.round((b.cx - b.w / 2) * scaleX),
-    y: Math.round((b.cy - b.h / 2) * scaleY),
-    w: Math.round(b.w * scaleX),
-    h: Math.round(b.h * scaleY),
-  }));
+  const sx = origW / MODEL_W, sy = origH / MODEL_H;
+  return kept.map(b => ({ label: b.label, conf: b.conf,
+    x: Math.round((b.cx - b.w / 2) * sx), y: Math.round((b.cy - b.h / 2) * sy),
+    w: Math.round(b.w * sx), h: Math.round(b.h * sy) }));
 }
 
-// Serialise all ONNX calls — WASM/WebGL runtimes behave poorly with concurrent
-// session.run() calls.  Chain every inference on the previous one's Promise so
-// at most one inference is in flight at any given time.
+// ── Serialised ONNX execution ─────────────────────────────────────────────────
+
 let onnxChain: Promise<unknown> = Promise.resolve();
 
 async function runOnnx(snap: Snapshot): Promise<Detection[]> {
@@ -260,27 +305,19 @@ async function runOnnx(snap: Snapshot): Promise<Detection[]> {
     const results = await session.run({ [session.inputNames[0]]: tensor });
     return postprocess(results[session.outputNames[0]], snap.origW, snap.origH);
   });
-  // Keep the chain alive even if this inference fails.
   onnxChain = result.catch(() => {});
   return result;
 }
 
 // ── Cache access ──────────────────────────────────────────────────────────────
 
-/**
- * Returns cached detections for `key`, or null if not cached.
- * Sets `window.__lastDetections` and logs on cache hit.
- */
 export async function getCachedDetections(key: string): Promise<Detection[] | null> {
-  // 1. Memory cache (fastest)
   const mem = memCache.get(key);
   if (mem !== undefined) {
     console.log(`[detector] cache hit (memory) key="${key}" detections=${mem.length}`);
     (window as unknown as Record<string, unknown>).__lastDetections = mem;
     return mem;
   }
-
-  // 2. IDB
   try {
     const rec = await idbGet<{ key: string; detections: Detection[] }>('frames', key);
     if (rec) {
@@ -289,8 +326,7 @@ export async function getCachedDetections(key: string): Promise<Detection[] | nu
       (window as unknown as Record<string, unknown>).__lastDetections = rec.detections;
       return rec.detections;
     }
-  } catch { /* IDB unavailable */ }
-
+  } catch { /* ok */ }
   return null;
 }
 
@@ -307,30 +343,19 @@ async function drainQueue(): Promise<void> {
     const t0 = performance.now();
     const detections = await runOnnx(req.snap);
     const ms = performance.now() - t0;
-    inferenceCount++;
-    totalInferenceMs += ms;
-    const avg = totalInferenceMs / inferenceCount;
-    console.log(
-      `[detector] inference key="${req.key}" ${ms.toFixed(0)}ms` +
-      ` detections=${detections.length} avg=${avg.toFixed(0)}ms`,
-    );
+    inferenceStats[currentModel].count++;
+    inferenceStats[currentModel].totalMs += ms;
+    const avg = inferenceStats[currentModel].totalMs / inferenceStats[currentModel].count;
+    console.log(`[detector] inference model=${currentModel} key="${req.key}" ${ms.toFixed(0)}ms detections=${detections.length} avg=${avg.toFixed(0)}ms`);
     memCache.set(req.key, detections);
     idbPut('frames', { key: req.key, detections, cachedAt: Date.now() }).catch(() => {});
-    persistStats();
+    persistStats(currentModel);
     (window as unknown as Record<string, unknown>).__lastDetections = detections;
     req.callback(detections);
   }
   queueRunning = false;
 }
 
-/**
- * Schedule background inference for `source`.
- *
- * - Takes a pixel snapshot of `source` immediately (synchronous) so later draws
- *   on the canvas don't corrupt the queued data.
- * - Replaces any previously queued-but-not-yet-started request.
- * - Any in-flight inference runs to completion before the next one starts.
- */
 export function scheduleInference(
   source: HTMLCanvasElement | OffscreenCanvas,
   key: string,
@@ -344,23 +369,15 @@ export function scheduleInference(
 
 // ── Export path ───────────────────────────────────────────────────────────────
 
-/**
- * Run inference for export, bypassing the preview queue.
- * Checks cache first; falls back to direct ONNX inference.
- * Suitable for sequential export where no queue management is needed.
- */
 export async function detectForExport(
   source: HTMLCanvasElement | OffscreenCanvas,
   key: string,
 ): Promise<Detection[]> {
-  // Memory cache
   const mem = memCache.get(key);
   if (mem !== undefined) {
     console.log(`[detector] export cache hit (memory) key="${key}" detections=${mem.length}`);
     return mem;
   }
-
-  // IDB cache
   try {
     const rec = await idbGet<{ key: string; detections: Detection[] }>('frames', key);
     if (rec) {
@@ -369,31 +386,24 @@ export async function detectForExport(
       return rec.detections;
     }
   } catch { /* fall through */ }
-
-  // Live inference
   const t0 = performance.now();
-  const snap = captureSnapshot(source);
-  const detections = await runOnnx(snap);
+  const detections = await runOnnx(captureSnapshot(source));
   const ms = performance.now() - t0;
-  inferenceCount++;
-  totalInferenceMs += ms;
-  console.log(
-    `[detector] export inference key="${key}" ${ms.toFixed(0)}ms` +
-    ` detections=${detections.length} avg=${(totalInferenceMs / inferenceCount).toFixed(0)}ms`,
-  );
+  inferenceStats[currentModel].count++;
+  inferenceStats[currentModel].totalMs += ms;
+  const avg = inferenceStats[currentModel].totalMs / inferenceStats[currentModel].count;
+  console.log(`[detector] export inference model=${currentModel} key="${key}" ${ms.toFixed(0)}ms detections=${detections.length} avg=${avg.toFixed(0)}ms`);
   memCache.set(key, detections);
   idbPut('frames', { key, detections, cachedAt: Date.now() }).catch(() => {});
-  persistStats();
+  persistStats(currentModel);
   return detections;
 }
 
 // ── Drawing ───────────────────────────────────────────────────────────────────
 
-/** Draw detection boxes with label+confidence onto a canvas context. */
-export function drawDetections(
-  ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
-  detections: Detection[],
-): void {
+type AnyCtx = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
+
+function drawOutline(ctx: AnyCtx, detections: Detection[]): void {
   if (detections.length === 0) return;
   ctx.save();
   ctx.strokeStyle = '#ff0000';
@@ -409,4 +419,14 @@ export function drawDetections(
     ctx.fillText(label, d.x + 2, d.y - 4);
   }
   ctx.restore();
+}
+
+/** Apply detections to the canvas using the current draw mode. */
+export function applyDetections(ctx: AnyCtx, detections: Detection[], mode: DrawMode): void {
+  if (detections.length === 0) return;
+  if (mode === 'outline') {
+    drawOutline(ctx, detections);
+  } else {
+    blurrer.apply(ctx, detections, mode);
+  }
 }

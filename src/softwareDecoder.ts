@@ -91,10 +91,27 @@ export class SoftwareWebCodecsDecoder extends CustomVideoDecoder {
       },
     });
 
-    this.decoder.configure({
-      ...this.config,
-      hardwareAcceleration: 'prefer-software',
-    });
+    // configure() is synchronous; on some platforms (e.g. iOS Safari where
+    // 'prefer-software' is not a recognised HardwareAcceleration value) it may
+    // throw a TypeError or transition the decoder to 'closed' state immediately.
+    // Either case must propagate as an init() failure so mediabunny can fall
+    // back to its own WebCodecs path without 'prefer-software'.
+    try {
+      this.decoder.configure({
+        ...this.config,
+        hardwareAcceleration: 'prefer-software',
+      });
+    } catch (e) {
+      this.decoder.close();
+      this.decoder = null;
+      throw new Error(`SoftwareWebCodecsDecoder: configure threw for ${this.codec}: ${e}`);
+    }
+    if (this.decoder.state !== 'configured') {
+      const state = this.decoder.state;
+      this.decoder.close();
+      this.decoder = null;
+      throw new Error(`SoftwareWebCodecsDecoder: unexpected state "${state}" after configure for ${this.codec}`);
+    }
   }
 
   async decode(packet: EncodedPacket): Promise<void> {

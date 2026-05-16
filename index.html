@@ -3,279 +3,737 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Media Preview</title>
+  <title>Media Redactor</title>
   <style>
+    :root {
+      --bg:        #0d1117;
+      --card:      #161b22;
+      --card2:     #1f2937;
+      --border:    #30363d;
+      --text:      #e6edf3;
+      --dim:       #8b949e;
+      --muted:     #484f58;
+      --accent:    #3b82f6;
+      --accent-h:  #2563eb;
+      --green:     #22c55e;
+      --green-dk:  #166534;
+      --step-num:  #3b82f6;
+      --mono:      ui-monospace, 'SFMono-Regular', Consolas, monospace;
+    }
+
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
-      font-family: system-ui, sans-serif;
-      background: #1a1a1a;
-      color: #e0e0e0;
-      height: 100vh;
-      display: flex;
-      flex-direction: column;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100dvh;
+      padding: 20px 16px 40px;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    /* ── App title ─────────────────────────────────────────────── */
+    #app-title {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      color: var(--text);
+      margin-bottom: 20px;
+    }
+    #app-title span { color: var(--accent); }
+
+    /* ── Step card ─────────────────────────────────────────────── */
+    .step-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      margin-bottom: 16px;
       overflow: hidden;
     }
 
-    /* ── Drop zone ─────────────────────────────────────── */
-    #drop-zone {
-      padding: 10px 16px;
+    .step-header {
       display: flex;
       align-items: center;
       gap: 12px;
-      border-bottom: 1px solid #2e2e2e;
-      background: #242424;
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(255,255,255,0.02);
+    }
+
+    .step-number {
+      width: 26px; height: 26px;
+      border-radius: 50%;
+      background: var(--step-num);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       flex-shrink: 0;
-      transition: background 0.15s, border-color 0.15s;
     }
 
-    #drop-zone.drag-over {
-      background: #1a2a3a;
-      border-color: #3a7bd5;
+    .step-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
     }
 
-    #drop-hint {
-      font-size: 13px;
-      color: #666;
-      flex: 1;
-      pointer-events: none;
-      user-select: none;
+    .step-subtitle {
+      font-size: 12px;
+      color: var(--dim);
+      margin-left: auto;
     }
 
-    #file-input { display: none; }
+    .step-body {
+      padding: 18px;
+    }
+
+    /* ── 1. Load ───────────────────────────────────────────────── */
+    #load-body {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    #drop-zone {
+      border: 2px dashed var(--border);
+      border-radius: 10px;
+      padding: 32px 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      color: var(--muted);
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s, color 0.15s;
+    }
+    #drop-zone:hover, #drop-zone.drag-over {
+      border-color: var(--accent);
+      background: rgba(59,130,246,0.06);
+      color: var(--dim);
+    }
+    #drop-zone svg { width: 36px; height: 36px; opacity: 0.4; }
+    #drop-zone p { font-size: 14px; }
+    #drop-zone small { font-size: 12px; opacity: 0.6; }
+
+    #load-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
 
     #pick-btn {
-      padding: 5px 13px;
-      background: #3a7bd5;
+      padding: 9px 20px;
+      background: var(--accent);
       color: #fff;
       border: none;
-      border-radius: 4px;
+      border-radius: 8px;
       cursor: pointer;
+      font-size: 14px;
+      font-family: inherit;
+      font-weight: 500;
+    }
+    #pick-btn:hover { background: var(--accent-h); }
+    #file-input { display: none; }
+
+    #loaded-summary {
       font-size: 13px;
-    }
-    #pick-btn:hover { background: #2d64b8; }
-
-    #export-btn {
-      padding: 5px 13px;
-      background: #2d8a4e;
-      color: #fff;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 13px;
-    }
-    #export-btn:hover:not(:disabled) { background: #246b3d; }
-    #export-btn:disabled { opacity: 0.4; cursor: default; }
-
-    /* ── Global progress bar ───────────────────────────── */
-    #global-progress {
-      height: 3px;
-      background: #2e2e2e;
-      flex-shrink: 0;
-    }
-    #global-progress[hidden] { display: none; }
-    #global-progress-fill {
-      height: 100%;
-      background: #2d8a4e;
-      width: 0%;
-      transition: width 0.2s ease;
+      color: var(--dim);
     }
 
-    /* ── Tab bar ───────────────────────────────────────── */
-    #tab-bar {
+    /* ── 2. Preview ────────────────────────────────────────────── */
+    #step-preview, #step-settings, #step-export {
+      display: none;
+    }
+    #step-preview.active, #step-settings.active, #step-export.active {
+      display: block;
+    }
+
+    /* File nav row */
+    #file-nav {
       display: flex;
-      overflow-x: auto;
-      background: #1e1e1e;
-      border-bottom: 1px solid #2e2e2e;
-      min-height: 34px;
-      flex-shrink: 0;
-      scrollbar-width: thin;
-      scrollbar-color: #444 transparent;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 14px;
+      /* Always takes up space even when hidden to avoid layout shift */
+      min-height: 36px;
+      visibility: hidden;
     }
+    #file-nav.visible { visibility: visible; }
 
-    .tab {
-      padding: 7px 16px;
-      font-size: 12px;
-      white-space: nowrap;
+    .nav-btn {
+      width: 32px; height: 32px;
+      background: var(--card2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--dim);
+      font-size: 16px;
       cursor: pointer;
-      border: none;
-      border-right: 1px solid #2e2e2e;
-      border-bottom: 2px solid transparent;
-      color: #777;
-      background: transparent;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
       transition: color 0.1s, background 0.1s;
     }
-    .tab:hover { background: #282828; color: #bbb; }
-    .tab.active { color: #e0e0e0; border-bottom-color: #3a7bd5; background: #2d2d2d; }
+    .nav-btn:hover:not(:disabled) { background: #2d3748; color: var(--text); }
+    .nav-btn:disabled { opacity: 0.3; cursor: default; }
 
-    /* ── Preview area ──────────────────────────────────── */
-    #preview-area {
+    #file-select {
       flex: 1;
+      max-width: 340px;
+      padding: 6px 10px;
+      background: var(--card2);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 13px;
+      font-family: inherit;
+      cursor: pointer;
+    }
+
+    #file-counter {
+      font-size: 12px;
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+
+    /* Canvas area */
+    #preview-area {
       position: relative;
+      width: 100%;
+      aspect-ratio: 16/9;
+      background: #080b0f;
+      border-radius: 8px;
       overflow: hidden;
+      min-height: 180px;
     }
 
     .canvas-wrapper {
       position: absolute;
       inset: 0;
       display: none;
-      flex-direction: column;
       align-items: center;
       justify-content: center;
-      background: #111;
       overflow: auto;
     }
     .canvas-wrapper.active { display: flex; }
-
     .canvas-wrapper canvas {
       display: block;
       max-width: 100%;
       max-height: 100%;
       flex-shrink: 0;
     }
-
     .canvas-wrapper .error-msg {
-      color: #e06060;
+      color: #f87171;
       font-size: 14px;
       padding: 24px;
       text-align: center;
     }
 
-    /* ── Per-file progress bar ─────────────────────────── */
-    .file-progress {
-      width: 100%;
-      height: 3px;
-      background: #2e2e2e;
+    /* Detection spinner (absolutely positioned over canvas, top-left) */
+    #detect-status-inline {
       position: absolute;
-      bottom: 0;
-      left: 0;
-    }
-    .file-progress[hidden] { display: none; }
-    .file-progress-fill {
-      height: 100%;
-      background: #3a7bd5;
-      width: 0%;
-      transition: width 0.15s ease;
-    }
-
-    /* ── Detection status bar ──────────────────────────── */
-    .detect-status {
-      position: absolute;
-      top: 0; left: 0; right: 0;
-      padding: 4px 10px 4px 8px;
-      background: rgba(0,0,0,0.55);
-      color: #ccc;
-      font-size: 12px;
-      font-family: monospace;
+      top: 8px; left: 8px;
       display: flex;
       align-items: center;
       gap: 7px;
+      padding: 4px 10px;
+      background: rgba(0,0,0,0.7);
+      border-radius: 4px;
+      font-size: 11px;
+      font-family: var(--mono);
+      color: var(--dim);
       pointer-events: none;
       z-index: 10;
+      visibility: hidden;
     }
-    .detect-status[hidden] { display: none; }
-    .detect-status::before {
+    #detect-status-inline.visible { visibility: visible; }
+    #detect-status-inline::before {
       content: '';
-      display: inline-block;
       width: 11px; height: 11px;
-      border: 2px solid rgba(255,255,255,0.2);
-      border-top-color: #bbb;
+      border: 2px solid rgba(255,255,255,0.15);
+      border-top-color: var(--accent);
       border-radius: 50%;
-      animation: det-spin 0.75s linear infinite;
+      animation: spin 0.75s linear infinite;
       flex-shrink: 0;
     }
-    @keyframes det-spin { to { transform: rotate(360deg); } }
+    @keyframes spin { to { transform: rotate(360deg); } }
 
-    /* ── Empty state ───────────────────────────────────── */
-    #empty-state {
-      position: absolute;
-      inset: 0;
+    /* Trim controls */
+    #trim-section {
+      margin-top: 16px;
+      /* Always present in DOM, visibility-toggled to avoid layout shift */
+      visibility: hidden;
+    }
+    #trim-section.visible { visibility: visible; }
+
+    .trim-label-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+
+    .trim-section-label {
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .trim-times {
+      display: flex;
+      gap: 20px;
+      font-size: 12px;
+      font-family: var(--mono);
+      color: var(--dim);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .trim-time-item {
       display: flex;
       flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 14px;
-      color: #444;
-      pointer-events: none;
+      align-items: flex-end;
+      gap: 1px;
+    }
+    .trim-time-item.start { align-items: flex-start; }
+    .trim-time-item:last-child { align-items: flex-end; }
+
+    .trim-time-label {
+      font-size: 10px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--muted);
     }
 
-    #empty-state svg { width: 56px; height: 56px; }
-    #empty-state p { font-size: 15px; }
+    .trim-time-value { font-size: 13px; }
 
-    /* ── Video controls ────────────────────────────────── */
-    #controls {
-      display: none;
-      padding: 8px 16px;
-      background: #242424;
-      border-top: 1px solid #2e2e2e;
-      align-items: center;
-      gap: 10px;
-      flex-shrink: 0;
-    }
-    #controls.visible { display: flex; }
-
-    #play-btn {
-      width: 30px;
-      height: 30px;
-      background: #3a7bd5;
-      border: none;
-      border-radius: 50%;
-      color: #fff;
+    .trim-duration {
       font-size: 12px;
-      cursor: pointer;
+      color: var(--muted);
+      text-align: center;
+      flex: 1;
+    }
+
+    /* Dual-range track */
+    .trim-slider {
+      position: relative;
+      height: 36px;
       display: flex;
       align-items: center;
-      justify-content: center;
-      flex-shrink: 0;
     }
-    #play-btn:hover { background: #2d64b8; }
-
-    #seek-bar {
-      flex: 1;
-      height: 4px;
-      cursor: pointer;
-      accent-color: #3a7bd5;
+    .trim-track-bg {
+      position: absolute;
+      left: 0; right: 0;
+      height: 5px;
+      background: var(--card2);
+      border-radius: 3px;
+      border: 1px solid var(--border);
+    }
+    .trim-track-fill {
+      position: absolute;
+      height: 5px;
+      background: var(--accent);
+      border-radius: 3px;
+      pointer-events: none;
+    }
+    .trim-slider input[type=range] {
+      position: absolute;
+      width: 100%;
+      height: 5px;
+      margin: 0;
+      background: transparent;
+      -webkit-appearance: none;
+      appearance: none;
+      pointer-events: none;
+      outline: none;
+    }
+    .trim-slider input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 20px; height: 20px;
+      border-radius: 50%;
+      background: var(--accent);
+      border: 2px solid #fff;
+      cursor: ew-resize;
+      pointer-events: all;
+      box-shadow: 0 1px 5px rgba(0,0,0,0.6);
+    }
+    .trim-slider input[type=range]::-moz-range-thumb {
+      width: 20px; height: 20px;
+      border-radius: 50%;
+      background: var(--accent);
+      border: 2px solid #fff;
+      cursor: ew-resize;
+      pointer-events: all;
+      box-shadow: 0 1px 5px rgba(0,0,0,0.6);
     }
 
-    #time-display {
+    /* ── 3. Settings ───────────────────────────────────────────── */
+    .settings-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .setting-row {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .setting-row-label {
       font-size: 12px;
-      color: #777;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .setting-row-desc {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+
+    .pill-group {
+      display: flex;
+      flex-wrap: wrap;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      width: fit-content;
+    }
+    .pill-group label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 9px 18px;
+      font-size: 14px;
+      cursor: pointer;
+      color: var(--dim);
+      background: transparent;
+      border-right: 1px solid var(--border);
+      transition: color 0.1s, background 0.1s;
+      white-space: nowrap;
+      user-select: none;
+    }
+    .pill-group label:last-child { border-right: none; }
+    .pill-group label:hover { background: var(--card2); color: var(--text); }
+    .pill-group label:has(input:checked) { background: var(--accent); color: #fff; }
+    .pill-group input[type=radio] { display: none; }
+
+    /* Model load indicator — visibility-hidden, never causes layout shift */
+    .model-load-indicator {
+      height: 24px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      visibility: hidden;
+    }
+    .model-load-indicator.visible { visibility: visible; }
+    #model-load-bar-track {
+      width: 140px; height: 4px;
+      background: var(--card2);
+      border-radius: 2px;
+      border: 1px solid var(--border);
+    }
+    #model-load-bar-fill {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 2px;
+      width: 0%;
+      transition: width 0.2s ease;
+    }
+    #model-load-text {
+      font-size: 12px;
+      color: var(--dim);
+      white-space: nowrap;
+    }
+
+    /* ── 4. Export ─────────────────────────────────────────────── */
+    .export-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    #export-btn {
+      padding: 10px 24px;
+      background: var(--green-dk);
+      color: var(--green);
+      border: 1px solid var(--green);
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+      font-family: inherit;
+      font-weight: 600;
+    }
+    #export-btn:hover:not(:disabled) {
+      background: var(--green);
+      color: #fff;
+    }
+    #export-btn:disabled { opacity: 0.35; cursor: default; }
+
+    #export-all-btn {
+      padding: 10px 24px;
+      background: var(--card2);
+      color: var(--dim);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+      font-family: inherit;
+      font-weight: 500;
+    }
+    #export-all-btn:hover:not(:disabled) { background: #2d3748; color: var(--text); }
+    #export-all-btn:disabled { opacity: 0.35; cursor: default; }
+
+    /* Progress — fixed height rows to prevent layout shift */
+    .export-progress-rows {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      /* Reserve vertical space equal to global row even when empty */
+      min-height: 28px;
+    }
+
+    .export-global-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      height: 28px;
+      visibility: hidden;
+    }
+    .export-global-row.visible { visibility: visible; }
+
+    .export-global-label {
+      font-size: 12px;
+      color: var(--dim);
+      white-space: nowrap;
+    }
+
+    #global-progress-track {
+      flex: 1;
+      max-width: 200px;
+      height: 4px;
+      background: var(--card2);
+      border-radius: 2px;
+      border: 1px solid var(--border);
+    }
+    #global-progress-fill {
+      height: 100%;
+      background: var(--green);
+      border-radius: 2px;
+      width: 0%;
+      transition: width 0.2s ease;
+    }
+    #global-eta {
+      font-size: 12px;
+      color: var(--muted);
       font-variant-numeric: tabular-nums;
-      min-width: 90px;
-      text-align: right;
-      flex-shrink: 0;
+      white-space: nowrap;
+      min-width: 80px;
+    }
+
+    /* Per-file rows */
+    #export-file-rows { display: flex; flex-direction: column; gap: 6px; }
+    .export-file-row {
+      display: none;
+      align-items: center;
+      gap: 10px;
+      height: 22px;
+    }
+    .export-file-row.active { display: flex; }
+    .export-file-name {
+      font-size: 12px;
+      color: var(--dim);
+      min-width: 100px;
+      max-width: 200px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .export-file-bar-track {
+      flex: 1;
+      max-width: 180px;
+      height: 4px;
+      background: var(--card2);
+      border-radius: 2px;
+      border: 1px solid var(--border);
+    }
+    .export-file-bar-fill {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 2px;
+      width: 0%;
+      transition: width 0.15s ease;
+    }
+    .export-file-eta {
+      font-size: 12px;
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+      min-width: 72px;
+    }
+
+    /* ── Mobile ────────────────────────────────────────────────── */
+    @media (max-width: 560px) {
+      body { padding: 12px 10px 32px; }
+      .step-body { padding: 14px; }
+      .pill-group label { padding: 9px 12px; font-size: 13px; }
+      #export-btn, #export-all-btn { padding: 10px 16px; font-size: 13px; }
     }
   </style>
 </head>
 <body>
-  <div id="drop-zone">
-    <span id="drop-hint">Drop images or videos here</span>
-    <button id="pick-btn">Choose files</button>
-    <button id="export-btn" disabled>Export</button>
-    <input id="file-input" type="file" multiple accept="image/*,video/*">
-  </div>
 
-  <div id="global-progress" hidden>
-    <div id="global-progress-fill"></div>
-  </div>
+  <h1 id="app-title">Media<span>·</span>Redactor</h1>
 
-  <div id="tab-bar"></div>
-
-  <div id="preview-area">
-    <div id="empty-state">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="3" y="3" width="18" height="18" rx="2"/>
-        <circle cx="8.5" cy="8.5" r="1.5"/>
-        <polyline points="21 15 16 10 5 21"/>
-      </svg>
-      <p>Drop images or videos to get started</p>
+  <!-- ─────────────────────────── STEP 1: LOAD ─────────────────────────── -->
+  <div class="step-card" id="step-load">
+    <div class="step-header">
+      <div class="step-number">1</div>
+      <span class="step-title">Load files</span>
+    </div>
+    <div class="step-body" id="load-body">
+      <div id="drop-zone">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"
+             stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="17 8 12 3 7 8"/>
+          <line x1="12" y1="3" x2="12" y2="15"/>
+        </svg>
+        <p>Drop images or videos here</p>
+        <small>MP4 · MOV · WebM · JPEG · PNG · WebP</small>
+      </div>
+      <div id="load-actions">
+        <button id="pick-btn">Choose files</button>
+        <input id="file-input" type="file" multiple accept="image/*,video/*">
+        <span id="loaded-summary"></span>
+      </div>
     </div>
   </div>
 
-  <div id="controls">
-    <button id="play-btn" aria-label="Play/pause">▶</button>
-    <input id="seek-bar" type="range" min="0" max="1000" step="1" value="0">
-    <span id="time-display">0:00 / 0:00</span>
+  <!-- ──────────────────────────── STEP 2: PREVIEW ─────────────────────── -->
+  <div class="step-card" id="step-preview">
+    <div class="step-header">
+      <div class="step-number">2</div>
+      <span class="step-title">Preview &amp; trim</span>
+      <span class="step-subtitle" id="step-preview-subtitle"></span>
+    </div>
+    <div class="step-body">
+
+      <!-- File navigator (prev / dropdown / next) — hidden when 1 file -->
+      <div id="file-nav">
+        <button class="nav-btn" id="nav-prev" aria-label="Previous file">&#8592;</button>
+        <select id="file-select" aria-label="Selected file"></select>
+        <span id="file-counter"></span>
+        <button class="nav-btn" id="nav-next" aria-label="Next file">&#8594;</button>
+      </div>
+
+      <!-- Canvas preview -->
+      <div id="preview-area">
+        <div id="detect-status-inline">Detecting…</div>
+      </div>
+
+      <!-- Trim (videos only) — visibility:hidden so it doesn't shift layout -->
+      <div id="trim-section">
+        <div class="trim-label-row">
+          <span class="trim-section-label">Trim range</span>
+          <div class="trim-times">
+            <div class="trim-time-item start">
+              <span class="trim-time-label">Start</span>
+              <span class="trim-time-value" id="trim-start-label">0:00.000</span>
+            </div>
+            <span class="trim-duration" id="trim-duration-label"></span>
+            <div class="trim-time-item">
+              <span class="trim-time-label">End</span>
+              <span class="trim-time-value" id="trim-end-label">0:00.000</span>
+            </div>
+          </div>
+        </div>
+        <div class="trim-slider">
+          <div class="trim-track-bg"></div>
+          <div class="trim-track-fill" id="trim-track-fill"></div>
+          <input type="range" id="trim-start" min="0" max="1000" value="0"   step="1">
+          <input type="range" id="trim-end"   min="0" max="1000" value="1000" step="1">
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ──────────────────────────── STEP 3: SETTINGS ───────────────────── -->
+  <div class="step-card" id="step-settings">
+    <div class="step-header">
+      <div class="step-number">3</div>
+      <span class="step-title">Settings</span>
+    </div>
+    <div class="step-body">
+      <div class="settings-grid">
+
+        <!-- Model -->
+        <div class="setting-row">
+          <span class="setting-row-label">Detection model</span>
+          <div class="pill-group" id="model-radio-group">
+            <label><input type="radio" name="model" value="detect_n" checked>Small &mdash; fast (8 MB)</label>
+            <label><input type="radio" name="model" value="detect_x">Large &mdash; accurate (342 MB)</label>
+          </div>
+          <!-- Fixed-height indicator — visibility toggled, no layout shift -->
+          <div class="model-load-indicator" id="model-load-progress">
+            <div id="model-load-bar-track"><div id="model-load-bar-fill"></div></div>
+            <span id="model-load-text"></span>
+          </div>
+        </div>
+
+        <!-- Redaction mode + detecting spinner -->
+        <div class="setting-row">
+          <span class="setting-row-label">Redaction style</span>
+          <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+            <div class="pill-group" id="mode-radio-group">
+              <label><input type="radio" name="drawMode" value="outline">Outline (debug)</label>
+              <label><input type="radio" name="drawMode" value="blackout">Blackout</label>
+              <label><input type="radio" name="drawMode" value="blur" checked>Blur</label>
+            </div>
+            <div id="detect-status-settings"></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ──────────────────────────── STEP 4: EXPORT ─────────────────────── -->
+  <div class="step-card" id="step-export">
+    <div class="step-header">
+      <div class="step-number">4</div>
+      <span class="step-title">Export</span>
+    </div>
+    <div class="step-body">
+      <div class="export-actions">
+        <button id="export-btn" disabled>Export current file</button>
+        <button id="export-all-btn" disabled>Export all files</button>
+      </div>
+      <div class="export-progress-rows">
+        <div class="export-global-row" id="export-global-row">
+          <span class="export-global-label">Overall</span>
+          <div id="global-progress-track"><div id="global-progress-fill"></div></div>
+          <span id="global-eta"></span>
+        </div>
+        <div id="export-file-rows"></div>
+      </div>
+    </div>
   </div>
 
   <script type="module" src="/dist/bundle.js"></script>
