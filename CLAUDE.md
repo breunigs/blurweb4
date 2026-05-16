@@ -141,7 +141,19 @@ Audio is passed through automatically when no `audio:` options are specified.
 
 **Metadata pitfall:** mediabunny copies input metadata tags to the output by default. For
 GoPro files this includes ~25 KB of GPMF telemetry in a proprietary `ilst` format that
-ffprobe and other parsers reject. Always pass `tags: {}` to suppress metadata copying.
+ffprobe and other parsers reject as invalid. The fix is to pass a `tags` function that
+strips `Uint8Array` raw entries (binary blobs) while keeping harmless string fields like
+GPS coordinates (`©xyz`):
+```typescript
+tags: (input) => {
+  const { raw, ...rest } = input;
+  const safeRaw: typeof raw = {};
+  for (const [k, v] of Object.entries(raw ?? {})) {
+    if (typeof v === 'string') safeRaw[k] = v;
+  }
+  return { ...rest, ...(Object.keys(safeRaw).length ? { raw: safeRaw } : {}) };
+},
+```
 
 ## WebCodecs hardware-acceleration fallback chain (src/softwareDecoder.ts)
 
