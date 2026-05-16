@@ -415,13 +415,13 @@
     }
     /* Active (currently being dragged or last used) slider thumb */
     .trim-slider input[type=range].active-thumb::-webkit-slider-thumb {
-      outline: 3px solid rgba(255,255,255,0.9);
+      outline: 3px solid var(--bg);
       outline-offset: 2px;
-      box-shadow: 0 0 0 5px rgba(255,255,255,0.18), 0 1px 5px rgba(0,0,0,0.6);
+      box-shadow: 0 0 0 5px var(--accent), 0 1px 5px rgba(0,0,0,0.4);
     }
     .trim-slider input[type=range].active-thumb::-moz-range-thumb {
-      box-shadow: 0 0 0 4px rgba(255,255,255,0.22), 0 1px 5px rgba(0,0,0,0.6);
-      border: 3px solid #fff;
+      box-shadow: 0 0 0 4px var(--accent), 0 1px 5px rgba(0,0,0,0.4);
+      border: 3px solid var(--bg);
     }
 
     /* ── 3. Settings ───────────────────────────────────────────── */
