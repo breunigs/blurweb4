@@ -34,9 +34,12 @@ function copyOrtWasm() {
 copyOrtWasm();
 
 const buildConfig = {
-  entryPoints: ['src/main.ts'],
+  entryPoints: {
+    bundle:     'src/main.ts',
+    hevcWorker: 'src/hevcWorker.ts',
+  },
   bundle: true,
-  outfile: 'dist/bundle.js',
+  outdir: 'dist',
   format: 'esm',
   sourcemap: dev,
   target: ['chrome114', 'firefox115'],
@@ -54,5 +57,5 @@ if (dev) {
   console.log('Press Ctrl+C to stop.');
 } else {
   await esbuild.build(buildConfig);
-  console.log('Build complete → dist/bundle.js');
+  console.log('Build complete → dist/bundle.js + dist/hevcWorker.js');
 }

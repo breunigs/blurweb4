@@ -99,7 +99,9 @@ export class VideoPlayer {
     this.seekGen++;
     const myGen = this.seekGen;
 
+    const t0 = performance.now();
     const sample = await this.sink.getSample(time);
+    console.log(`[videoPlayer] getSample(${time.toFixed(3)}s) ${(performance.now() - t0).toFixed(1)}ms${myGen !== this.seekGen ? ' (superseded)' : ''}`);
 
     // If another seekTo() was called while we awaited, discard this result.
     if (myGen !== this.seekGen) {
@@ -121,13 +123,16 @@ export class VideoPlayer {
       const key = makeVideoKey(this.file, this.canvas.width, this.canvas.height, sample.microsecondTimestamp);
       sample.close();
 
+      const tCacheStart = performance.now();
       const cached = await getCachedDetections(key);
+      console.log(`[videoPlayer] getCachedDetections ${(performance.now() - tCacheStart).toFixed(1)}ms hit=${cached !== null}`);
       if (gen !== this.inferenceGen) return true; // frame was drawn even if inference skipped
       if (cached !== null) {
         this.applyAndNotify(cached);
       } else {
         this.statusEl.textContent = detStatusText();
         this.statusEl.hidden = false;
+        console.log(`[videoPlayer] scheduleInference key="${key}"`);
         scheduleInference(this.canvas, key, (dets) => {
           if (this.inferenceGen !== gen) return;
           this.statusEl.hidden = true;
