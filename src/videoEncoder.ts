@@ -27,8 +27,25 @@ export async function encodeVideo(
     const width  = await track.getCodedWidth();
     const height = await track.getCodedHeight();
 
+    // Use the source file's average bitrate for the output.
+    // getAverageBitrate() reads container metadata and often returns null when
+    // the container doesn't embed a bitrate field. Fall back to estimating from
+    // file size ÷ duration (subtracting ~192 kbps for audio overhead).
+    let sourceBitrate = await track.getAverageBitrate();
+    if (sourceBitrate === null) {
+      const duration = await input.getDurationFromMetadata([track]);
+      if (duration && duration > 0) {
+        const AUDIO_OVERHEAD_BPS = 192_000;
+        sourceBitrate = Math.max(100_000, Math.round(file.size * 8 / duration) - AUDIO_OVERHEAD_BPS);
+        console.log(`[videoEncoder] bitrate from file size: ${(sourceBitrate / 1_000_000).toFixed(2)} Mbps (file=${file.size} dur=${duration.toFixed(2)}s)`);
+      }
+    } else {
+      console.log(`[videoEncoder] bitrate from metadata: ${(sourceBitrate / 1_000_000).toFixed(2)} Mbps`);
+    }
+
     const enc = await detectEncoder(width, height);
     if (!enc) throw new Error('No encodable video codec available in this browser');
+    console.log(`[videoEncoder] encoding ${enc.codec} / ${enc.hardwareAcceleration} bitrate=${sourceBitrate ? `${(sourceBitrate / 1_000_000).toFixed(2)} Mbps` : 'mediabunny-default'}`);
 
     const format = enc.ext === '.webm' ? new WebMOutputFormat() : new Mp4OutputFormat();
     const target = new BufferTarget();
@@ -62,6 +79,7 @@ export async function encodeVideo(
       video: {
         codec:                enc.codec,
         hardwareAcceleration: enc.hardwareAcceleration,
+        ...(sourceBitrate !== null ? { bitrate: sourceBitrate } : {}),
         process: async (sample: VideoSample): Promise<OffscreenCanvas> => {
           if (!offscreen || offscreen.width !== sample.displayWidth || offscreen.height !== sample.displayHeight) {
             offscreen = new OffscreenCanvas(sample.displayWidth, sample.displayHeight);

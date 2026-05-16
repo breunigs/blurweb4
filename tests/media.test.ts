@@ -291,6 +291,18 @@ function ffprobeDuration(filePath: string): number {
   return parseFloat(fmt.duration);
 }
 
+function ffprobeHasVideo(filePath: string): boolean {
+  const out = execFileSync('ffprobe', [
+    '-v', 'quiet',
+    '-print_format', 'json',
+    '-show_streams',
+    '-select_streams', 'v',
+    filePath,
+  ], { encoding: 'utf8' });
+  const streams = (JSON.parse(out) as { streams: unknown[] }).streams;
+  return streams.length > 0;
+}
+
 const EXPORT_CASES = [
   { file: 'x264.mp4', codec: 'H.264' },
   { file: 'x265.mp4', codec: 'H.265', wasmFallback: true },
@@ -340,12 +352,15 @@ for (const { file, codec, wasmFallback } of EXPORT_CASES) {
       await download.saveAs(tmpPath);
 
       let outputDuration: number;
+      let hasVideoStream: boolean;
       try {
         outputDuration = ffprobeDuration(tmpPath);
+        hasVideoStream = ffprobeHasVideo(tmpPath);
       } finally {
         import('fs').then(fs => fs.unlinkSync(tmpPath)).catch(() => {});
       }
 
+      expect(hasVideoStream, 'Exported file must contain a video stream').toBe(true);
       expect(
         Math.abs(outputDuration - inputDuration),
         `Output duration ${outputDuration.toFixed(3)} s differs from input ${inputDuration.toFixed(3)} s by more than 0.1 s`,
