@@ -8,6 +8,9 @@ import './hevcDecoder';         // libav.js WASM fallback for HEVC (always)
 import './softwareDecoder';     // smart WebCodecs with hw→sw→no-preference fallback chain
 import './libavVideoDecoder';   // libav.js WASM fallback for AVC/AV1 (only when all WebCodecs fail)
 
+// Register quality-mode encoder (overrides mediabunny's realtime-latency default).
+import './qualityEncoder';
+
 import { App } from './app';
 
 const app = new App();
