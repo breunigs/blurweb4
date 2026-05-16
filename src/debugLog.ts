@@ -20,11 +20,20 @@ function timestamp(): string {
   return `${h}:${m}:${s}.${ms}`;
 }
 
+function safeStringify(a: unknown): string {
+  try {
+    return JSON.stringify(a);
+  } catch {
+    // Cyclic structures, BigInt, etc.
+    return String(a);
+  }
+}
+
 function record(level: string, args: unknown[]): void {
   const msg = args.map(a =>
     typeof a === 'string' ? a :
     a instanceof Error    ? `${a.message}` :
-    typeof a === 'object' ? JSON.stringify(a) :
+    typeof a === 'object' ? safeStringify(a) :
     String(a)
   ).join(' ');
   entries.push(`[${timestamp()}] ${level} ${msg}`);
