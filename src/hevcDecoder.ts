@@ -105,6 +105,7 @@ export class HevcFallbackDecoder extends CustomVideoDecoder {
   }
 
   async init(): Promise<void> {
+    window.dispatchEvent(new CustomEvent('libavfallback', { detail: 'hevc' }));
     this.worker = new Worker('/dist/hevcWorker.js', { type: 'module' });
 
     this.worker.onmessage = (e: MessageEvent) => {

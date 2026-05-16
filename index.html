@@ -313,6 +313,12 @@
       filter: blur(3px) brightness(0.55);
     }
 
+    #libav-warning {
+      font-size: 12px;
+      color: #b45309;
+      margin-left: auto;
+    }
+
     .canvas-wrapper .error-msg {
       color: #f87171;
       font-size: 14px;
@@ -851,6 +857,7 @@
       <div id="detect-status-row">
         <div id="detect-status-inline">Detecting…</div>
         <span id="detect-result"></span>
+        <span id="libav-warning" hidden>Software decoder active — seeking may be slow</span>
       </div>
 
       <!-- Trim (videos only) — visibility:hidden so it doesn't shift layout -->

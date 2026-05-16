@@ -33,6 +33,11 @@ export class VideoPlayer {
   onTimeUpdate: ((time: number) => void) | null = null;
   onEnd: (() => void) | null = null;
   onDetection: ((dets: Detection[]) => void) | null = null;
+  onLibavFallback: ((codec: string) => void) | null = null;
+
+  private readonly libavHandler = (e: Event) => {
+    this.onLibavFallback?.((e as CustomEvent<string>).detail);
+  };
 
   constructor(canvas: HTMLCanvasElement, statusEl: HTMLElement) {
     this.canvas   = canvas;
@@ -47,6 +52,7 @@ export class VideoPlayer {
 
   async load(file: File): Promise<void> {
     this.dispose();
+    window.addEventListener('libavfallback', this.libavHandler);
     this.file = file;
 
     this.input = new Input({ formats: ALL_FORMATS, source: new BlobSource(file) });
@@ -200,6 +206,7 @@ export class VideoPlayer {
     this.playing = false;
     this.seekGen++;   // invalidate any in-flight seek
     this.statusEl.hidden = true;
+    window.removeEventListener('libavfallback', this.libavHandler);
     this.input?.dispose();
     this.input = null;
     this.sink  = null;
