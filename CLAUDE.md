@@ -12,7 +12,8 @@ blurweb4/
 │   ├── imageRenderer.ts  createImageBitmap → canvas (renders bitmap only, no detection)
 │   ├── videoPlayer.ts    mediabunny VideoSampleSink wrapper with play/pause/seek
 │   ├── hevcDecoder.ts    libav.js WASM fallback decoder for HEVC (registered at startup)
-│   ├── softwareDecoder.ts  prefer-software WebCodecs wrapper for AVC/VP9
+│   ├── softwareDecoder.ts  smart WebCodecs decoder with hw→sw→no-pref fallback chain
+│   ├── libavVideoDecoder.ts  libav.js WASM fallback for AVC/AV1 (last resort)
 │   ├── detector.ts       YOLOv5 ONNX inference, IDB cache, inference queue, drawing
 │   ├── encoderConfig.ts  codec/hardware detection for export
 │   ├── videoEncoder.ts   mediabunny Conversion-based re-encoder (bakes detections in)
@@ -21,9 +22,10 @@ blurweb4/
 ├── models/
 │   └── detect_n_2024_04.onnx   YOLOv5n model (~8 MB), labels: plate, person
 ├── vendor/
-│   └── libav-hevc/       pre-built libav.js hevc-aac WASM variant (not bundled by esbuild)
-│       ├── libav-6.8.8.0-hevc-aac.wasm.mjs   ES module wrapper (~260 KB)
-│       └── libav-6.8.8.0-hevc-aac.wasm.wasm  WASM binary (~2.2 MB)
+│   ├── libav-hevc/       pre-built libav.js hevc-aac WASM variant (not bundled by esbuild)
+│   │   ├── libav-6.8.8.0-hevc-aac.wasm.mjs   ES module wrapper (~260 KB)
+│   │   └── libav-6.8.8.0-hevc-aac.wasm.wasm  WASM binary (~2.2 MB)
+│   └── libav-avc-av1/    libav.js AVC+AV1 WASM (build instructions in libavVideoDecoder.ts)
 ├── tests/
 │   └── media.test.ts   Playwright tests (Chromium + Firefox)
 ├── playwright.config.ts
@@ -135,6 +137,40 @@ const conversion = await Conversion.init({
 ```
 
 Audio is passed through automatically when no `audio:` options are specified.
+
+## WebCodecs hardware-acceleration fallback chain (src/softwareDecoder.ts)
+
+`SmartWebCodecsDecoder` handles AVC, VP9, AV1, and VP8 (everything except HEVC).
+
+**Startup probing:** At module load, `isConfigSupported()` is called for every
+`(codec, hardwareAcceleration)` combination — `prefer-hardware`, `prefer-software`,
+`no-preference` — for each codec.  Results are stored as `probe-ok` / `probe-fail`.
+
+**Decoder selection in `init()`:** The first non-failed mode is tried using
+`VideoDecoder.configure()`.  If configure transitions the decoder to a non-`configured`
+state (or throws), the mode is marked `runtime-fail` and the next is tried.
+
+**Runtime error recovery (the tricky part):**
+`VideoDecoder.decode()` is fire-and-forget — errors arrive asynchronously via the
+error callback, which closes the decoder (`state = 'closed'`).  Mediabunny detects
+this by calling our `flush()` after queuing packets; our `await this.decoder.flush()`
+then throws `InvalidStateError` because the decoder is closed.
+
+The fix: buffer every `EncodedVideoChunk` in `pendingPackets` inside `decode()`.  In
+`flush()`, if the flush fails (or `runtimeError` is already set / decoder already
+closed), call `reinitWithNextMode()` then replay all buffered packets through the new
+decoder and flush again.  `pendingPackets` is cleared only on a successful flush.
+
+**libav.js ultimate fallback (src/libavVideoDecoder.ts):**
+`LibavVideoFallbackDecoder` claims AVC and AV1 only when `areAllWebCodecsFailed(codec)`
+returns true (exported from softwareDecoder.ts).  It also HEAD-checks the vendor WASM
+at startup and will not activate if the file is absent.  Vendor files go in
+`vendor/libav-avc-av1/` — see that file's header for build instructions.
+
+**Registration order in main.ts matters:**
+1. `hevcDecoder` — HEVC → always libav
+2. `softwareDecoder` — AVC/VP9/AV1/VP8 → smart WebCodecs, checked first
+3. `libavVideoDecoder` — AVC/AV1 → libav fallback, checked only if #2 returns false
 
 ## HEVC / H.265 support
 
