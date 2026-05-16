@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,43 +8,49 @@
   <style>
     /* ── Dark theme (default) ───────────────────────────────────── */
     :root {
-      --bg:        #0d1117;
-      --card:      #161b22;
-      --card2:     #1f2937;
-      --border:    #30363d;
-      --text:      #e6edf3;
-      --dim:       #8b949e;
-      --muted:     #484f58;
-      --accent:    #3b82f6;
-      --accent-h:  #2563eb;
-      --green:     #22c55e;
-      --green-dk:  #166534;
-      --step-num:  #3b82f6;
+      --bg: #0d1117;
+      --card: #161b22;
+      --card2: #1f2937;
+      --border: #30363d;
+      --text: #e6edf3;
+      --dim: #8b949e;
+      --muted: #484f58;
+      --accent: #3b82f6;
+      --accent-h: #2563eb;
+      --green: #22c55e;
+      --green-dk: #166534;
+      --step-num: #3b82f6;
       --canvas-bg: #080b0f;
-      --mono:      ui-monospace, 'SFMono-Regular', Consolas, monospace;
+      --mono: ui-monospace, 'SFMono-Regular', Consolas, monospace;
     }
 
     /* ── Light theme ────────────────────────────────────────────── */
     @media (prefers-color-scheme: light) {
       :root {
-        --bg:        #f6f8fa;
-        --card:      #ffffff;
-        --card2:     #f0f2f5;
-        --border:    #d0d7de;
-        --text:      #1f2328;
-        --dim:       #57606a;
-        --muted:     #8c959f;
-        --accent:    #2563eb;
-        --accent-h:  #1d4ed8;
-        --green:     #16a34a;
-        --green-dk:  #dcfce7;
-        --step-num:  #2563eb;
+        --bg: #f6f8fa;
+        --card: #ffffff;
+        --card2: #f0f2f5;
+        --border: #d0d7de;
+        --text: #1f2328;
+        --dim: #57606a;
+        --muted: #8c959f;
+        --accent: #2563eb;
+        --accent-h: #1d4ed8;
+        --green: #16a34a;
+        --green-dk: #dcfce7;
+        --step-num: #2563eb;
         --canvas-bg: #1a1a1a;
-        --mono:      ui-monospace, 'SFMono-Regular', Consolas, monospace;
+        --mono: ui-monospace, 'SFMono-Regular', Consolas, monospace;
       }
     }
 
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
 
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
@@ -65,7 +72,10 @@
       color: var(--text);
       margin-bottom: 20px;
     }
-    #app-title span { color: var(--accent); }
+
+    #app-title span {
+      color: var(--accent);
+    }
 
     /* ── Step card ─────────────────────────────────────────────── */
     .step-card {
@@ -82,11 +92,12 @@
       gap: 12px;
       padding: 14px 18px;
       border-bottom: 1px solid var(--border);
-      background: rgba(255,255,255,0.02);
+      background: rgba(255, 255, 255, 0.02);
     }
 
     .step-number {
-      width: 26px; height: 26px;
+      width: 26px;
+      height: 26px;
       border-radius: 50%;
       background: var(--step-num);
       color: #fff;
@@ -135,14 +146,28 @@
       cursor: pointer;
       transition: border-color 0.15s, background 0.15s, color 0.15s;
     }
-    #drop-zone:hover, #drop-zone.drag-over {
+
+    #drop-zone:hover,
+    #drop-zone.drag-over {
       border-color: var(--accent);
-      background: rgba(59,130,246,0.06);
+      background: rgba(59, 130, 246, 0.06);
       color: var(--dim);
     }
-    #drop-zone svg { width: 36px; height: 36px; opacity: 0.4; }
-    #drop-zone p { font-size: 14px; }
-    #drop-zone small { font-size: 12px; opacity: 0.6; }
+
+    #drop-zone svg {
+      width: 36px;
+      height: 36px;
+      opacity: 0.4;
+    }
+
+    #drop-zone p {
+      font-size: 14px;
+    }
+
+    #drop-zone small {
+      font-size: 12px;
+      opacity: 0.6;
+    }
 
     #load-actions {
       display: flex;
@@ -162,8 +187,14 @@
       font-family: inherit;
       font-weight: 500;
     }
-    #pick-btn:hover { background: var(--accent-h); }
-    #file-input { display: none; }
+
+    #pick-btn:hover {
+      background: var(--accent-h);
+    }
+
+    #file-input {
+      display: none;
+    }
 
     #loaded-summary {
       font-size: 13px;
@@ -171,10 +202,15 @@
     }
 
     /* ── 2. Preview ────────────────────────────────────────────── */
-    #step-preview, #step-settings, #step-export {
+    #step-preview,
+    #step-settings,
+    #step-export {
       display: none;
     }
-    #step-preview.active, #step-settings.active, #step-export.active {
+
+    #step-preview.active,
+    #step-settings.active,
+    #step-export.active {
       display: block;
     }
 
@@ -188,10 +224,14 @@
       min-height: 36px;
       visibility: hidden;
     }
-    #file-nav.visible { visibility: visible; }
+
+    #file-nav.visible {
+      visibility: visible;
+    }
 
     .nav-btn {
-      width: 32px; height: 32px;
+      width: 32px;
+      height: 32px;
       background: var(--card2);
       border: 1px solid var(--border);
       border-radius: 6px;
@@ -204,8 +244,16 @@
       flex-shrink: 0;
       transition: color 0.1s, background 0.1s;
     }
-    .nav-btn:hover:not(:disabled) { background: var(--card2); color: var(--text); }
-    .nav-btn:disabled { opacity: 0.3; cursor: default; }
+
+    .nav-btn:hover:not(:disabled) {
+      background: var(--card2);
+      color: var(--text);
+    }
+
+    .nav-btn:disabled {
+      opacity: 0.3;
+      cursor: default;
+    }
 
     #file-select {
       flex: 1;
@@ -246,7 +294,11 @@
       justify-content: center;
       overflow: auto;
     }
-    .canvas-wrapper.active { display: flex; }
+
+    .canvas-wrapper.active {
+      display: flex;
+    }
+
     .canvas-wrapper canvas {
       display: block;
       max-width: 100%;
@@ -255,10 +307,12 @@
       /* Stale frame indicator: applied when canvas doesn't yet show the seeked position */
       transition: filter 0.15s ease;
     }
+
     /* When #preview-area has .stale, dim and blur the canvas to signal loading */
     #preview-area.stale .canvas-wrapper.active canvas {
       filter: blur(3px) brightness(0.55);
     }
+
     .canvas-wrapper .error-msg {
       color: #f87171;
       font-size: 14px;
@@ -284,23 +338,36 @@
       color: var(--dim);
       visibility: hidden;
     }
-    #detect-status-inline.visible { visibility: visible; }
+
+    #detect-status-inline.visible {
+      visibility: visible;
+    }
+
     #detect-status-inline::before {
       content: '';
-      width: 11px; height: 11px;
+      width: 11px;
+      height: 11px;
       border: 2px solid var(--border);
       border-top-color: var(--accent);
       border-radius: 50%;
       animation: spin 0.75s linear infinite;
       flex-shrink: 0;
     }
-    @keyframes spin { to { transform: rotate(360deg); } }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
 
     #detect-result {
       color: var(--dim);
       visibility: hidden;
     }
-    #detect-result.visible { visibility: visible; }
+
+    #detect-result.visible {
+      visibility: visible;
+    }
 
     /* Trim controls */
     #trim-section {
@@ -308,7 +375,10 @@
       /* Always present in DOM, visibility-toggled to avoid layout shift */
       visibility: hidden;
     }
-    #trim-section.visible { visibility: visible; }
+
+    #trim-section.visible {
+      visibility: visible;
+    }
 
     .trim-label-row {
       display: flex;
@@ -340,8 +410,14 @@
       align-items: flex-end;
       gap: 1px;
     }
-    .trim-time-item.start { align-items: flex-start; }
-    .trim-time-item:last-child { align-items: flex-end; }
+
+    .trim-time-item.start {
+      align-items: flex-start;
+    }
+
+    .trim-time-item:last-child {
+      align-items: flex-end;
+    }
 
     .trim-time-label {
       font-size: 10px;
@@ -350,7 +426,9 @@
       color: var(--muted);
     }
 
-    .trim-time-value { font-size: 13px; }
+    .trim-time-value {
+      font-size: 13px;
+    }
 
     .trim-duration {
       font-size: 12px;
@@ -366,14 +444,17 @@
       display: flex;
       align-items: center;
     }
+
     .trim-track-bg {
       position: absolute;
-      left: 0; right: 0;
+      left: 0;
+      right: 0;
       height: 5px;
       background: var(--card2);
       border-radius: 3px;
       border: 1px solid var(--border);
     }
+
     .trim-track-fill {
       position: absolute;
       height: 5px;
@@ -381,6 +462,7 @@
       border-radius: 3px;
       pointer-events: none;
     }
+
     .trim-slider input[type=range] {
       position: absolute;
       width: 100%;
@@ -392,35 +474,41 @@
       pointer-events: none;
       outline: none;
     }
+
     .trim-slider input[type=range]::-webkit-slider-thumb {
       -webkit-appearance: none;
-      width: 20px; height: 20px;
+      width: 20px;
+      height: 20px;
       border-radius: 50%;
       background: var(--accent);
       border: 2px solid #fff;
       cursor: ew-resize;
       pointer-events: all;
-      box-shadow: 0 1px 5px rgba(0,0,0,0.6);
+      box-shadow: 0 1px 5px rgba(0, 0, 0, 0.6);
       outline: 2px solid transparent;
       outline-offset: 2px;
     }
+
     .trim-slider input[type=range]::-moz-range-thumb {
-      width: 20px; height: 20px;
+      width: 20px;
+      height: 20px;
       border-radius: 50%;
       background: var(--accent);
       border: 2px solid #fff;
       cursor: ew-resize;
       pointer-events: all;
-      box-shadow: 0 1px 5px rgba(0,0,0,0.6);
+      box-shadow: 0 1px 5px rgba(0, 0, 0, 0.6);
     }
+
     /* Active (currently being dragged or last used) slider thumb */
     .trim-slider input[type=range].active-thumb::-webkit-slider-thumb {
       outline: 3px solid var(--bg);
       outline-offset: 2px;
-      box-shadow: 0 0 0 5px var(--accent), 0 1px 5px rgba(0,0,0,0.4);
+      box-shadow: 0 0 0 5px var(--accent), 0 1px 5px rgba(0, 0, 0, 0.4);
     }
+
     .trim-slider input[type=range].active-thumb::-moz-range-thumb {
-      box-shadow: 0 0 0 4px var(--accent), 0 1px 5px rgba(0,0,0,0.4);
+      box-shadow: 0 0 0 4px var(--accent), 0 1px 5px rgba(0, 0, 0, 0.4);
       border: 3px solid var(--bg);
     }
 
@@ -459,6 +547,7 @@
       overflow: hidden;
       width: fit-content;
     }
+
     .pill-group label {
       display: flex;
       align-items: center;
@@ -473,10 +562,24 @@
       white-space: nowrap;
       user-select: none;
     }
-    .pill-group label:last-child { border-right: none; }
-    .pill-group label:hover { background: var(--card2); color: var(--text); }
-    .pill-group label:has(input:checked) { background: var(--accent); color: #fff; }
-    .pill-group input[type=radio] { display: none; }
+
+    .pill-group label:last-child {
+      border-right: none;
+    }
+
+    .pill-group label:hover {
+      background: var(--card2);
+      color: var(--text);
+    }
+
+    .pill-group label:has(input:checked) {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    .pill-group input[type=radio] {
+      display: none;
+    }
 
     /* Model load indicator — visibility-hidden, never causes layout shift */
     .model-load-indicator {
@@ -486,13 +589,19 @@
       gap: 10px;
       visibility: hidden;
     }
-    .model-load-indicator.visible { visibility: visible; }
+
+    .model-load-indicator.visible {
+      visibility: visible;
+    }
+
     #model-load-bar-track {
-      width: 140px; height: 4px;
+      width: 140px;
+      height: 4px;
       background: var(--card2);
       border-radius: 2px;
       border: 1px solid var(--border);
     }
+
     #model-load-bar-fill {
       height: 100%;
       background: var(--accent);
@@ -500,6 +609,7 @@
       width: 0%;
       transition: width 0.2s ease;
     }
+
     #model-load-text {
       font-size: 12px;
       color: var(--dim);
@@ -526,11 +636,16 @@
       font-family: inherit;
       font-weight: 600;
     }
+
     #export-btn:hover:not(:disabled) {
       background: var(--green);
       color: #fff;
     }
-    #export-btn:disabled { opacity: 0.35; cursor: default; }
+
+    #export-btn:disabled {
+      opacity: 0.35;
+      cursor: default;
+    }
 
     #export-all-btn {
       padding: 10px 24px;
@@ -543,8 +658,16 @@
       font-family: inherit;
       font-weight: 500;
     }
-    #export-all-btn:hover:not(:disabled) { background: var(--card2); color: var(--text); }
-    #export-all-btn:disabled { opacity: 0.35; cursor: default; }
+
+    #export-all-btn:hover:not(:disabled) {
+      background: var(--card2);
+      color: var(--text);
+    }
+
+    #export-all-btn:disabled {
+      opacity: 0.35;
+      cursor: default;
+    }
 
     /* Progress — fixed height rows to prevent layout shift */
     .export-progress-rows {
@@ -562,7 +685,10 @@
       height: 28px;
       visibility: hidden;
     }
-    .export-global-row.visible { visibility: visible; }
+
+    .export-global-row.visible {
+      visibility: visible;
+    }
 
     .export-global-label {
       font-size: 12px;
@@ -578,6 +704,7 @@
       border-radius: 2px;
       border: 1px solid var(--border);
     }
+
     #global-progress-fill {
       height: 100%;
       background: var(--green);
@@ -585,6 +712,7 @@
       width: 0%;
       transition: width 0.2s ease;
     }
+
     #global-eta {
       font-size: 12px;
       color: var(--muted);
@@ -594,14 +722,23 @@
     }
 
     /* Per-file rows */
-    #export-file-rows { display: flex; flex-direction: column; gap: 6px; }
+    #export-file-rows {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
     .export-file-row {
       display: none;
       align-items: center;
       gap: 10px;
       height: 22px;
     }
-    .export-file-row.active { display: flex; }
+
+    .export-file-row.active {
+      display: flex;
+    }
+
     .export-file-name {
       font-size: 12px;
       color: var(--dim);
@@ -611,6 +748,7 @@
       overflow: hidden;
       text-overflow: ellipsis;
     }
+
     .export-file-bar-track {
       flex: 1;
       max-width: 180px;
@@ -619,6 +757,7 @@
       border-radius: 2px;
       border: 1px solid var(--border);
     }
+
     .export-file-bar-fill {
       height: 100%;
       background: var(--accent);
@@ -626,6 +765,7 @@
       width: 0%;
       transition: width 0.15s ease;
     }
+
     .export-file-eta {
       font-size: 12px;
       color: var(--muted);
@@ -636,13 +776,28 @@
 
     /* ── Mobile ────────────────────────────────────────────────── */
     @media (max-width: 560px) {
-      body { padding: 12px 10px 32px; }
-      .step-body { padding: 14px; }
-      .pill-group label { padding: 9px 12px; font-size: 13px; }
-      #export-btn, #export-all-btn { padding: 10px 16px; font-size: 13px; }
+      body {
+        padding: 12px 10px 32px;
+      }
+
+      .step-body {
+        padding: 14px;
+      }
+
+      .pill-group label {
+        padding: 9px 12px;
+        font-size: 13px;
+      }
+
+      #export-btn,
+      #export-all-btn {
+        padding: 10px 16px;
+        font-size: 13px;
+      }
     }
   </style>
 </head>
+
 <body>
 
   <h1 id="app-title">Media<span>·</span>Redactor</h1>
@@ -655,11 +810,11 @@
     </div>
     <div class="step-body" id="load-body">
       <div id="drop-zone">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"
-             stroke-linecap="round" stroke-linejoin="round">
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-          <polyline points="17 8 12 3 7 8"/>
-          <line x1="12" y1="3" x2="12" y2="15"/>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"
+          stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+          <polyline points="17 8 12 3 7 8" />
+          <line x1="12" y1="3" x2="12" y2="15" />
         </svg>
         <p>Drop images or videos here</p>
         <small>MP4 · MOV · WebM · JPEG · PNG · WebP</small>
@@ -717,8 +872,8 @@
         <div class="trim-slider">
           <div class="trim-track-bg"></div>
           <div class="trim-track-fill" id="trim-track-fill"></div>
-          <input type="range" id="trim-start" min="0" max="1000" value="0"   step="1">
-          <input type="range" id="trim-end"   min="0" max="1000" value="1000" step="1">
+          <input type="range" id="trim-start" min="0" max="1000" value="0" step="1">
+          <input type="range" id="trim-end" min="0" max="1000" value="1000" step="1">
         </div>
       </div>
 
@@ -743,7 +898,9 @@
           </div>
           <!-- Fixed-height indicator — visibility toggled, no layout shift -->
           <div class="model-load-indicator" id="model-load-progress">
-            <div id="model-load-bar-track"><div id="model-load-bar-fill"></div></div>
+            <div id="model-load-bar-track">
+              <div id="model-load-bar-fill"></div>
+            </div>
             <span id="model-load-text"></span>
           </div>
         </div>
@@ -753,9 +910,9 @@
           <span class="setting-row-label">Redaction style</span>
           <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
             <div class="pill-group" id="mode-radio-group">
-              <label><input type="radio" name="drawMode" value="outline">Outline (debug)</label>
-              <label><input type="radio" name="drawMode" value="blackout">Blackout</label>
               <label><input type="radio" name="drawMode" value="blur" checked>Blur</label>
+              <label><input type="radio" name="drawMode" value="blackout">Blackout</label>
+              <label><input type="radio" name="drawMode" value="outline">Outline (debug)</label>
             </div>
             <div id="detect-status-settings"></div>
           </div>
@@ -779,7 +936,9 @@
       <div class="export-progress-rows">
         <div class="export-global-row" id="export-global-row">
           <span class="export-global-label">Overall</span>
-          <div id="global-progress-track"><div id="global-progress-fill"></div></div>
+          <div id="global-progress-track">
+            <div id="global-progress-fill"></div>
+          </div>
           <span id="global-eta"></span>
         </div>
         <div id="export-file-rows"></div>
@@ -841,4 +1000,5 @@
 
   <script type="module" src="/dist/bundle.js"></script>
 </body>
+
 </html>
