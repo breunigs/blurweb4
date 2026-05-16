@@ -12,7 +12,7 @@
  *   docker build -f /tmp/libavjs/Dockerfile.development -t libavjs-builder /tmp/libavjs
  *   # Inside the container, run config/mkconfig.js:
  *   docker run --rm -v /tmp/libavjs:/work -w /work libavjs-builder bash -c \
- *     "cd config && node mkconfig.js avc-av1 '[\"format-mp4\",\"parser-h264\",\"decoder-h264\",\"parser-av1\",\"decoder-libaom_av1\",\"swscale\"]' && cd .. && make build-avc-av1"
+ *     "cd configs && node mkconfig.js avc-av1 '[\"format-mp4\",\"parser-h264\",\"decoder-h264\",\"parser-av1\",\"decoder-libaom_av1\",\"swscale\"]' && cd .. && make build-avc-av1"
  *   cp /tmp/libavjs/dist/libav-6.8.8.0-avc-av1.wasm.{mjs,wasm} vendor/libav-avc-av1/
  *
  * Note: H.264 and AV1 (libaom) are patent/licensing-sensitive — build and
@@ -35,9 +35,9 @@ const LIBAV_MJS = '/vendor/libav-avc-av1/libav-6.8.8.0-avc-av1.wasm.mjs';
 // ── Pixel format maps (same as hevcDecoder.ts) ─────────────────────────────
 
 const AV_PIX_FMT_MAP: Record<number, VideoSamplePixelFormat> = {
-  0:  'I420',      // AV_PIX_FMT_YUV420P
-  4:  'I422',      // AV_PIX_FMT_YUV422P
-  5:  'I444',      // AV_PIX_FMT_YUV444P
+  0: 'I420',      // AV_PIX_FMT_YUV420P
+  4: 'I422',      // AV_PIX_FMT_YUV422P
+  5: 'I444',      // AV_PIX_FMT_YUV444P
   12: 'I420',      // AV_PIX_FMT_YUVJ420P  (full-range, same layout)
   23: 'NV12',      // AV_PIX_FMT_NV12
   63: 'I420P10',   // AV_PIX_FMT_YUV420P10LE
@@ -91,8 +91,8 @@ let wasmAvailable: boolean | null = null;
 export class LibavVideoFallbackDecoder extends CustomVideoDecoder {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private libav: any = null;
-  private c     = 0;  // AVCodecContext*
-  private pkt   = 0;  // AVPacket*
+  private c = 0;  // AVCodecContext*
+  private pkt = 0;  // AVPacket*
   private frame = 0;  // AVFrame*
 
   static override supports(codec: string, _config: VideoDecoderConfig): boolean {
@@ -105,7 +105,7 @@ export class LibavVideoFallbackDecoder extends CustomVideoDecoder {
 
   async init(): Promise<void> {
     const codec = this.codec as VideoCodec;
-    const codecId   = CODEC_ID[codec];
+    const codecId = CODEC_ID[codec];
     const codecName = CODEC_NAME[codec];
     if (codecId === undefined || !codecName) {
       throw new Error(`LibavVideoFallbackDecoder: unsupported codec ${codec}`);
@@ -128,10 +128,10 @@ export class LibavVideoFallbackDecoder extends CustomVideoDecoder {
     [, this.c, this.pkt, this.frame] = await this.libav.ff_init_decoder(codecName, {
       codecpar: {
         codec_type: AVMEDIA_TYPE_VIDEO,
-        codec_id:   codecId,
-        format:     -1,
-        width:      this.config.codedWidth  ?? 0,
-        height:     this.config.codedHeight ?? 0,
+        codec_id: codecId,
+        format: -1,
+        width: this.config.codedWidth ?? 0,
+        height: this.config.codedHeight ?? 0,
         extradata,
       },
       time_base: [1, 1_000_000],
@@ -146,10 +146,10 @@ export class LibavVideoFallbackDecoder extends CustomVideoDecoder {
     const rawFrames: unknown[] = await this.libav.ff_decode_multi(
       this.c, this.pkt, this.frame,
       [{
-        data:          packet.data,
+        data: packet.data,
         pts,
-        dts:           pts,
-        flags:         packet.type === 'key' ? 1 : 0,
+        dts: pts,
+        flags: packet.type === 'key' ? 1 : 0,
         time_base_num: 1,
         time_base_den: 1_000_000,
       }],
@@ -185,27 +185,27 @@ export class LibavVideoFallbackDecoder extends CustomVideoDecoder {
         continue;
       }
 
-      const w = frame.width  as number;
+      const w = frame.width as number;
       const h = frame.height as number;
       const layout = this.packedLayout(format, w, h);
 
-      let displayWidth  = w;
+      let displayWidth = w;
       let displayHeight = h;
       const sar = frame.sample_aspect_ratio as [number, number] | undefined;
       if (sar && sar[0] > 0 && sar[1] > 0 && sar[0] !== sar[1]) {
         const aspect = sar[0] / sar[1];
-        if (aspect > 1) displayWidth  = Math.round(w * aspect);
-        else            displayHeight = Math.round(h / aspect);
+        if (aspect > 1) displayWidth = Math.round(w * aspect);
+        else displayHeight = Math.round(h / aspect);
       }
 
       this.onSample(new VideoSample(frame.data as Uint8Array, {
         format,
-        codedWidth:    w,
-        codedHeight:   h,
+        codedWidth: w,
+        codedHeight: h,
         displayWidth,
         displayHeight,
-        timestamp:     ((frame.pts as number) ?? 0) / 1_000_000,
-        duration:      0,
+        timestamp: ((frame.pts as number) ?? 0) / 1_000_000,
+        duration: 0,
         layout,
       }));
     }
@@ -217,12 +217,12 @@ export class LibavVideoFallbackDecoder extends CustomVideoDecoder {
     h: number,
   ): { offset: number; stride: number }[] {
     const yStride = w;
-    const ySize   = yStride * h;
+    const ySize = yStride * h;
     const nChroma = CHROMA_PLANES[format] ?? 2;
 
     if (format === 'NV12') {
       return [
-        { offset: 0,     stride: w },
+        { offset: 0, stride: w },
         { offset: ySize, stride: w },
       ];
     }
@@ -232,13 +232,13 @@ export class LibavVideoFallbackDecoder extends CustomVideoDecoder {
     const chromaW = is444 ? w : w >> 1;
     const chromaH = (is422 || is444) ? h : h >> 1;
     const uvStride = chromaW;
-    const uvSize   = uvStride * chromaH;
+    const uvSize = uvStride * chromaH;
 
     if (nChroma === 2) {
       return [
-        { offset: 0,               stride: yStride },
-        { offset: ySize,           stride: uvStride },
-        { offset: ySize + uvSize,  stride: uvStride },
+        { offset: 0, stride: yStride },
+        { offset: ySize, stride: uvStride },
+        { offset: ySize + uvSize, stride: uvStride },
       ];
     }
 
