@@ -12,7 +12,7 @@
  *   docker build -f /tmp/libavjs/Dockerfile.development -t libavjs-builder /tmp/libavjs
  *   # Inside the container, run config/mkconfig.js:
  *   docker run --rm -v /tmp/libavjs:/work -w /work libavjs-builder bash -c \
- *     "cd configs && node mkconfig.js avc-av1 '[\"format-mp4\",\"parser-h264\",\"decoder-h264\",\"parser-av1\",\"decoder-libaom_av1\",\"swscale\"]' && cd .. && make build-avc-av1"
+ *     "cd configs && node mkconfig.js avc-av1 '[\"format-mp4\",\"parser-h264\",\"decoder-h264\",\"parser-av1\",\"decoder-libaom_av1\",\"swscale\"]' && cd .. && MAKEFLAGS=-j\$(nproc) make dist/libav-6.8.8.0-avc-av1.wasm.mjs"
  *   cp /tmp/libavjs/dist/libav-6.8.8.0-avc-av1.wasm.{mjs,wasm} vendor/libav-avc-av1/
  *
  * Note: H.264 and AV1 (libaom) are patent/licensing-sensitive — build and

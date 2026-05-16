@@ -282,7 +282,8 @@ from the source tarball inside the npm package:
 mkdir /tmp/libavjs && tar xf node_modules/libav.js/sources/libav.js.tar.xz -C /tmp/libavjs
 cp node_modules/libav.js/sources/*.tar.* /tmp/libavjs/
 docker build -f /tmp/libavjs/Dockerfile.development -t libavjs-builder /tmp/libavjs
-docker run --rm -v /tmp/libavjs:/work -w /work libavjs-builder make build-hevc-aac
+docker run --rm -v /tmp/libavjs:/work -w /work libavjs-builder bash -c \
+  "MAKEFLAGS=-j\$(nproc) make dist/libav-6.8.8.0-hevc-aac.wasm.mjs"
 # Copy output:
 cp /tmp/libavjs/dist/libav-6.8.8.0-hevc-aac.wasm.{mjs,wasm} vendor/libav-hevc/
 ```
