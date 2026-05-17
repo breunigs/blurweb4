@@ -502,6 +502,27 @@ test.describe('Object detection — JPEG first frame', () => {
     const detections = await waitForDetections(page);
     assertDetectionsMatch(detections, JPEG_REF_DETECTIONS);
   });
+
+  // Actual confidences: ~0.90, ~0.67, ~0.43.
+  // At 0.10 all three plates are shown; at 0.50 only the two high-conf ones pass.
+  test('minConfidence=0.10 shows 3 plates', async ({ page }) => {
+    await loadFile(page, path.join(EXAMPLES, 'jpeg.jpg'));
+    await waitForCanvas(page);
+    await waitForDetections(page);
+    await page.evaluate(() => (window as any).__setMinConfidence(0.10));
+    const detections = await waitForDetections(page);
+    expect(detections.length).toBe(3);
+  });
+
+  test('minConfidence=0.50 shows 2 plates', async ({ page }) => {
+    await loadFile(page, path.join(EXAMPLES, 'jpeg.jpg'));
+    await waitForCanvas(page);
+    await waitForDetections(page);
+    await page.evaluate(() => (window as any).__setMinConfidence(0.50));
+    const detections = await waitForDetections(page);
+    expect(detections.length).toBe(2);
+    expect(detections.every((d: any) => d.conf >= 0.50)).toBe(true);
+  });
 });
 
 const DETECTION_VIDEO_CASES = [

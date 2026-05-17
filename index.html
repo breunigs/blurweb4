@@ -922,6 +922,15 @@
           </div>
         </div>
 
+        <!-- Min. confidence slider -->
+        <div class="setting-row">
+          <span class="setting-row-label" data-i18n="setting_confidence">Min. confidence</span>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <input type="range" id="conf-slider" min="1" max="99" value="10" step="1" style="flex:1;min-width:120px;max-width:220px;">
+            <span id="conf-value" style="font-variant-numeric:tabular-nums;min-width:2.8em;">0.10</span>
+          </div>
+        </div>
+
         <!-- Audio (only shown when at least one video is loaded) -->
         <div class="setting-row" id="audio-setting-row" hidden>
           <span class="setting-row-label" data-i18n="setting_audio">Audio</span>
