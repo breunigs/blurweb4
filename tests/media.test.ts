@@ -1104,3 +1104,123 @@ test.describe('AV export from large GoPro source file', () => {
     }
   });
 });
+
+// ── Error paths ───────────────────────────────────────────────────────────────
+// The app filters by MIME type (image/* / video/*), so tests must use valid
+// MIME types with invalid content to exercise the decode-error path.
+
+test.describe('Error paths', () => {
+  test('truncated MP4 (video/mp4 MIME, only ftyp header) shows error message', async ({ page }) => {
+    await page.goto('http://localhost:3100');
+    // Minimal valid ftyp box followed by nothing — mediabunny will find no tracks.
+    const truncated = Buffer.from([
+      0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, // box size=24, type='ftyp'
+      0x6d, 0x70, 0x34, 0x32, 0x00, 0x00, 0x00, 0x00, // major brand 'mp42', minor ver
+      0x6d, 0x70, 0x34, 0x32, 0x69, 0x73, 0x6f, 0x6d, // compat brands 'mp42','isom'
+    ]);
+    await page.locator('#file-input').setInputFiles({
+      name: 'truncated.mp4',
+      mimeType: 'video/mp4',
+      buffer: truncated,
+    });
+    await page.waitForFunction(
+      () => !!document.querySelector('.canvas-wrapper.active .error-msg'),
+      { timeout: 30_000 },
+    );
+    const msg = await page.evaluate(
+      () => document.querySelector('.canvas-wrapper.active .error-msg')?.textContent ?? '',
+    );
+    expect(msg.trim().length, `Error message should be non-empty, got: "${msg}"`).toBeGreaterThan(0);
+  });
+
+  test('corrupt image data (image/jpeg MIME, random bytes) shows error message', async ({ page }) => {
+    await page.goto('http://localhost:3100');
+    // Random bytes — not a valid JPEG; createImageBitmap should reject it.
+    const garbage = Buffer.from(new Array(64).fill(0).map((_, i) => i));
+    await page.locator('#file-input').setInputFiles({
+      name: 'corrupt.jpg',
+      mimeType: 'image/jpeg',
+      buffer: garbage,
+    });
+    await page.waitForFunction(
+      () => !!document.querySelector('.canvas-wrapper.active .error-msg'),
+      { timeout: 15_000 },
+    );
+    const msg = await page.evaluate(
+      () => document.querySelector('.canvas-wrapper.active .error-msg')?.textContent ?? '',
+    );
+    expect(msg.trim().length, `Error message should be non-empty, got: "${msg}"`).toBeGreaterThan(0);
+  });
+});
+
+// ── Batch export (Export All) ─────────────────────────────────────────────────
+// Loads two files, clicks "Export All", and verifies both downloads arrive and
+// the video output is a valid MP4 with the correct duration.
+
+test.describe('Batch export — Export All button', () => {
+  test.setTimeout(1_500_000);
+
+  test('exports all files; video output duration matches input', async ({ page }) => {
+    const videoPath = path.join(EXAMPLES, 'x264.mp4');
+    const inputDuration = ffprobeDuration(videoPath);
+
+    await page.goto('http://localhost:3100');
+
+    if (!(await webCodecsSupported(page))) {
+      test.skip(true, 'WebCodecs not available');
+    }
+
+    // Load two files — jpeg first so it renders before the video switch.
+    await page.locator('#file-input').setInputFiles([
+      path.join(EXAMPLES, 'jpeg.jpg'),
+      videoPath,
+    ]);
+
+    // Active file is x264.mp4 (last added). Wait for first frame.
+    await page.waitForFunction(
+      () => {
+        const c = document.querySelector<HTMLCanvasElement>('.canvas-wrapper.active canvas[data-loaded="true"]');
+        return c !== null && c.width > 0;
+      },
+      { timeout: 45_000 },
+    );
+
+    // Wait for first-frame inference on the active video.
+    await waitForDetections(page, 45_000);
+
+    // Collect downloads before clicking so we don't miss the fast JPEG one.
+    const downloads: import('@playwright/test').Download[] = [];
+    let resolveBothDownloads: () => void;
+    const bothDownloaded = new Promise<void>((res) => { resolveBothDownloads = res; });
+    page.on('download', (dl) => {
+      downloads.push(dl);
+      if (downloads.length >= 2) resolveBothDownloads();
+    });
+
+    // Export All is only shown when ≥ 2 files are loaded.
+    await page.locator('#export-all-btn').click();
+    await bothDownloaded;
+
+    // Save the MP4 download and verify with ffprobe.
+    const videoDownload = downloads.find((dl) => dl.suggestedFilename().endsWith('.mp4'));
+    expect(videoDownload, 'No MP4 download found among batch exports').toBeDefined();
+
+    const tmpPath = path.join(path.dirname(fileURLToPath(import.meta.url)), '../.tmp-batch-export.mp4');
+    await videoDownload!.saveAs(tmpPath);
+
+    let outputDuration: number;
+    let hasVideoStream: boolean;
+    try {
+      outputDuration = ffprobeDuration(tmpPath);
+      hasVideoStream = ffprobeHasVideo(tmpPath);
+    } finally {
+      import('fs').then((fs) => fs.unlinkSync(tmpPath)).catch(() => {});
+    }
+
+    expect(hasVideoStream, 'Exported MP4 must contain a video stream').toBe(true);
+    expect(
+      Math.abs(outputDuration - inputDuration),
+      `Output duration ${outputDuration.toFixed(3)} s differs from input ${inputDuration.toFixed(3)} s by more than 0.1 s`,
+    ).toBeLessThanOrEqual(0.1);
+  });
+});
