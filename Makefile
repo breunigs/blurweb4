@@ -1,5 +1,5 @@
 GO := $(shell mise which go)
-.PHONY: dev build test vendor-hevc vendor-avc-av1 go-build go-run prepare-go-embed
+.PHONY: dev build test vendor-hevc vendor-avc-av1 go-build go-run prepare-go-embed deploy
 
 ## Start the development server (hot-reload on port 3000)
 dev:
@@ -37,3 +37,10 @@ go-build: prepare-go-embed
 ## Populate server/dist-embedded/ with gzip-compressed assets (runs build first)
 prepare-go-embed: build
 	node scripts/prepare-go-embed.mjs
+
+## Deploy dist to remote server: set BLURWEB_RSYNC_TARGET=user@host:/path/to/webroot
+## server/dist-embedded/ contains both plain and .gz variants; nginx gzip_static can
+## serve pre-compressed files automatically when configured with `gzip_static on`.
+deploy: prepare-go-embed
+	@test -n "$(BLURWEB_RSYNC_TARGET)" || (echo "Error: BLURWEB_RSYNC_TARGET is not set"; exit 1)
+	rsync -r --progress --partial server/dist-embedded/ $(BLURWEB_RSYNC_TARGET)
