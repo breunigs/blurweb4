@@ -130,22 +130,21 @@ export async function makeVideoKey(file: File, width: number, height: number, mi
 const DB_NAME = 'blurweb4-detections';
 const DB_VERSION = 2;
 
-function openDB(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = () => {
-      const db = req.result;
-      if (!db.objectStoreNames.contains('frames')) db.createObjectStore('frames', { keyPath: 'key' });
-      if (!db.objectStoreNames.contains('stats')) db.createObjectStore('stats', { keyPath: 'id' });
-      if (!db.objectStoreNames.contains('trims')) db.createObjectStore('trims', { keyPath: 'key' });
-    };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-}
+// Opened once and reused — IDBDatabase connections are long-lived and safe to share.
+const dbPromise: Promise<IDBDatabase> = new Promise((resolve, reject) => {
+  const req = indexedDB.open(DB_NAME, DB_VERSION);
+  req.onupgradeneeded = () => {
+    const db = req.result;
+    if (!db.objectStoreNames.contains('frames')) db.createObjectStore('frames', { keyPath: 'key' });
+    if (!db.objectStoreNames.contains('stats')) db.createObjectStore('stats', { keyPath: 'id' });
+    if (!db.objectStoreNames.contains('trims')) db.createObjectStore('trims', { keyPath: 'key' });
+  };
+  req.onsuccess = () => resolve(req.result);
+  req.onerror = () => reject(req.error);
+});
 
 function idbGet<T>(store: string, key: string): Promise<T | undefined> {
-  return openDB().then(
+  return dbPromise.then(
     (db) =>
       new Promise((resolve, reject) => {
         const req = db.transaction(store, 'readonly').objectStore(store).get(key);
@@ -156,11 +155,23 @@ function idbGet<T>(store: string, key: string): Promise<T | undefined> {
 }
 
 function idbPut(store: string, value: unknown): Promise<void> {
-  return openDB().then(
+  return dbPromise.then(
     (db) =>
       new Promise((resolve, reject) => {
         const tx = db.transaction(store, 'readwrite');
         tx.objectStore(store).put(value);
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+      }),
+  );
+}
+
+function idbClear(store: string): Promise<void> {
+  return dbPromise.then(
+    (db) =>
+      new Promise((resolve, reject) => {
+        const tx = db.transaction(store, 'readwrite');
+        tx.objectStore(store).clear();
         tx.oncomplete = () => resolve();
         tx.onerror = () => reject(tx.error);
       }),
@@ -249,15 +260,7 @@ export function filterByConf(dets: Detection[], minConf: number): Detection[] {
 /** Clear the in-memory cache and all cached detections from IndexedDB. */
 export function clearDetectionCache(): Promise<void> {
   memCache.clear();
-  return openDB().then(
-    (db) =>
-      new Promise((resolve, reject) => {
-        const tx = db.transaction('frames', 'readwrite');
-        tx.objectStore('frames').clear();
-        tx.oncomplete = () => resolve();
-        tx.onerror = () => reject(tx.error);
-      }),
-  );
+  return idbClear('frames');
 }
 
 // ── Session singleton ─────────────────────────────────────────────────────────
