@@ -12,12 +12,12 @@ export interface AppConfig {
 }
 
 const STORAGE_KEY = 'blurweb4-config';
-const DEFAULTS: AppConfig = {
+export const DEFAULTS: AppConfig = {
   model: 'detect_n',
   drawMode: 'blur',
   keepMetadata: 'keep',
   keepAudio: true,
-  minConfidence: 0.1,
+  minConfidence: 0.05,
   namingPattern: '{input}',
 };
 

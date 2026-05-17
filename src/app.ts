@@ -16,7 +16,7 @@ import {
   saveTrim,
   loadTrim,
 } from './detector';
-import { getConfig, setConfig, type AppConfig, type ModelChoice } from './config';
+import { getConfig, setConfig, DEFAULTS, type AppConfig, type ModelChoice } from './config';
 import { t, tpl, translateLabel, applyTranslations } from './i18n';
 import { getEntries, clearEntries, setOnUpdate, copyToClipboard } from './debugLog';
 
@@ -291,7 +291,7 @@ export class App {
       if (area) area.textContent = '';
     });
     document.getElementById('defaults-btn')!.addEventListener('click', () => {
-      setConfig({ model: 'detect_n', drawMode: 'blur', keepMetadata: 'keep', keepAudio: true, minConfidence: 0.1, namingPattern: '{input}' });
+      setConfig({ ...DEFAULTS });
     });
     document.getElementById('delete-detections-btn')?.addEventListener('click', () => {
       if (!confirm(t('confirm_delete_detections'))) return;
