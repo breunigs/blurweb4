@@ -152,7 +152,7 @@
           <span class="setting-row-label" data-i18n="setting_confidence">Min. confidence</span>
           <div style="display:flex;align-items:center;gap:10px;">
             <input type="range" id="conf-slider" min="1" max="99" value="10" step="1"
-              style="flex:1;min-width:120px;max-width:220px;">
+              style="flex:1;min-width:120px;max-width:300px;">
             <span id="conf-value" style="font-variant-numeric:tabular-nums;min-width:2.8em;">0.10</span>
           </div>
         </div>
@@ -183,7 +183,7 @@
           </div>
         </div>
         <div id="naming-info-panel" hidden
-          style="margin-top:-10px;border:1px solid var(--border);border-radius:6px;
+          style="grid-column:1/-1;margin-top:-4px;border:1px solid var(--border);border-radius:6px;
                  padding:10px 12px;background:var(--card2);overflow-x:auto;">
           <table id="naming-vars-table"
             style="border-collapse:collapse;width:100%;min-width:300px;font-size:12px;">
@@ -201,7 +201,7 @@
           </table>
         </div>
 
-        <div style="display:flex;justify-content:flex-end;margin-top:4px;">
+        <div style="grid-column:1/-1;display:flex;justify-content:flex-end;margin-top:8px;">
           <button id="defaults-btn" style="
             padding:6px 14px;
             background:var(--card2);

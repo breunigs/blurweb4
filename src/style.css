@@ -521,26 +521,25 @@ body {
 
 /* ── 3. Settings ───────────────────────────────────────────── */
 .settings-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  align-items: center;
+  row-gap: 8px;
 }
 
 .setting-row {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  display: contents;
 }
 .setting-row[hidden] {
   display: none;
 }
 
 .setting-row-label {
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--muted);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--dim);
+  padding: 0 20px 0 0;
+  white-space: nowrap;
 }
 
 .setting-row-desc {
