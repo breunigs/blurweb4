@@ -30,6 +30,15 @@ const DETECT_X_CHUNKS = 9;
 
 ort.env.wasm.wasmPaths = new URL('./ort/', import.meta.url).href;
 
+// ── Debug flag ────────────────────────────────────────────────────────────────
+// Enable from the browser console:  window.__detectDebug = true
+// Then open a file to trigger inference (cache must be cold — clear IDB first).
+
+(window as unknown as Record<string, unknown>).__detectDebug = false;
+function dbg(): boolean {
+  return !!(window as unknown as Record<string, unknown>).__detectDebug;
+}
+
 // ── State ─────────────────────────────────────────────────────────────────────
 
 let currentModel: ModelChoice = getConfig().model;
@@ -56,6 +65,9 @@ interface Snapshot {
   data: Uint8ClampedArray;
   origW: number;
   origH: number;
+  scale: number;  // uniform scale applied to fit content into MODEL_W×MODEL_H
+  padX: number;   // horizontal padding added on each side (letterbox)
+  padY: number;   // vertical padding added on each side (letterbox)
 }
 
 interface PendingItem {
@@ -241,14 +253,30 @@ export function setModel(
 
 // ── Preprocessing ─────────────────────────────────────────────────────────────
 
+// YOLOv5 letterbox fill colour (matches PyTorch default: 114/255 ≈ 0.447).
+const LETTERBOX_FILL = 'rgb(114,114,114)';
+
 function captureSnapshot(source: HTMLCanvasElement | OffscreenCanvas): Snapshot {
   const t0 = performance.now();
+  const srcW = source.width, srcH = source.height;
+  // Uniform scale so content fits inside MODEL_W×MODEL_H without distortion.
+  const scale = Math.min(MODEL_W / srcW, MODEL_H / srcH);
+  const scaledW = Math.round(srcW * scale), scaledH = Math.round(srcH * scale);
+  const padX = (MODEL_W - scaledW) / 2, padY = (MODEL_H - scaledH) / 2;
   const tmp = new OffscreenCanvas(MODEL_W, MODEL_H);
   const ctx = tmp.getContext('2d')!;
-  ctx.drawImage(source as CanvasImageSource, 0, 0, MODEL_W, MODEL_H);
+  ctx.fillStyle = LETTERBOX_FILL;
+  ctx.fillRect(0, 0, MODEL_W, MODEL_H);
+  ctx.drawImage(source as CanvasImageSource, padX, padY, scaledW, scaledH);
   const data = ctx.getImageData(0, 0, MODEL_W, MODEL_H).data;
   console.log(`[detector] captureSnapshot ${(performance.now() - t0).toFixed(1)}ms`);
-  return { data, origW: source.width, origH: source.height };
+  if (dbg()) {
+    console.log(
+      `[detector][debug] letterbox: source=${srcW}×${srcH} → scale=${scale.toFixed(4)} scaled=${scaledW}×${scaledH}`,
+      `\n  padX=${padX.toFixed(1)} padY=${padY.toFixed(1)} fill=${LETTERBOX_FILL}`,
+    );
+  }
+  return { data, origW: srcW, origH: srcH, scale, padX, padY };
 }
 
 function buildTensor(snap: Snapshot): ort.Tensor {
@@ -262,6 +290,26 @@ function buildTensor(snap: Snapshot): ort.Tensor {
     tensor[pixels * 2 + i] = data[i * 4 + 2] / 255;
   }
   console.log(`[detector] buildTensor ${(performance.now() - t0).toFixed(1)}ms`);
+  if (dbg()) {
+    // Per-channel stats to check for BGR vs RGB issues.
+    // If model expects BGR and we feed RGB, channel 0 will have blue-biased stats for a scene
+    // that should be red-heavy (and vice versa). Compare against known PyTorch preprocessing.
+    let rSum = 0, gSum = 0, bSum = 0, rMin = 1, gMin = 1, bMin = 1, rMax = 0, gMax = 0, bMax = 0;
+    for (let i = 0; i < pixels; i++) {
+      const r = tensor[i], g = tensor[pixels + i], b = tensor[pixels * 2 + i];
+      rSum += r; gSum += g; bSum += b;
+      if (r < rMin) rMin = r; if (r > rMax) rMax = r;
+      if (g < gMin) gMin = g; if (g > gMax) gMax = g;
+      if (b < bMin) bMin = b; if (b > bMax) bMax = b;
+    }
+    console.log(
+      `[detector][debug] tensor channel stats (channel order sent to model: R G B)`,
+      `\n  R: mean=${(rSum/pixels).toFixed(3)} min=${rMin.toFixed(3)} max=${rMax.toFixed(3)}`,
+      `\n  G: mean=${(gSum/pixels).toFixed(3)} min=${gMin.toFixed(3)} max=${gMax.toFixed(3)}`,
+      `\n  B: mean=${(bSum/pixels).toFixed(3)} min=${bMin.toFixed(3)} max=${bMax.toFixed(3)}`,
+      `\n  (if model expects BGR, swap R↔B in buildTensor)`,
+    );
+  }
   return new ort.Tensor('float32', tensor, [1, 3, MODEL_H, MODEL_W]);
 }
 
@@ -278,31 +326,50 @@ function iou(a: RawBox, b: RawBox): number {
   return union > 0 ? inter / union : 0;
 }
 
-function postprocess(output: ort.Tensor, origW: number, origH: number): Detection[] {
+function postprocess(output: ort.Tensor, scale: number, padX: number, padY: number): Detection[] {
   const data = output.data as Float32Array;
   const [, rows, cols] = output.dims as [number, number, number];
+  if (dbg()) console.log(`[detector][debug] raw output: ${rows} rows × ${cols} cols`);
+  let nObjPass = 0, nClassPass = 0;
   const raw: RawBox[] = [];
   for (let r = 0; r < rows; r++) {
     const base = r * cols;
     const objConf = data[base + 4], pc = data[base + 5], nc = data[base + 6];
+    if (objConf >= THRESHOLD_CONF) nObjPass++;
     if (objConf < THRESHOLD_CONF || Math.max(pc, nc) < THRESHOLD_CLASS) continue;
+    nClassPass++;
     raw.push({
       label: pc >= nc ? LABELS[0] : LABELS[1], conf: objConf * Math.max(pc, nc),
       cx: data[base], cy: data[base + 1], w: data[base + 2], h: data[base + 3]
     });
   }
   raw.sort((a, b) => b.conf - a.conf);
+  if (dbg()) {
+    console.log(
+      `[detector][debug] filtering: total=${rows} objConf≥${THRESHOLD_CONF}→${nObjPass} classConf≥${THRESHOLD_CLASS}→${nClassPass}`,
+      `\n  THRESHOLD_CONF=${THRESHOLD_CONF} THRESHOLD_CLASS=${THRESHOLD_CLASS} THRESHOLD_IOU=${THRESHOLD_IOU}`,
+    );
+    const top = raw.slice(0, 20);
+    console.log(`[detector][debug] top-${top.length} candidates before NMS (model-pixel coords):`);
+    for (const b of top) {
+      const x1 = (b.cx - b.w/2).toFixed(1), y1 = (b.cy - b.h/2).toFixed(1);
+      console.log(`  ${b.label} conf=${b.conf.toFixed(3)} cx=${b.cx.toFixed(1)} cy=${b.cy.toFixed(1)} w=${b.w.toFixed(1)} h=${b.h.toFixed(1)}  →  x1=${x1} y1=${y1}`);
+    }
+  }
   const kept: RawBox[] = [], sup = new Uint8Array(raw.length);
   for (let i = 0; i < raw.length; i++) {
     if (sup[i]) continue;
     kept.push(raw[i]);
     for (let j = i + 1; j < raw.length; j++) if (!sup[j] && iou(raw[i], raw[j]) > THRESHOLD_IOU) sup[j] = 1;
   }
-  const sx = origW / MODEL_W, sy = origH / MODEL_H;
+  if (dbg()) console.log(`[detector][debug] after NMS: ${raw.length} → ${kept.length} detections`);
+  if (dbg()) console.log(`[detector][debug] unmap: scale=${scale.toFixed(4)} padX=${padX.toFixed(1)} padY=${padY.toFixed(1)}`);
   return kept.map(b => ({
     label: b.label, conf: b.conf,
-    x: Math.round((b.cx - b.w / 2) * sx), y: Math.round((b.cy - b.h / 2) * sy),
-    w: Math.round(b.w * sx), h: Math.round(b.h * sy)
+    x: Math.round((b.cx - b.w / 2 - padX) / scale),
+    y: Math.round((b.cy - b.h / 2 - padY) / scale),
+    w: Math.round(b.w / scale),
+    h: Math.round(b.h / scale),
   }));
 }
 
@@ -318,7 +385,7 @@ async function runOnnx(snap: Snapshot): Promise<Detection[]> {
     const tRun = performance.now();
     const results = await session.run({ [session.inputNames[0]]: tensor });
     console.log(`[detector] session.run ${(performance.now() - tRun).toFixed(1)}ms (ep=${currentEP})`);
-    const detections = postprocess(results[session.outputNames[0]], snap.origW, snap.origH);
+    const detections = postprocess(results[session.outputNames[0]], snap.scale, snap.padX, snap.padY);
     console.log(`[detector] runOnnx total ${(performance.now() - t0).toFixed(1)}ms`);
     return detections;
   });
