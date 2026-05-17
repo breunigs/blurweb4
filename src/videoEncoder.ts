@@ -83,13 +83,17 @@ export async function encodeVideo(
         ? {}
         : keepMetadata === 'gps'
         ? (input) => {
-            const { raw: _raw, ...rest } = input;
+            // For MP4/QuickTime, mediabunny puts ilst atom data (including ©xyz)
+            // into the `raw` field — NOT into the top-level normalized fields.
             // ©xyz — QuickTime/Apple/GoPro GPS coordinate string (ISO 6709 format)
             // loci  — QuickTime location atom (older cameras)
             const GPS_KEYS = new Set(['©xyz', 'loci']);
-            return Object.fromEntries(
-              Object.entries(rest).filter(([k]) => GPS_KEYS.has(k)),
-            ) as typeof rest;
+            const { raw } = input;
+            const gpsRaw: typeof raw = {};
+            for (const [k, v] of Object.entries(raw ?? {})) {
+              if (GPS_KEYS.has(k)) gpsRaw[k] = v;
+            }
+            return Object.keys(gpsRaw).length ? { raw: gpsRaw } : {};
           }
         : (input) => {
             const { raw, ...rest } = input;
