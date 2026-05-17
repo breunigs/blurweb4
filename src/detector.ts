@@ -695,7 +695,7 @@ function drawOutline(ctx: AnyCtx, detections: Detection[]): void {
   // Scale font to the shorter canvas dimension so labels are readable regardless
   // of canvas resolution or CSS zoom. Use pixel dimensions (not clientWidth) so
   // this works even when the canvas is display:none (e.g. loaded in background).
-  const fontSize = Math.max(11, Math.round(Math.min(ctx.canvas.width, ctx.canvas.height) * 0.02));
+  const fontSize = Math.max(11, Math.round(Math.min(ctx.canvas.width, ctx.canvas.height) * 0.012));
   ctx.font = `${fontSize}px monospace`;
   // Track per-label index so consecutive detections of the same label cycle through hues.
   const labelIdx: Record<string, number> = {};
