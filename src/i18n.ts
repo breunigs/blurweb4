@@ -69,6 +69,8 @@ const STRINGS = {
     copied:           'Copied!',
     detecting_plain:  'Detecting\u2026',
     detecting_timed:  'Detecting\u2026 (~{t}s)',
+    computing:          'computing\u2026',
+    downloading_model:  'downloading model\u2026',
     no_detections:    '0 detections',
 
     // Dynamic — file nav / summary
@@ -134,6 +136,8 @@ const STRINGS = {
     copied:           'Kopiert!',
     detecting_plain:  'Erkennung\u2026',
     detecting_timed:  'Erkennung\u2026 (~{t}s)',
+    computing:          'Berechnung\u2026',
+    downloading_model:  'Modell wird geladen\u2026',
     no_detections:    '0 Erkennungen',
 
     files_loaded_one: '1 Datei geladen',
