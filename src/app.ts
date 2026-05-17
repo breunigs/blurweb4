@@ -219,7 +219,8 @@ export class App {
         ? t('detecting_plain')
         : tpl('detecting_timed', { t: (avg / 1000).toFixed(1) });
       this.detectStatusInline.classList.add('visible');
-      this.detectResultEl.classList.remove('visible');
+      this.detectResultEl.textContent = t('computing');
+      this.detectResultEl.classList.add('visible');
     } else {
       this.detectStatusInline.classList.remove('visible');
     }
@@ -415,6 +416,8 @@ export class App {
   private async onConfigChange(cfg: AppConfig): Promise<void> {
     if (cfg.model !== this.prevModel) {
       this.prevModel = cfg.model;
+      this.showDetecting(true);
+      this.detectResultEl.textContent = t('downloading_model');
       this.modelLoadProgress.classList.add('visible');
       this.modelLoadBarFill.style.width = '0%';
       this.modelLoadText.textContent = cfg.model === 'detect_n'
