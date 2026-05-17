@@ -268,13 +268,18 @@ async function loadModelBuffer(
   if (model === 'detect_n') {
     return new URL('../models/detect_n_2024_04.onnx', import.meta.url).href;
   }
-  // Fetch all detect_x chunks in parallel, then concatenate via Blob (avoids a
-  // manual Uint8Array copy loop over ~170 MB — the browser handles it natively).
+  // Fetch detect_x chunks with a concurrency limit of 2 to avoid saturating the
+  // connection and triggering browser-side throttling on large parallel fetches.
+  // Chunks are stored by index so Blob concatenation order is always correct.
+  const CHUNK_CONCURRENCY = 2;
   const blobs: (Blob | null)[] = new Array(DETECT_X_CHUNKS).fill(null);
+  let nextChunk = 0;
   let done = 0;
   const t0 = performance.now();
-  await Promise.all(
-    Array.from({ length: DETECT_X_CHUNKS }, async (_, i) => {
+
+  async function fetchWorker(): Promise<void> {
+    while (nextChunk < DETECT_X_CHUNKS) {
+      const i = nextChunk++;
       const url = new URL(`../models/detect_x_2024_04.onnx.${i}`, import.meta.url).href;
       const tChunk = performance.now();
       console.log(`[detector] chunk ${i} fetch start`);
@@ -286,8 +291,10 @@ async function loadModelBuffer(
       );
       blobs[i] = blob;
       onProgress?.(++done, DETECT_X_CHUNKS);
-    }),
-  );
+    }
+  }
+
+  await Promise.all(Array.from({ length: CHUNK_CONCURRENCY }, fetchWorker));
   console.log(`[detector] all chunks fetched ${(performance.now() - t0).toFixed(0)}ms`);
   const tBlob = performance.now();
   const buf = await new Blob(blobs as Blob[]).arrayBuffer();
