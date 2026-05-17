@@ -16,11 +16,11 @@ import { blurrer } from './blurrer';
 // ── Config ────────────────────────────────────────────────────────────────────
 
 const MODEL_W = 1280;
-const MODEL_H = 736;
+const MODEL_H = 1280;
 const LABELS = ['plate', 'person'] as const;
 const THRESHOLD_IOU = 0.45;
-const THRESHOLD_CONF = 0.1;
-const THRESHOLD_CLASS = 0.1;
+// also update confidence slider's minimum value if you changesthis
+const THRESHOLD_CONF = 0.01;
 
 const MODEL_NAMES: Record<ModelChoice, string> = {
   detect_n: 'detect_n_2024_04',
@@ -347,8 +347,9 @@ function captureSnapshot(source: HTMLCanvasElement | OffscreenCanvas): Snapshot 
   const scale = Math.min(MODEL_W / srcW, MODEL_H / srcH);
   const scaledW = Math.round(srcW * scale),
     scaledH = Math.round(srcH * scale);
-  const padX = (MODEL_W - scaledW) / 2,
-    padY = (MODEL_H - scaledH) / 2;
+  // Use floor to match PyTorch's letterbox convention (left/top gets the smaller half).
+  const padX = Math.floor((MODEL_W - scaledW) / 2),
+    padY = Math.floor((MODEL_H - scaledH) / 2);
   const tmp = new OffscreenCanvas(MODEL_W, MODEL_H);
   const ctx = tmp.getContext('2d')!;
   ctx.fillStyle = LETTERBOX_FILL;
@@ -447,50 +448,58 @@ function postprocess(output: ort.Tensor, scale: number, padX: number, padY: numb
   if (dbg()) console.log(`[detector][debug] raw output: ${rows} rows × ${cols} cols`);
   let nObjPass = 0,
     nClassPass = 0;
-  const raw: RawBox[] = [];
+
+  // Per-class candidate lists (matches PyTorch multi_label=True for nc>1).
+  // Each (box, class) pair is emitted independently; NMS is then run per class
+  // so a plate and a person can occupy the same region without suppressing each other.
+  const rawByClass: RawBox[][] = LABELS.map(() => []);
+
   for (let r = 0; r < rows; r++) {
     const base = r * cols;
-    const objConf = data[base + 4],
-      pc = data[base + 5],
-      nc = data[base + 6];
-    if (objConf >= THRESHOLD_CONF) nObjPass++;
-    if (objConf < THRESHOLD_CONF || Math.max(pc, nc) < THRESHOLD_CLASS) continue;
-    nClassPass++;
-    raw.push({
-      label: pc >= nc ? LABELS[0] : LABELS[1],
-      conf: objConf * Math.max(pc, nc),
-      cx: data[base],
-      cy: data[base + 1],
-      w: data[base + 2],
-      h: data[base + 3],
-    });
-  }
-  raw.sort((a, b) => b.conf - a.conf);
-  if (dbg()) {
-    console.log(
-      `[detector][debug] filtering: total=${rows} objConf≥${THRESHOLD_CONF}→${nObjPass} classConf≥${THRESHOLD_CLASS}→${nClassPass}`,
-      `\n  THRESHOLD_CONF=${THRESHOLD_CONF} THRESHOLD_CLASS=${THRESHOLD_CLASS} THRESHOLD_IOU=${THRESHOLD_IOU}`,
-    );
-    const top = raw.slice(0, 20);
-    console.log(`[detector][debug] top-${top.length} candidates before NMS (model-pixel coords):`);
-    for (const b of top) {
-      const x1 = (b.cx - b.w / 2).toFixed(1),
-        y1 = (b.cy - b.h / 2).toFixed(1);
-      console.log(
-        `  ${b.label} conf=${b.conf.toFixed(3)} cx=${b.cx.toFixed(1)} cy=${b.cy.toFixed(1)} w=${b.w.toFixed(1)} h=${b.h.toFixed(1)}  →  x1=${x1} y1=${y1}`,
-      );
+    const objConf = data[base + 4];
+    if (objConf < THRESHOLD_CONF) continue;
+    nObjPass++;
+    const cx = data[base], cy = data[base + 1], w = data[base + 2], h = data[base + 3];
+    for (let c = 0; c < LABELS.length; c++) {
+      const conf = objConf * data[base + 5 + c];
+      if (conf < THRESHOLD_CONF) continue;
+      nClassPass++;
+      rawByClass[c].push({ label: LABELS[c], conf, cx, cy, w, h });
     }
   }
-  const kept: RawBox[] = [],
-    sup = new Uint8Array(raw.length);
-  for (let i = 0; i < raw.length; i++) {
-    if (sup[i]) continue;
-    kept.push(raw[i]);
-    for (let j = i + 1; j < raw.length; j++) if (!sup[j] && iou(raw[i], raw[j]) > THRESHOLD_IOU) sup[j] = 1;
+
+  if (dbg()) {
+    console.log(
+      `[detector][debug] filtering: total=${rows} objConf≥${THRESHOLD_CONF}→${nObjPass} candidates→${nClassPass}`,
+      `\n  THRESHOLD_CONF=${THRESHOLD_CONF} THRESHOLD_IOU=${THRESHOLD_IOU}`,
+    );
   }
-  if (dbg()) console.log(`[detector][debug] after NMS: ${raw.length} → ${kept.length} detections`);
+
+  // Per-class greedy NMS (descending confidence).
+  const kept: RawBox[] = [];
+  for (const classRaw of rawByClass) {
+    classRaw.sort((a, b) => b.conf - a.conf);
+    if (dbg() && classRaw.length > 0) {
+      const label = classRaw[0].label;
+      console.log(`[detector][debug] top-${Math.min(classRaw.length, 10)} ${label} candidates before NMS (model-pixel coords):`);
+      for (const b of classRaw.slice(0, 10)) {
+        const x1 = (b.cx - b.w / 2).toFixed(1), y1 = (b.cy - b.h / 2).toFixed(1);
+        console.log(
+          `  ${b.label} conf=${b.conf.toFixed(3)} cx=${b.cx.toFixed(1)} cy=${b.cy.toFixed(1)} w=${b.w.toFixed(1)} h=${b.h.toFixed(1)}  →  x1=${x1} y1=${y1}`,
+        );
+      }
+    }
+    const sup = new Uint8Array(classRaw.length);
+    for (let i = 0; i < classRaw.length; i++) {
+      if (sup[i]) continue;
+      kept.push(classRaw[i]);
+      for (let j = i + 1; j < classRaw.length; j++) if (!sup[j] && iou(classRaw[i], classRaw[j]) > THRESHOLD_IOU) sup[j] = 1;
+    }
+  }
+
+  if (dbg()) console.log(`[detector][debug] after NMS: ${nClassPass} → ${kept.length} detections`);
   if (dbg())
-    console.log(`[detector][debug] unmap: scale=${scale.toFixed(4)} padX=${padX.toFixed(1)} padY=${padY.toFixed(1)}`);
+    console.log(`[detector][debug] unmap: scale=${scale.toFixed(4)} padX=${padX} padY=${padY}`);
   return kept.map((b) => ({
     label: b.label,
     conf: b.conf,
