@@ -4,7 +4,7 @@ import { runBatch } from './batchExporter';
 import type { ExportItem } from './batchExporter';
 import {
   getCachedDetections, scheduleInference, applyDetections,
-  makeImageKey, getAverageInferenceMs, setModel,
+  makeImageKey, getAverageInferenceMs, setModel, clearDetectionCache,
 } from './detector';
 import { getConfig, setConfig, type AppConfig, type ModelChoice } from './config';
 import { t, tpl, translateLabel, applyTranslations } from './i18n';
@@ -207,6 +207,10 @@ export class App {
       clearEntries();
       const area = document.getElementById('debug-log-area');
       if (area) area.textContent = '';
+    });
+    document.getElementById('delete-detections-btn')?.addEventListener('click', () => {
+      if (!confirm(t('confirm_delete_detections'))) return;
+      clearDetectionCache().then(() => this.rerenderActive()).catch(console.error);
     });
   }
 
