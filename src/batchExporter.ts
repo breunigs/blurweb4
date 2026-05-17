@@ -8,7 +8,7 @@ export interface ExportItem {
   file?: File;
   trimStart?: number;
   trimEnd?: number;
-  keepMetadata?: boolean;
+  keepMetadata?: 'keep' | 'gps' | 'strip';
   keepAudio?: boolean;
 }
 

@@ -23,7 +23,7 @@ export async function encodeVideo(
   onProgress: (p: number) => void,
   trimStart?: number,
   trimEnd?: number,
-  keepMetadata = true,
+  keepMetadata: 'keep' | 'gps' | 'strip' = 'keep',
   keepAudio = true,
 ): Promise<EncodeResult> {
   const input = new Input({ formats: ALL_FORMATS, source: new BlobSource(file) });
@@ -76,20 +76,29 @@ export async function encodeVideo(
       input,
       output,
       ...(trim ? { trim } : {}),
-      // When keeping metadata: copy normalised tags but strip raw Uint8Array blobs.
-      // GoPro writes ~25 KB of proprietary GPMF telemetry as raw ilst atoms; if
-      // copied verbatim they produce output that ffprobe rejects as invalid data.
-      // When stripping: pass empty tags to suppress all metadata copy.
-      tags: keepMetadata
+      // 'keep': copy normalised tags but strip raw Uint8Array blobs (GoPro GPMF etc.)
+      // 'gps':  keep only the ©xyz location string (ISO 6709); strip everything else
+      // 'strip': suppress all metadata
+      tags: keepMetadata === 'strip'
+        ? {}
+        : keepMetadata === 'gps'
         ? (input) => {
+            const { raw: _raw, ...rest } = input;
+            // ©xyz — QuickTime/Apple/GoPro GPS coordinate string (ISO 6709 format)
+            // loci  — QuickTime location atom (older cameras)
+            const GPS_KEYS = new Set(['©xyz', 'loci']);
+            return Object.fromEntries(
+              Object.entries(rest).filter(([k]) => GPS_KEYS.has(k)),
+            ) as typeof rest;
+          }
+        : (input) => {
             const { raw, ...rest } = input;
             const safeRaw: typeof raw = {};
             for (const [k, v] of Object.entries(raw ?? {})) {
               if (typeof v === 'string') safeRaw[k] = v;
             }
             return { ...rest, ...(Object.keys(safeRaw).length ? { raw: safeRaw } : {}) };
-          }
-        : {},
+          },
       ...(keepAudio ? {} : { audio: { discard: true } }),
       video: {
         codec: enc.codec,
