@@ -68,6 +68,14 @@ console.log('  index.html');
 embedFile(join(ROOT, 'robots.txt'), join(OUT, 'robots.txt'));
 console.log('  robots.txt');
 
+// PWA assets
+embedFile(join(ROOT, 'manifest.json'), join(OUT, 'manifest.json'));
+console.log('  manifest.json');
+embedFile(join(ROOT, 'sw.js'), join(OUT, 'sw.js'));
+console.log('  sw.js');
+embedFile(join(ROOT, 'icon.svg'), join(OUT, 'icon.svg'));
+console.log('  icon.svg');
+
 // src/style.css — referenced directly from index.html as "src/style.css"
 embedFile(join(ROOT, 'src', 'style.css'), join(OUT, 'src', 'style.css'));
 console.log('  src/style.css');
