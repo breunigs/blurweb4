@@ -38,7 +38,7 @@ const STRINGS = {
     step_settings:    'Settings',
     setting_model:    'Detection model',
     model_small:      'Small \u2014 fast (8\u00a0MB)',
-    model_large:      'Large \u2014 accurate (177\u00a0MB)',
+    model_large:      'Large \u2014 accurate (185\u00a0MB)',
     setting_metadata: 'Metadata',
     setting_audio:    'Audio',
     keep:             'Keep',
@@ -61,6 +61,7 @@ const STRINGS = {
     btn_copy:               'Copy to clipboard',
     btn_clear:              'Clear',
     btn_delete_detections:    'Delete detections',
+    btn_defaults:             'Reset to defaults',
     confirm_delete_detections:'Delete all cached detections?',
 
     // Dynamic — ETA
@@ -113,7 +114,7 @@ const STRINGS = {
     step_settings:    'Einstellungen',
     setting_model:    'Erkennungsmodell',
     model_small:      'Klein \u2014 schnell (8\u00a0MB)',
-    model_large:      'Gro\u00df \u2014 genau (177\u00a0MB)',
+    model_large:      'Gro\u00df \u2014 genau (185\u00a0MB)',
     setting_metadata: 'Metadaten',
     setting_audio:    'Audio',
     keep:             'Behalten',
@@ -134,6 +135,7 @@ const STRINGS = {
     btn_copy:               'In Zwischenablage kopieren',
     btn_clear:              'Leeren',
     btn_delete_detections:    'Erkennungen l\u00f6schen',
+    btn_defaults:             'Auf Standard zur\u00fccksetzen',
     confirm_delete_detections:'Alle gespeicherten Erkennungen l\u00f6schen?',
 
     almost_done: 'fast fertig',

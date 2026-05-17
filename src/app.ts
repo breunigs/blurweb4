@@ -220,6 +220,9 @@ export class App {
       const area = document.getElementById('debug-log-area');
       if (area) area.textContent = '';
     });
+    document.getElementById('defaults-btn')!.addEventListener('click', () => {
+      setConfig({ model: 'detect_n', drawMode: 'blur', keepMetadata: true, keepAudio: true, minConfidence: 0.1 });
+    });
     document.getElementById('delete-detections-btn')?.addEventListener('click', () => {
       if (!confirm(t('confirm_delete_detections'))) return;
       clearDetectionCache().then(() => this.rerenderActive()).catch(console.error);
@@ -440,6 +443,7 @@ export class App {
   private async onConfigChange(cfg: AppConfig): Promise<void> {
     this.items.forEach(it => { it.exported = false; });
     this.updateExportBtnState();
+    this.syncConfigUI();
     if (cfg.model !== this.prevModel) {
       this.prevModel = cfg.model;
       this.showDetecting(true);
