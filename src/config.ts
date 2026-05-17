@@ -4,10 +4,12 @@ export type ModelChoice = 'detect_n' | 'detect_x';
 export interface AppConfig {
   model: ModelChoice;
   drawMode: DrawMode;
+  keepMetadata: boolean;
+  keepAudio: boolean;
 }
 
 const STORAGE_KEY = 'blurweb4-config';
-const DEFAULTS: AppConfig = { model: 'detect_n', drawMode: 'blur' };
+const DEFAULTS: AppConfig = { model: 'detect_n', drawMode: 'blur', keepMetadata: true, keepAudio: true };
 
 function load(): AppConfig {
   try {

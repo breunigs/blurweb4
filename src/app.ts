@@ -84,6 +84,7 @@ export class App {
   private libavWarningEl!: HTMLElement;
   private loadedSummary!: HTMLElement;
   private stepPreviewSubtitle!: HTMLElement;
+  private audioSettingRow!: HTMLElement;
 
   init(): void {
     this.previewArea        = document.getElementById('preview-area')!;
@@ -113,6 +114,7 @@ export class App {
     this.libavWarningEl     = document.getElementById('libav-warning')!;
     this.loadedSummary      = document.getElementById('loaded-summary')!;
     this.stepPreviewSubtitle= document.getElementById('step-preview-subtitle')!;
+    this.audioSettingRow    = document.getElementById('audio-setting-row')!;
 
     this.bindEvents();
     this.syncConfigUI();
@@ -168,6 +170,14 @@ export class App {
     if (mr) mr.checked = true;
     const dr = document.querySelector<HTMLInputElement>(`input[name="drawMode"][value="${cfg.drawMode}"]`);
     if (dr) dr.checked = true;
+    const meta = document.querySelector<HTMLInputElement>(`input[name="keepMetadata"][value="${cfg.keepMetadata ? 'keep' : 'strip'}"]`);
+    if (meta) meta.checked = true;
+    const audio = document.querySelector<HTMLInputElement>(`input[name="keepAudio"][value="${cfg.keepAudio ? 'keep' : 'strip'}"]`);
+    if (audio) audio.checked = true;
+  }
+
+  private updateAudioSettingVisibility(): void {
+    this.audioSettingRow.hidden = !this.items.some(it => it.isVideo);
   }
 
   // ── Debug log ───────────────────────────────────────────────────────────────
@@ -354,6 +364,14 @@ export class App {
       const t = e.target as HTMLInputElement;
       if (t.name === 'drawMode') setConfig({ drawMode: t.value as AppConfig['drawMode'] });
     });
+    document.getElementById('metadata-radio-group')!.addEventListener('change', e => {
+      const t = e.target as HTMLInputElement;
+      if (t.name === 'keepMetadata') setConfig({ keepMetadata: t.value === 'keep' });
+    });
+    document.getElementById('audio-radio-group')!.addEventListener('change', e => {
+      const t = e.target as HTMLInputElement;
+      if (t.name === 'keepAudio') setConfig({ keepAudio: t.value === 'keep' });
+    });
 
     window.addEventListener('configchange', (e) =>
       void this.onConfigChange((e as CustomEvent<AppConfig>).detail));
@@ -485,6 +503,7 @@ export class App {
       loaded: false, exported: false, usesLibav: false,
     };
     this.items.push(item);
+    this.updateAudioSettingVisibility();
 
     // Reveal step cards on first file
     if (this.items.length === 1) {
@@ -639,13 +658,16 @@ export class App {
     const total          = pending.length;
     const fileStartTimes = new Array<number>(total).fill(0);
 
+    const { keepMetadata, keepAudio } = getConfig();
     const exportItems: ExportItem[] = pending.map(it => ({
       name:      it.name,
       isVideo:   it.isVideo,
       canvas:    it.isVideo ? undefined : it.canvas,
-      file:      it.isVideo ? it.file   : undefined,
+      file:      it.file,
       trimStart: it.trimStart,
       trimEnd:   it.trimEnd,
+      keepMetadata,
+      keepAudio,
     }));
 
     await runBatch(exportItems, {
