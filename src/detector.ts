@@ -101,9 +101,17 @@ const fileHashes = new WeakMap<File, string>();
 async function getFileHash(file: File): Promise<string> {
   let hash = fileHashes.get(file);
   if (!hash) {
-    const bytes = await file.slice(0, 8192).arrayBuffer();
-    const digest = await crypto.subtle.digest('SHA-256', bytes);
-    hash = Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).slice(0, 8).join('');
+    if (crypto.subtle) {
+      const bytes = await file.slice(0, 8192).arrayBuffer();
+      const digest = await crypto.subtle.digest('SHA-256', bytes);
+      hash = Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).slice(0, 8).join('');
+    } else {
+      // crypto.subtle is unavailable on non-secure origins (e.g. http://192.x.x.x).
+      // Fall back to a fixed placeholder — cache keys will still be scoped by
+      // filename + size, so cross-file collisions remain unlikely in practice.
+      console.warn('[detector] crypto.subtle unavailable; using placeholder file hash');
+      hash = '00000000';
+    }
     fileHashes.set(file, hash);
   }
   return hash;
