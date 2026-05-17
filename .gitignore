@@ -1,7 +1,10 @@
 node_modules
 dist
 *.wasm
-vendor/libav-hevc/
+vendor/libav-hevc/*.wasm
+vendor/libav-hevc/*.mjs
+vendor/libav-avc-av1/*.wasm
+vendor/libav-avc-av1/*.mjs
 # Large model chunks (detect_x) not yet used; commit only detect_n via direct git
 models/detect_x_*
 test-results/.last-run.json

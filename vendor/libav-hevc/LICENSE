@@ -1,0 +1,33 @@
+# License — vendor/libav-hevc
+
+This directory contains pre-built WebAssembly binaries of the libav.js
+"hevc-aac" variant. The binaries are compiled from the following sources:
+
+## Components and Licenses
+
+### FFmpeg (libavformat, libavcodec, libavutil, libswresample, libswscale)
+- Version: 8.0
+- License: **GNU Lesser General Public License v2.1 or later (LGPL-2.1+)**
+- Copyright: (c) 2000-2024 Fabrice Bellard et al
+- Source: `node_modules/libav.js/sources/ffmpeg-8.0.tar.xz`
+
+### Emscripten C runtime (musl libc)
+- License: **MIT / ISC**
+- Copyright: (c) 2010-2024 Emscripten authors; (c) 2005-2024 Rich Felker et al
+- Source: bundled with Emscripten SDK
+
+### libav.js wrapper
+- Version: 6.8.8
+- License: **0-Clause BSD (0BSD)** — no attribution required in derivatives
+- Copyright: (c) Yahweasel and contributors
+- Source: `node_modules/libav.js/sources/libav.js.tar.xz`
+
+## LGPL Compliance
+
+The LGPL-2.1 requires that source code be made available to recipients of the
+binary. Sources for all LGPL-licensed components are included in the libav.js
+npm package at `node_modules/libav.js/sources/`. Build instructions are in
+`scripts/build-hevc.mjs`.
+
+The full text of the LGPL-2.1 is available at:
+https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html
