@@ -19,8 +19,14 @@ const MODEL_W = 1280;
 const MODEL_H = 1280;
 const LABELS = ['plate', 'person'] as const;
 const THRESHOLD_IOU = 0.45;
-// also update confidence slider's minimum value if you changesthis
+// also update confidence slider's minimum value if you changes this
 const THRESHOLD_CONF = 0.01;
+// Cap candidates per class fed into NMS to bound O(n²) cost.
+// With THRESHOLD_CONF=0.01 tens of thousands of boxes can pass the filter;
+// NMS on 10 k boxes is ~100 M iterations and will freeze the main thread.
+// After sorting by confidence (descending), we keep only the top K — the
+// highest-confidence detections are always preferred by greedy NMS anyway.
+const MAX_NMS_CANDIDATES_PER_CLASS = 1500;
 
 const MODEL_NAMES: Record<ModelChoice, string> = {
   detect_n: 'detect_n_2024_04',
@@ -470,12 +476,20 @@ function postprocess(output: ort.Tensor, scale: number, padX: number, padY: numb
     );
   }
 
-  console.log(`[detector] starting NMS`);
+  const candidateCounts = rawByClass.map((r, i) => `${LABELS[i]}=${r.length}`).join(' ');
+  console.log(`[detector] pre-NMS candidates: ${candidateCounts} (total=${nClassPass})`);
 
   // Per-class greedy NMS (descending confidence).
   const kept: RawBox[] = [];
   for (const classRaw of rawByClass) {
     classRaw.sort((a, b) => b.conf - a.conf);
+    // Cap to bound O(n²) NMS cost. With THRESHOLD_CONF=0.01 tens of thousands
+    // of boxes can pass the filter; 10 k boxes ≈ 100 M iterations and will
+    // freeze the main thread. Top-K by confidence is the standard mitigation.
+    if (classRaw.length > MAX_NMS_CANDIDATES_PER_CLASS) {
+      console.log(`[detector] capping ${classRaw[0].label} candidates ${classRaw.length} → ${MAX_NMS_CANDIDATES_PER_CLASS}`);
+      classRaw.splice(MAX_NMS_CANDIDATES_PER_CLASS);
+    }
     if (dbg() && classRaw.length > 0) {
       const label = classRaw[0].label;
       console.log(`[detector][debug] top-${Math.min(classRaw.length, 10)} ${label} candidates before NMS (model-pixel coords):`);
@@ -494,7 +508,7 @@ function postprocess(output: ort.Tensor, scale: number, padX: number, padY: numb
     }
   }
 
-  console.log(`[detector] post-process complete`);
+  console.log(`[detector] post-process complete (kept=${kept.length})`);
 
   if (dbg()) console.log(`[detector][debug] after NMS: ${nClassPass} → ${kept.length} detections`);
   if (dbg())
