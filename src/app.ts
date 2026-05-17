@@ -681,7 +681,22 @@ export class App {
       keepAudio,
     }));
 
-    await runBatch(exportItems, {
+    const _nav = navigator as unknown as { wakeLock?: { request(t: string): Promise<{ release(): Promise<void> }> } };
+    let wakeLock: { release(): Promise<void> } | null = null;
+    if (!_nav.wakeLock) {
+      console.log('[wakelock] navigator.wakeLock not available (API unsupported or insecure context)');
+    } else {
+      try {
+        wakeLock = await _nav.wakeLock.request('screen');
+        console.log('[wakelock] acquired');
+      } catch (err) {
+        console.log(`[wakelock] request failed: ${err instanceof Error ? `${err.name}: ${err.message}` : String(err)}`);
+      }
+    }
+    if (wakeLock === null && navigator.maxTouchPoints > 0 && exportItems.some(it => it.isVideo)) {
+      alert(t('wakelock_warning'));
+    }
+    try { await runBatch(exportItems, {
       onFileStart: (i) => {
         fileStartTimes[i] = performance.now();
         pending[i].exportBarFill.style.width = '0%';
@@ -721,8 +736,9 @@ export class App {
           this.globalEta.textContent = p >= 1 ? t('done') : formatEta(elapsed * (1 - p) / p);
         }
       },
-    });
-
+    }); } finally {
+    wakeLock?.release().catch(() => {});
+    }
     this.exporting = false;
     this.updateExportBtnState();
 

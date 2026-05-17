@@ -86,6 +86,7 @@ const STRINGS = {
     loading_chunks:       'Loading chunks ({done}/{total})\u2026',
 
     // Dynamic — export progress
+    wakelock_warning: 'Could not keep the screen awake. If the screen sleeps during export, the export will fail. Keep the screen active until it finishes.',
     estimating: 'Estimating\u2026',
     done:       'Done',
     failed:     'Failed',
@@ -152,6 +153,7 @@ const STRINGS = {
     loading_chunks_start: 'Segmente laden (0/{total})\u2026',
     loading_chunks:       'Segmente laden ({done}/{total})\u2026',
 
+    wakelock_warning: 'Bildschirm kann nicht aktiv gehalten werden. Wenn der Bildschirm w\u00e4hrend des Exports ausgeht, bricht der Export ab. Bitte den Bildschirm bis zum Abschluss aktiv lassen.',
     estimating: 'Sch\u00e4tzung\u2026',
     done:       'Fertig',
     failed:     'Fehlgeschlagen',
