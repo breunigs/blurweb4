@@ -8,4 +8,5 @@ vendor/libav-avc-av1/*.mjs
 test-results/.last-run.json
 TODO
 server/dist-embedded
+server/blurweb-server
 release

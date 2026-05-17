@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:mediabunny.dev)",
+      "Bash(npm:*)",
+      "Bash(npx:*)",
+      "Bash(node:*)",
+      "Bash(make:*)",
+      "Bash(git:*)",
+      "Bash(go:*)",
+      "Bash(docker:*)",
+      "Bash(tar:*)",
+      "Bash(cp:*)",
+      "Bash(du:*)",
+      "Bash(fuser:*)",
+      "Bash(pkill:*)",
+      "Bash(wait:*)",
+      "Bash(mkdir:*)",
+      "Bash(ffprobe:*)",
+      "Bash(python3:*)",
+      "Read(/tmp/**)",
+      "Read(/usr/local/go/**)"
+    ],
+    "additionalDirectories": [
+      "/tmp"
+    ]
+  }
+}

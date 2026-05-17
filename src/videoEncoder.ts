@@ -25,6 +25,7 @@ export async function encodeVideo(
   trimEnd?: number,
   keepMetadata: 'keep' | 'gps' | 'strip' = 'keep',
   keepAudio = true,
+  outputStem?: string,
 ): Promise<EncodeResult> {
   const input = new Input({ formats: ALL_FORMATS, source: new BlobSource(file) });
   try {
@@ -127,7 +128,7 @@ export async function encodeVideo(
     conversion.onProgress = onProgress;
     await conversion.execute();
 
-    const stem = file.name.replace(/\.[^.]+$/, '');
+    const stem = outputStem ?? file.name.replace(/\.[^.]+$/, '');
     return { buffer: target.buffer!, filename: stem + enc.ext };
   } finally {
     input.dispose();

@@ -1,5 +1,7 @@
 import { encodeVideo } from './videoEncoder';
 import { exportAsJpeg } from './imageExporter';
+import { applyPattern } from './naming';
+import type { FileMeta } from './fileMeta';
 
 export interface ExportItem {
   name: string;
@@ -10,6 +12,7 @@ export interface ExportItem {
   trimEnd?: number;
   keepMetadata?: 'keep' | 'gps' | 'strip';
   keepAudio?: boolean;
+  meta?: FileMeta;
 }
 
 export interface BatchCallbacks {
@@ -27,7 +30,7 @@ function triggerDownload(data: ArrayBuffer | Blob, filename: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
-export async function runBatch(items: ExportItem[], cb: BatchCallbacks): Promise<void> {
+export async function runBatch(items: ExportItem[], namingPattern: string, cb: BatchCallbacks): Promise<void> {
   const total = items.length;
   let completed = 0;
 
@@ -35,10 +38,13 @@ export async function runBatch(items: ExportItem[], cb: BatchCallbacks): Promise
     const item = items[i];
     cb.onFileStart(i);
 
+    const stem = item.name.replace(/\.[^.]+$/, '');
+    const outputStem = applyPattern(namingPattern, stem, i + 1, item.meta ?? {});
+
     try {
       if (!item.isVideo) {
         cb.onFileProgress(i, 1);
-        const { blob, filename } = await exportAsJpeg(item.canvas!, item.name, item.file, item.keepMetadata);
+        const { blob, filename } = await exportAsJpeg(item.canvas!, item.name, item.file, item.keepMetadata, 0.92, outputStem);
         triggerDownload(blob, filename);
       } else {
         const { buffer, filename } = await encodeVideo(
@@ -48,6 +54,7 @@ export async function runBatch(items: ExportItem[], cb: BatchCallbacks): Promise
           item.trimEnd,
           item.keepMetadata,
           item.keepAudio,
+          outputStem,
         );
         cb.onFileProgress(i, 1);
         triggerDownload(buffer, filename);

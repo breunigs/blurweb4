@@ -2,6 +2,8 @@ import { renderImage } from './imageRenderer';
 import { VideoPlayer } from './videoPlayer';
 import { runBatch } from './batchExporter';
 import type { ExportItem } from './batchExporter';
+import { extractImageMeta, extractVideoMeta, type FileMeta } from './fileMeta';
+import { applyPattern } from './naming';
 import {
   getCachedDetections,
   scheduleInference,
@@ -33,6 +35,8 @@ interface MediaItem {
   exportBarFill: HTMLElement;
   exportEtaEl: HTMLElement;
   usesLibav: boolean;
+  metaPromise: Promise<FileMeta>;
+  meta?: FileMeta;
 }
 
 function formatTime(s: number): string {
@@ -207,10 +211,55 @@ export class App {
       slider.value = String(Math.round(cfg.minConfidence * 100));
       (document.getElementById('conf-value') as HTMLElement).textContent = cfg.minConfidence.toFixed(2);
     }
+    const ni = document.getElementById('naming-pattern-input') as HTMLInputElement | null;
+    if (ni) ni.value = cfg.namingPattern;
   }
 
   private updateAudioSettingVisibility(): void {
     this.audioSettingRow.hidden = !this.items.some((it) => it.isVideo);
+  }
+
+  private async updateNamingInfoPanel(): Promise<void> {
+    const panel = document.getElementById('naming-info-panel');
+    if (!panel || panel.hidden) return;
+    const item = this.items[this.activeIndex];
+    const stem = item ? item.name.replace(/\.[^.]+$/, '') : '';
+    const meta = item ? (item.meta ?? await item.metaPromise) : {};
+    const values: Record<string, string> = {
+      input: stem,
+      index: '1',
+      ...Object.fromEntries(Object.entries(meta).filter(([, v]) => v !== undefined)),
+    };
+    const VARS: Array<{ key: string; i18nKey: Parameters<typeof t>[0] }> = [
+      { key: 'input', i18nKey: 'var_desc_input' },
+      { key: 'index', i18nKey: 'var_desc_index' },
+      { key: 'year', i18nKey: 'var_desc_year' },
+      { key: 'month', i18nKey: 'var_desc_month' },
+      { key: 'day', i18nKey: 'var_desc_day' },
+      { key: 'hour', i18nKey: 'var_desc_hour' },
+      { key: 'minute', i18nKey: 'var_desc_minute' },
+      { key: 'timezone', i18nKey: 'var_desc_timezone' },
+      { key: 'lat', i18nKey: 'var_desc_lat' },
+      { key: 'lon', i18nKey: 'var_desc_lon' },
+      { key: 'duration', i18nKey: 'var_desc_duration' },
+    ];
+    const tbody = document.getElementById('naming-vars-body')!;
+    tbody.innerHTML = '';
+    for (const v of VARS) {
+      const val = values[v.key] ?? '';
+      const tr = document.createElement('tr');
+      const tdVar = document.createElement('td');
+      tdVar.style.cssText = 'padding:3px 10px 3px 0;font-family:var(--mono);color:var(--text);white-space:nowrap;';
+      tdVar.textContent = `{${v.key}}`;
+      const tdDesc = document.createElement('td');
+      tdDesc.style.cssText = 'padding:3px 10px 3px 0;color:var(--dim);';
+      tdDesc.textContent = t(v.i18nKey);
+      const tdVal = document.createElement('td');
+      tdVal.style.cssText = 'padding:3px 0;font-family:var(--mono);color:var(--dim);';
+      tdVal.textContent = val;
+      tr.append(tdVar, tdDesc, tdVal);
+      tbody.appendChild(tr);
+    }
   }
 
   // ── Debug log ───────────────────────────────────────────────────────────────
@@ -242,7 +291,7 @@ export class App {
       if (area) area.textContent = '';
     });
     document.getElementById('defaults-btn')!.addEventListener('click', () => {
-      setConfig({ model: 'detect_n', drawMode: 'blur', keepMetadata: 'keep', keepAudio: true, minConfidence: 0.1 });
+      setConfig({ model: 'detect_n', drawMode: 'blur', keepMetadata: 'keep', keepAudio: true, minConfidence: 0.1, namingPattern: '{input}' });
     });
     document.getElementById('delete-detections-btn')?.addEventListener('click', () => {
       if (!confirm(t('confirm_delete_detections'))) return;
@@ -425,6 +474,17 @@ export class App {
     });
 
     window.addEventListener('configchange', (e) => void this.onConfigChange((e as CustomEvent<AppConfig>).detail));
+
+    const namingInput = document.getElementById('naming-pattern-input') as HTMLInputElement | null;
+    const debouncedNamingChange = debounce((value: string) => setConfig({ namingPattern: value }), 300);
+    namingInput?.addEventListener('input', () => debouncedNamingChange(namingInput.value));
+
+    document.getElementById('naming-info-btn')?.addEventListener('click', () => {
+      const panel = document.getElementById('naming-info-panel');
+      if (!panel) return;
+      panel.hidden = !panel.hidden;
+      if (!panel.hidden) void this.updateNamingInfoPanel();
+    });
   }
 
   private onTrimStartInput(): void {
@@ -572,7 +632,14 @@ export class App {
       loaded: false,
       exported: false,
       usesLibav: false,
+      metaPromise: Promise.resolve({}),
     };
+    // Kick off metadata extraction fire-and-forget; cache result on item.
+    if (isVideo) {
+      item.metaPromise = extractVideoMeta(file).then((m) => { item.meta = m; return m; }).catch(() => ({}));
+    } else {
+      item.metaPromise = extractImageMeta(file).then((m) => { item.meta = m; return m; }).catch(() => ({}));
+    }
     this.items.push(item);
     this.updateAudioSettingVisibility();
 
@@ -700,6 +767,7 @@ export class App {
     this.updateFileNav();
     this.updateExportBtnState();
     this.updatePreviewAspectRatio();
+    void this.updateNamingInfoPanel();
   }
 
   private updatePreviewAspectRatio(): void {
@@ -756,7 +824,7 @@ export class App {
     const total = pending.length;
     const fileStartTimes = new Array<number>(total).fill(0);
 
-    const { keepMetadata, keepAudio } = getConfig();
+    const { keepMetadata, keepAudio, namingPattern } = getConfig();
     const exportItems: ExportItem[] = pending.map((it) => ({
       name: it.name,
       isVideo: it.isVideo,
@@ -766,6 +834,7 @@ export class App {
       trimEnd: it.trimEnd,
       keepMetadata,
       keepAudio,
+      meta: it.meta,
     }));
 
     const _nav = navigator as unknown as { wakeLock?: { request(t: string): Promise<{ release(): Promise<void> }> } };
@@ -784,7 +853,7 @@ export class App {
       alert(t('wakelock_warning'));
     }
     try {
-      await runBatch(exportItems, {
+      await runBatch(exportItems, namingPattern, {
         onFileStart: (i) => {
           fileStartTimes[i] = performance.now();
           pending[i].exportBarFill.style.width = '0%';
