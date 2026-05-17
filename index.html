@@ -530,6 +530,7 @@
       flex-direction: column;
       gap: 8px;
     }
+    .setting-row[hidden] { display: none; }
 
     .setting-row-label {
       font-size: 12px;
@@ -909,6 +910,24 @@
               <div id="model-load-bar-fill"></div>
             </div>
             <span id="model-load-text"></span>
+          </div>
+        </div>
+
+        <!-- Metadata -->
+        <div class="setting-row">
+          <span class="setting-row-label">Metadata</span>
+          <div class="pill-group" id="metadata-radio-group">
+            <label><input type="radio" name="keepMetadata" value="keep" checked>Keep</label>
+            <label><input type="radio" name="keepMetadata" value="strip">Strip</label>
+          </div>
+        </div>
+
+        <!-- Audio (only shown when at least one video is loaded) -->
+        <div class="setting-row" id="audio-setting-row" hidden>
+          <span class="setting-row-label">Audio</span>
+          <div class="pill-group" id="audio-radio-group">
+            <label><input type="radio" name="keepAudio" value="keep" checked>Keep</label>
+            <label><input type="radio" name="keepAudio" value="strip">Strip</label>
           </div>
         </div>
 

@@ -8,6 +8,8 @@ export interface ExportItem {
   file?: File;
   trimStart?: number;
   trimEnd?: number;
+  keepMetadata?: boolean;
+  keepAudio?: boolean;
 }
 
 export interface BatchCallbacks {
@@ -36,7 +38,7 @@ export async function runBatch(items: ExportItem[], cb: BatchCallbacks): Promise
     try {
       if (!item.isVideo) {
         cb.onFileProgress(i, 1);
-        const { blob, filename } = await exportAsJpeg(item.canvas!, item.name);
+        const { blob, filename } = await exportAsJpeg(item.canvas!, item.name, item.file, item.keepMetadata);
         triggerDownload(blob, filename);
       } else {
         const { buffer, filename } = await encodeVideo(
@@ -44,6 +46,8 @@ export async function runBatch(items: ExportItem[], cb: BatchCallbacks): Promise
           (p) => cb.onFileProgress(i, p),
           item.trimStart,
           item.trimEnd,
+          item.keepMetadata,
+          item.keepAudio,
         );
         cb.onFileProgress(i, 1);
         triggerDownload(buffer, filename);

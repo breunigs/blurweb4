@@ -18,6 +18,8 @@ export async function encodeVideo(
   onProgress: (p: number) => void,
   trimStart?: number,
   trimEnd?: number,
+  keepMetadata = true,
+  keepAudio = true,
 ): Promise<EncodeResult> {
   const input = new Input({ formats: ALL_FORMATS, source: new BlobSource(file) });
   try {
@@ -65,17 +67,21 @@ export async function encodeVideo(
       input,
       output,
       ...(trim ? { trim } : {}),
-      // Copy normalised tags (title, date, etc.) but strip raw Uint8Array blobs.
+      // When keeping metadata: copy normalised tags but strip raw Uint8Array blobs.
       // GoPro writes ~25 KB of proprietary GPMF telemetry as raw ilst atoms; if
       // copied verbatim they produce output that ffprobe rejects as invalid data.
-      tags: (input) => {
-        const { raw, ...rest } = input;
-        const safeRaw: typeof raw = {};
-        for (const [k, v] of Object.entries(raw ?? {})) {
-          if (typeof v === 'string') safeRaw[k] = v;
-        }
-        return { ...rest, ...(Object.keys(safeRaw).length ? { raw: safeRaw } : {}) };
-      },
+      // When stripping: pass empty tags to suppress all metadata copy.
+      tags: keepMetadata
+        ? (input) => {
+            const { raw, ...rest } = input;
+            const safeRaw: typeof raw = {};
+            for (const [k, v] of Object.entries(raw ?? {})) {
+              if (typeof v === 'string') safeRaw[k] = v;
+            }
+            return { ...rest, ...(Object.keys(safeRaw).length ? { raw: safeRaw } : {}) };
+          }
+        : {},
+      ...(keepAudio ? {} : { audio: { discard: true } }),
       video: {
         codec:                enc.codec,
         hardwareAcceleration: enc.hardwareAcceleration,
