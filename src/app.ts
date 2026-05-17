@@ -565,7 +565,7 @@ export class App {
     const item = this.items[this.activeIndex];
     if (!item) return;
     if (!item.isVideo) {
-      const key = makeImageKey(item.file, item.canvas.width, item.canvas.height);
+      const key = await makeImageKey(item.file, item.canvas.width, item.canvas.height);
       const cached = await getCachedDetections(key);
       if (cached !== null) {
         // Fast path: re-decode the image then overlay cached detections.
@@ -736,7 +736,7 @@ export class App {
           canvas.dataset.loaded = 'true';
           if (this.activeIndex === index) this.updatePreviewAspectRatio();
           const ctx = canvas.getContext('2d')!;
-          const key = makeImageKey(file, canvas.width, canvas.height);
+          const key = await makeImageKey(file, canvas.width, canvas.height);
           const cached = await getCachedDetections(key);
           if (cached !== null) {
             const filtered = filterByConf(cached, getConfig().minConfidence);

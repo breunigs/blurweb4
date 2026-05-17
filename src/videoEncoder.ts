@@ -117,7 +117,7 @@ export async function encodeVideo(
           sample.draw(offCtx!, 0, 0);
           // Key uses the absolute container timestamp — same as preview seek.
           // Frames previewed at the trim-start position hit the cache here.
-          const key = makeVideoKey(file, offscreen.width, offscreen.height, sample.microsecondTimestamp);
+          const key = await makeVideoKey(file, offscreen.width, offscreen.height, sample.microsecondTimestamp);
           const detections = filterByConf(await detectForExport(offscreen, key), getConfig().minConfidence);
           applyDetections(offCtx!, detections, drawMode);
           return offscreen;

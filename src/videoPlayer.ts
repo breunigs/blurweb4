@@ -82,7 +82,7 @@ export class VideoPlayer {
       const gen = this.inferenceGen;
       this.statusEl.classList.remove('visible');
 
-      const key = makeVideoKey(this.file, this.canvas.width, this.canvas.height, firstSample.microsecondTimestamp);
+      const key = await makeVideoKey(this.file, this.canvas.width, this.canvas.height, firstSample.microsecondTimestamp);
       firstSample.close();
 
       const cached = await getCachedDetections(key);
@@ -134,7 +134,7 @@ export class VideoPlayer {
       const gen = this.inferenceGen;
       this.statusEl.classList.remove('visible');
 
-      const key = makeVideoKey(this.file, this.canvas.width, this.canvas.height, sample.microsecondTimestamp);
+      const key = await makeVideoKey(this.file, this.canvas.width, this.canvas.height, sample.microsecondTimestamp);
       sample.close();
 
       const tCacheStart = performance.now();
@@ -192,7 +192,7 @@ export class VideoPlayer {
       const gen = this.inferenceGen;
       this.statusEl.classList.remove('visible');
 
-      const key = makeVideoKey(this.file, this.canvas.width, this.canvas.height, sample.microsecondTimestamp);
+      const key = await makeVideoKey(this.file, this.canvas.width, this.canvas.height, sample.microsecondTimestamp);
       sample.close();
 
       const cached = await getCachedDetections(key);

@@ -93,12 +93,28 @@ interface PendingItem {
 
 // ── Cache keys ────────────────────────────────────────────────────────────────
 
-export function makeImageKey(file: File, width: number, height: number): string {
-  return `${getModelName()}|${file.name}|${file.size}|${width}x${height}|img`;
+// Content fingerprint keyed by File object. We hash the first 8 KB so that two
+// files with the same name and size but different content get distinct cache
+// keys, while the same file loaded across sessions always hits the IDB cache.
+const fileHashes = new WeakMap<File, string>();
+
+async function getFileHash(file: File): Promise<string> {
+  let hash = fileHashes.get(file);
+  if (!hash) {
+    const bytes = await file.slice(0, 8192).arrayBuffer();
+    const digest = await crypto.subtle.digest('SHA-256', bytes);
+    hash = Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).slice(0, 8).join('');
+    fileHashes.set(file, hash);
+  }
+  return hash;
 }
 
-export function makeVideoKey(file: File, width: number, height: number, microsecondTimestamp: number): string {
-  return `${getModelName()}|${file.name}|${file.size}|${width}x${height}|t${Math.round(microsecondTimestamp)}`;
+export async function makeImageKey(file: File, width: number, height: number): Promise<string> {
+  return `${getModelName()}|${await getFileHash(file)}|${file.name}|${file.size}|${width}x${height}|img`;
+}
+
+export async function makeVideoKey(file: File, width: number, height: number, microsecondTimestamp: number): Promise<string> {
+  return `${getModelName()}|${await getFileHash(file)}|${file.name}|${file.size}|${width}x${height}|t${Math.round(microsecondTimestamp)}`;
 }
 
 // ── IndexedDB ─────────────────────────────────────────────────────────────────
