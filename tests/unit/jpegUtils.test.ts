@@ -4,7 +4,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { findJpegApp1 } from '../src/jpegUtils.ts';
+import { findJpegApp1 } from '../../src/jpegUtils.ts';
 
 // ---------------------------------------------------------------------------
 // Helpers to build synthetic JPEG byte sequences

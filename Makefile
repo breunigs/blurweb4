@@ -13,8 +13,9 @@ dev: node_modules/.package-lock.json
 build: node_modules/.package-lock.json vendor-hevc vendor-avc-av1
 	node build.mjs
 
-## Run Playwright tests (Chromium + Firefox, port 3100)
+## Run unit tests + Playwright tests (Chromium + Firefox, port 3100)
 test: build
+	node --experimental-strip-types --test tests/unit/*.test.ts
 	npx playwright test
 
 ## Build the libav.js HEVC/AAC WASM variant → vendor/libav-hevc/

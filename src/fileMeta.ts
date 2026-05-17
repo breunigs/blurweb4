@@ -1,4 +1,5 @@
 import { Input, ALL_FORMATS, BlobSource } from 'mediabunny';
+import { findJpegApp1 } from './jpegUtils';
 
 export interface FileMeta {
   year?: string;
@@ -22,25 +23,11 @@ function parseIso6709(s: string): { lat: number | null; lon: number | null } {
 
 /** Read EXIF metadata from a JPEG file's raw bytes. */
 function parseExifMeta(jpeg: Uint8Array): FileMeta {
-  // Locate EXIF APP1 (FF E1 + "Exif\0\0")
-  let pos = 2;
-  let tiff: Uint8Array | null = null;
-  while (pos + 4 <= jpeg.length) {
-    if (jpeg[pos] !== 0xff) break;
-    const marker = jpeg[pos + 1];
-    if (marker === 0xda) break;
-    const segLen = (jpeg[pos + 2] << 8) | jpeg[pos + 3];
-    if (
-      marker === 0xe1 && pos + 10 <= jpeg.length &&
-      jpeg[pos + 4] === 0x45 && jpeg[pos + 5] === 0x78 && jpeg[pos + 6] === 0x69 &&
-      jpeg[pos + 7] === 0x66 && jpeg[pos + 8] === 0x00 && jpeg[pos + 9] === 0x00
-    ) {
-      tiff = jpeg.subarray(pos + 10, pos + 2 + segLen);
-      break;
-    }
-    pos += 2 + segLen;
-  }
-  if (!tiff || tiff.length < 8) return {};
+  const app1 = findJpegApp1(jpeg);
+  // app1 = FF E1 (2) + length (2) + "Exif\0\0" (6) + TIFF data
+  if (!app1 || app1.length < 18) return {};
+  const tiff = app1.subarray(10);
+  if (tiff.length < 8) return {};
 
   const isLE = tiff[0] === 0x49; // "II" = little-endian
   const r16 = (o: number) =>

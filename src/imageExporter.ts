@@ -1,37 +1,8 @@
+import { findJpegApp1 } from './jpegUtils';
+
 export interface ImageExportResult {
   blob: Blob;
   filename: string;
-}
-
-/**
- * Extract the raw EXIF APP1 segment (marker + length bytes + payload) from a
- * JPEG byte array.  Returns null when no EXIF APP1 is present.
- */
-function extractExif(jpeg: Uint8Array): Uint8Array | null {
-  let pos = 2; // skip SOI (FF D8)
-  while (pos + 4 <= jpeg.length) {
-    if (jpeg[pos] !== 0xff) break;
-    const marker = jpeg[pos + 1];
-    if (marker === 0xda) break; // SOS — no more APPn segments ahead
-    const segLen = (jpeg[pos + 2] << 8) | jpeg[pos + 3]; // includes the 2 length bytes
-    if (marker === 0xe1) {
-      // APP1
-      // Check for "Exif\0\0" identifier
-      if (
-        pos + 10 <= jpeg.length &&
-        jpeg[pos + 4] === 0x45 &&
-        jpeg[pos + 5] === 0x78 &&
-        jpeg[pos + 6] === 0x69 &&
-        jpeg[pos + 7] === 0x66 &&
-        jpeg[pos + 8] === 0x00 &&
-        jpeg[pos + 9] === 0x00
-      ) {
-        return jpeg.subarray(pos, pos + 2 + segLen);
-      }
-    }
-    pos += 2 + segLen;
-  }
-  return null;
 }
 
 /** Byte sizes for each TIFF data type (indexed by type code 1–12). */
@@ -47,7 +18,7 @@ const TIFF_TYPE_SIZES: Record<number, number> = {
  * Returns null if the source has no EXIF or no GPS IFD.
  */
 function extractGpsOnlyExif(jpeg: Uint8Array): Uint8Array | null {
-  const exifSegment = extractExif(jpeg);
+  const exifSegment = findJpegApp1(jpeg);
   if (!exifSegment) return null;
 
   // TIFF data starts after: FF E1 (2) + length (2) + "Exif\0\0" (6) = offset 10
@@ -213,7 +184,7 @@ export async function exportAsJpeg(
   let finalBlob = canvasBlob;
   if (sourceBytes) {
     const exifSegment =
-      keepMetadata === 'gps' ? extractGpsOnlyExif(sourceBytes) : extractExif(sourceBytes);
+      keepMetadata === 'gps' ? extractGpsOnlyExif(sourceBytes) : findJpegApp1(sourceBytes);
     if (exifSegment) {
       const canvasBytes = new Uint8Array(await canvasBlob.arrayBuffer());
       finalBlob = new Blob([injectExif(canvasBytes, exifSegment)], { type: 'image/jpeg' });
