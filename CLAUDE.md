@@ -335,9 +335,9 @@ and reuses it if already running on port 3100.
 ## YOLOv5 object detection (src/detector.ts)
 
 Model: `models/detect_n_2024_04.onnx` (8 MB, labels: `plate`, `person`).
-Input: `[1, 3, 736, 1280]` float32 RGB CHW tensor normalized to [0, 1].
+Input: `[1, 3, 1280, 1280]` float32 RGB CHW tensor normalized to [0, 1].
 Output: `[1, N, 7]` — rows of `[cx, cy, w, h, obj_conf, plate_conf, person_conf]`
-in model-pixel coordinates (0..1280, 0..736).
+in model-pixel coordinates (0..1280, 0..1280).
 
 **Preprocessing — letterboxing (important):**
 The model was trained on letterboxed inputs. `captureSnapshot` scales the source
