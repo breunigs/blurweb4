@@ -92,7 +92,7 @@ export function makeVideoKey(file: File, width: number, height: number, microsec
 // ── IndexedDB ─────────────────────────────────────────────────────────────────
 
 const DB_NAME = 'blurweb4-detections';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -101,6 +101,7 @@ function openDB(): Promise<IDBDatabase> {
       const db = req.result;
       if (!db.objectStoreNames.contains('frames')) db.createObjectStore('frames', { keyPath: 'key' });
       if (!db.objectStoreNames.contains('stats')) db.createObjectStore('stats', { keyPath: 'id' });
+      if (!db.objectStoreNames.contains('trims')) db.createObjectStore('trims', { keyPath: 'key' });
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -167,6 +168,19 @@ export function getInferenceStats(): Record<ModelChoice, InferenceModelStats> {
 // ── In-memory cache ───────────────────────────────────────────────────────────
 
 const memCache = new Map<string, Detection[]>();
+
+// ── Trim persistence ──────────────────────────────────────────────────────────
+
+export function saveTrim(fileKey: string, start: number, end: number): void {
+  idbPut('trims', { key: fileKey, start, end }).catch(() => {});
+}
+
+export async function loadTrim(fileKey: string): Promise<{ start: number; end: number } | null> {
+  try {
+    const rec = await idbGet<{ key: string; start: number; end: number }>('trims', fileKey);
+    return rec ? { start: rec.start, end: rec.end } : null;
+  } catch { return null; }
+}
 
 /** Filter detections by a minimum combined confidence score. */
 export function filterByConf(dets: Detection[], minConf: number): Detection[] {

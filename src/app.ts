@@ -5,6 +5,7 @@ import type { ExportItem } from './batchExporter';
 import {
   getCachedDetections, scheduleInference, applyDetections,
   makeImageKey, getAverageInferenceMs, setModel, clearDetectionCache, filterByConf,
+  saveTrim, loadTrim,
 } from './detector';
 import { getConfig, setConfig, type AppConfig, type ModelChoice } from './config';
 import { t, tpl, translateLabel, applyTranslations } from './i18n';
@@ -136,10 +137,15 @@ export class App {
       const item = this.items[this.activeIndex];
       if (item?.isVideo) { item.trimStart = t; }
     };
+    w.__getActiveTrimValues = () => {
+      const item = this.items[this.activeIndex];
+      return item?.isVideo ? { start: item.trimStart ?? 0, end: item.trimEnd ?? item.player?.duration ?? 0 } : null;
+    };
     w.__setTrimEnd = (t: number) => {
       const item = this.items[this.activeIndex];
       if (item?.isVideo && item.player) {
         item.trimEnd = t;
+        saveTrim(`${item.file.name}|${item.file.size}`, item.trimStart ?? 0, t);
         item.exported = false;
         this.updateExportBtnState();
         const dur   = item.player.duration;
@@ -314,6 +320,7 @@ export class App {
 
   private applyTrimStart(item: MediaItem, sec: number): void {
     item.trimStart = sec;
+    saveTrim(`${item.file.name}|${item.file.size}`, sec, item.trimEnd ?? item.player!.duration);
     const steps = Number(this.trimStartInput.max);
     const dur   = item.player!.duration;
     this.trimStartInput.value = String(Math.round((sec / dur) * steps));
@@ -403,6 +410,7 @@ export class App {
     if (Number(this.trimStartInput.value) >= endVal)
       this.trimStartInput.value = String(Math.max(0, endVal - 1));
     item.trimStart = (Number(this.trimStartInput.value) / max) * item.player.duration;
+    saveTrim(`${item.file.name}|${item.file.size}`, item.trimStart, item.trimEnd ?? item.player.duration);
     item.exported = false;
     this.updateExportBtnState();
     this.updateTrimFill();
@@ -420,6 +428,7 @@ export class App {
     if (Number(this.trimEndInput.value) <= startVal)
       this.trimEndInput.value = String(Math.min(max, startVal + 1));
     item.trimEnd = (Number(this.trimEndInput.value) / max) * item.player.duration;
+    saveTrim(`${item.file.name}|${item.file.size}`, item.trimStart ?? 0, item.trimEnd);
     item.exported = false;
     this.updateExportBtnState();
     this.updateTrimFill();
@@ -555,9 +564,15 @@ export class App {
         if (this.activeIndex === index) this.showDetectionResult(dets);
       };
 
-      player.load(file).then(() => {
+      player.load(file).then(async () => {
         item.loaded = true;
         canvas.dataset.loaded = 'true';
+        const saved = await loadTrim(`${file.name}|${file.size}`);
+        if (saved && item.player) {
+          const dur = item.player.duration;
+          item.trimStart = Math.max(0, Math.min(saved.start, dur));
+          item.trimEnd   = Math.max(item.trimStart, Math.min(saved.end, dur));
+        }
         if (this.activeIndex === index) this.setupTrimSlider(item);
       }).catch(err => {
         console.error(`Failed to load video "${file.name}":`, err);
