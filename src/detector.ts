@@ -348,7 +348,10 @@ export function getSession(onProgress?: (done: number, total: number) => void): 
         }
       }
       throw new Error('No working execution provider');
-    })();
+    })().catch((err) => {
+      sessionPromise = null; // allow retry on next call
+      throw err;
+    });
   }
   return sessionPromise;
 }

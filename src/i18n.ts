@@ -94,6 +94,7 @@ const STRINGS = {
     downloading_model: 'downloading model\u2026',
     no_detections: '0 detections',
     detection_failed: 'Detection failed',
+    model_load_failed: 'Model failed to load',
 
     // Dynamic — file nav / summary
     files_loaded_one: '1 file loaded',
@@ -185,6 +186,7 @@ const STRINGS = {
     downloading_model: 'Modell wird geladen\u2026',
     no_detections: '0 Erkennungen',
     detection_failed: 'Erkennung fehlgeschlagen',
+    model_load_failed: 'Modell konnte nicht geladen werden',
 
     files_loaded_one: '1 Datei geladen',
     files_loaded_n: '{n} Dateien geladen',

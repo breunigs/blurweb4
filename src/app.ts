@@ -558,6 +558,13 @@ export class App {
       void this.rerenderActive();
       try {
         await modelPromise;
+      } catch (err) {
+        const error = err instanceof Error ? err : new Error(String(err));
+        console.error('[app] model load failed:', error);
+        this.detectStatusInline.classList.remove('visible');
+        this.detectResultEl.textContent = t('model_load_failed');
+        this.detectResultEl.classList.add('visible', 'error');
+        return;
       } finally {
         this.modelLoadProgress.classList.remove('visible');
       }
