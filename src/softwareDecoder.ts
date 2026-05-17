@@ -22,12 +22,7 @@
  * allowing libavVideoDecoder.ts to take over.
  */
 
-import {
-  CustomVideoDecoder,
-  VideoSample,
-  EncodedPacket,
-  registerDecoder,
-} from 'mediabunny';
+import { CustomVideoDecoder, VideoSample, EncodedPacket, registerDecoder } from 'mediabunny';
 import type { VideoCodec } from 'mediabunny';
 
 // ── Codec / mode tables ────────────────────────────────────────────────────
@@ -81,7 +76,7 @@ const _probesDone: Promise<void> = (async () => {
   );
   for (const { mediabunny } of CODECS) {
     const m = modeStatus.get(mediabunny)!;
-    const summary = ALL_MODES.map(mode => `${mode}=${m.get(mode)}`).join(', ');
+    const summary = ALL_MODES.map((mode) => `${mode}=${m.get(mode)}`).join(', ');
     console.log(`[webCodecsDecoder] probe ${mediabunny}: ${summary}`);
   }
 })();
@@ -91,7 +86,7 @@ const _probesDone: Promise<void> = (async () => {
 export function areAllWebCodecsFailed(codec: VideoCodec): boolean {
   const m = modeStatus.get(codec);
   if (!m) return true;
-  return ALL_MODES.every(mode => {
+  return ALL_MODES.every((mode) => {
     const s = m.get(mode)!;
     return s === 'probe-fail' || s === 'runtime-fail';
   });
@@ -100,7 +95,7 @@ export function areAllWebCodecsFailed(codec: VideoCodec): boolean {
 function availableModes(codec: VideoCodec): HwMode[] {
   const m = modeStatus.get(codec);
   if (!m) return [];
-  return ALL_MODES.filter(mode => {
+  return ALL_MODES.filter((mode) => {
     const s = m.get(mode)!;
     return s !== 'probe-fail' && s !== 'runtime-fail';
   });
@@ -122,7 +117,7 @@ export class SmartWebCodecsDecoder extends CustomVideoDecoder {
     if (typeof VideoDecoder === 'undefined') return false;
     const vc = codec as VideoCodec;
     if (!modeStatus.has(vc)) return false;
-    return ALL_MODES.some(mode => {
+    return ALL_MODES.some((mode) => {
       const s = modeStatus.get(vc)!.get(mode)!;
       return s !== 'probe-fail' && s !== 'runtime-fail';
     });
@@ -169,7 +164,11 @@ export class SmartWebCodecsDecoder extends CustomVideoDecoder {
     this.runtimeError = null;
     // Close old decoder if not already closed.
     if (this.decoder && this.decoder.state !== 'closed') {
-      try { this.decoder.close(); } catch { /* already closed */ }
+      try {
+        this.decoder.close();
+      } catch {
+        /* already closed */
+      }
     }
     this.decoder = null;
 
@@ -213,7 +212,11 @@ export class SmartWebCodecsDecoder extends CustomVideoDecoder {
     // handled in flush()).  Try/catch guards against closing between the check
     // and the call.
     if (this.decoder && this.decoder.state === 'configured') {
-      try { this.decoder.decode(chunk); } catch { /* decoder closed asynchronously */ }
+      try {
+        this.decoder.decode(chunk);
+      } catch {
+        /* decoder closed asynchronously */
+      }
     }
   }
 
@@ -237,9 +240,7 @@ export class SmartWebCodecsDecoder extends CustomVideoDecoder {
     // If the decoder is already in an error/closed state (runtimeError set by
     // the async error callback, or decoder.state already closed), skip straight
     // to retry.  Otherwise attempt the flush and treat failure as an error.
-    const ok = this.runtimeError === null
-      && this.decoder.state === 'configured'
-      && await tryFlush();
+    const ok = this.runtimeError === null && this.decoder.state === 'configured' && (await tryFlush());
 
     if (ok) {
       this.pendingPackets = [];
@@ -254,10 +255,14 @@ export class SmartWebCodecsDecoder extends CustomVideoDecoder {
 
     for (const chunk of this.pendingPackets) {
       if (this.decoder.state !== 'configured') break;
-      try { this.decoder.decode(chunk); } catch { break; }
+      try {
+        this.decoder.decode(chunk);
+      } catch {
+        break;
+      }
     }
 
-    if (!await tryFlush()) {
+    if (!(await tryFlush())) {
       throw new Error(`SmartWebCodecsDecoder: fallback mode also failed for ${this.codec}`);
     }
     this.pendingPackets = [];
@@ -265,7 +270,11 @@ export class SmartWebCodecsDecoder extends CustomVideoDecoder {
 
   async close(): Promise<void> {
     if (this.decoder && this.decoder.state !== 'closed') {
-      try { this.decoder.close(); } catch { /* ignore */ }
+      try {
+        this.decoder.close();
+      } catch {
+        /* ignore */
+      }
     }
     this.decoder = null;
     this.runtimeError = null;

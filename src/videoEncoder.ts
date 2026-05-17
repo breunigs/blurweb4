@@ -1,7 +1,12 @@
 import {
-  Input, ALL_FORMATS, BlobSource,
-  Output, Mp4OutputFormat, WebMOutputFormat,
-  BufferTarget, Conversion,
+  Input,
+  ALL_FORMATS,
+  BlobSource,
+  Output,
+  Mp4OutputFormat,
+  WebMOutputFormat,
+  BufferTarget,
+  Conversion,
 } from 'mediabunny';
 import type { VideoSample } from 'mediabunny';
 import { detectEncoder } from './encoderConfig';
@@ -26,7 +31,7 @@ export async function encodeVideo(
     const track = await input.getPrimaryVideoTrack();
     if (!track) throw new Error(`No video track in "${file.name}"`);
 
-    const width  = await track.getCodedWidth();
+    const width = await track.getCodedWidth();
     const height = await track.getCodedHeight();
 
     // Use the source file's average bitrate for the output.
@@ -38,8 +43,10 @@ export async function encodeVideo(
       const duration = await input.getDurationFromMetadata([track]);
       if (duration && duration > 0) {
         const AUDIO_OVERHEAD_BPS = 192_000;
-        sourceBitrate = Math.max(100_000, Math.round(file.size * 8 / duration) - AUDIO_OVERHEAD_BPS);
-        console.log(`[videoEncoder] bitrate from file size: ${(sourceBitrate / 1_000_000).toFixed(2)} Mbps (file=${file.size} dur=${duration.toFixed(2)}s)`);
+        sourceBitrate = Math.max(100_000, Math.round((file.size * 8) / duration) - AUDIO_OVERHEAD_BPS);
+        console.log(
+          `[videoEncoder] bitrate from file size: ${(sourceBitrate / 1_000_000).toFixed(2)} Mbps (file=${file.size} dur=${duration.toFixed(2)}s)`,
+        );
       }
     } else {
       console.log(`[videoEncoder] bitrate from metadata: ${(sourceBitrate / 1_000_000).toFixed(2)} Mbps`);
@@ -47,7 +54,9 @@ export async function encodeVideo(
 
     const enc = await detectEncoder(width, height);
     if (!enc) throw new Error('No encodable video codec available in this browser');
-    console.log(`[videoEncoder] encoding ${enc.codec} / ${enc.hardwareAcceleration} bitrate=${sourceBitrate ? `${(sourceBitrate / 1_000_000).toFixed(2)} Mbps` : 'mediabunny-default'}`);
+    console.log(
+      `[videoEncoder] encoding ${enc.codec} / ${enc.hardwareAcceleration} bitrate=${sourceBitrate ? `${(sourceBitrate / 1_000_000).toFixed(2)} Mbps` : 'mediabunny-default'}`,
+    );
 
     const format = enc.ext === '.webm' ? new WebMOutputFormat() : new Mp4OutputFormat();
     const target = new BufferTarget();
@@ -83,7 +92,7 @@ export async function encodeVideo(
         : {},
       ...(keepAudio ? {} : { audio: { discard: true } }),
       video: {
-        codec:                enc.codec,
+        codec: enc.codec,
         hardwareAcceleration: enc.hardwareAcceleration,
         ...(sourceBitrate !== null ? { bitrate: sourceBitrate } : {}),
         process: async (sample: VideoSample): Promise<OffscreenCanvas> => {

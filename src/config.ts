@@ -10,7 +10,13 @@ export interface AppConfig {
 }
 
 const STORAGE_KEY = 'blurweb4-config';
-const DEFAULTS: AppConfig = { model: 'detect_n', drawMode: 'blur', keepMetadata: true, keepAudio: true, minConfidence: 0.1 };
+const DEFAULTS: AppConfig = {
+  model: 'detect_n',
+  drawMode: 'blur',
+  keepMetadata: true,
+  keepAudio: true,
+  minConfidence: 0.1,
+};
 
 function load(): AppConfig {
   try {
@@ -23,10 +29,16 @@ function load(): AppConfig {
 
 let current: AppConfig = load();
 
-export function getConfig(): AppConfig { return current; }
+export function getConfig(): AppConfig {
+  return current;
+}
 
 export function setConfig(patch: Partial<AppConfig>): void {
   current = { ...current, ...patch };
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(current)); } catch { /* ok */ }
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(current));
+  } catch {
+    /* ok */
+  }
   window.dispatchEvent(new CustomEvent('configchange', { detail: current }));
 }

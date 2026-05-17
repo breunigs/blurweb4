@@ -3,9 +3,16 @@ import { VideoPlayer } from './videoPlayer';
 import { runBatch } from './batchExporter';
 import type { ExportItem } from './batchExporter';
 import {
-  getCachedDetections, scheduleInference, applyDetections,
-  makeImageKey, getAverageInferenceMs, setModel, clearDetectionCache, filterByConf,
-  saveTrim, loadTrim,
+  getCachedDetections,
+  scheduleInference,
+  applyDetections,
+  makeImageKey,
+  getAverageInferenceMs,
+  setModel,
+  clearDetectionCache,
+  filterByConf,
+  saveTrim,
+  loadTrim,
 } from './detector';
 import { getConfig, setConfig, type AppConfig, type ModelChoice } from './config';
 import { t, tpl, translateLabel, applyTranslations } from './i18n';
@@ -36,9 +43,10 @@ function formatTime(s: number): string {
 
 function formatEta(ms: number): string {
   const s = Math.round(ms / 1000);
-  if (s < 5)  return t('almost_done');
+  if (s < 5) return t('almost_done');
   if (s < 60) return tpl('eta_s', { s });
-  const m = Math.floor(s / 60), r = s % 60;
+  const m = Math.floor(s / 60),
+    r = s % 60;
   return tpl('eta_ms', { m, r: r.toString().padStart(2, '0') });
 }
 
@@ -47,7 +55,10 @@ function debounce<T extends unknown[]>(fn: (...args: T) => void, ms: number): (.
   let timer: ReturnType<typeof setTimeout> | null = null;
   return (...args: T) => {
     if (timer !== null) clearTimeout(timer);
-    timer = setTimeout(() => { timer = null; fn(...args); }, ms);
+    timer = setTimeout(() => {
+      timer = null;
+      fn(...args);
+    }, ms);
   };
 }
 
@@ -56,7 +67,6 @@ export class App {
   private activeIndex = -1;
   private exporting = false;
   private prevModel: ModelChoice = getConfig().model;
-
 
   // DOM refs
   private previewArea!: HTMLElement;
@@ -89,34 +99,34 @@ export class App {
   private audioSettingRow!: HTMLElement;
 
   init(): void {
-    this.previewArea        = document.getElementById('preview-area')!;
-    this.fileSelect         = document.getElementById('file-select') as HTMLSelectElement;
-    this.fileNav            = document.getElementById('file-nav')!;
-    this.fileCounter        = document.getElementById('file-counter')!;
-    this.navPrev            = document.getElementById('nav-prev') as HTMLButtonElement;
-    this.navNext            = document.getElementById('nav-next') as HTMLButtonElement;
-    this.exportBtn          = document.getElementById('export-btn') as HTMLButtonElement;
-    this.exportAllBtn       = document.getElementById('export-all-btn') as HTMLButtonElement;
+    this.previewArea = document.getElementById('preview-area')!;
+    this.fileSelect = document.getElementById('file-select') as HTMLSelectElement;
+    this.fileNav = document.getElementById('file-nav')!;
+    this.fileCounter = document.getElementById('file-counter')!;
+    this.navPrev = document.getElementById('nav-prev') as HTMLButtonElement;
+    this.navNext = document.getElementById('nav-next') as HTMLButtonElement;
+    this.exportBtn = document.getElementById('export-btn') as HTMLButtonElement;
+    this.exportAllBtn = document.getElementById('export-all-btn') as HTMLButtonElement;
     this.globalProgressFill = document.getElementById('global-progress-fill')!;
-    this.globalEta          = document.getElementById('global-eta')!;
-    this.exportGlobalRow    = document.getElementById('export-global-row')!;
-    this.exportFileRows     = document.getElementById('export-file-rows')!;
-    this.modelLoadProgress  = document.getElementById('model-load-progress')!;
-    this.modelLoadBarFill   = document.getElementById('model-load-bar-fill')!;
-    this.modelLoadText      = document.getElementById('model-load-text')!;
-    this.trimSection        = document.getElementById('trim-section')!;
-    this.trimStartInput     = document.getElementById('trim-start') as HTMLInputElement;
-    this.trimEndInput       = document.getElementById('trim-end') as HTMLInputElement;
-    this.trimTrackFill      = document.getElementById('trim-track-fill')!;
-    this.trimStartLabel     = document.getElementById('trim-start-label')!;
-    this.trimEndLabel       = document.getElementById('trim-end-label')!;
-    this.trimDurationLabel  = document.getElementById('trim-duration-label')!;
+    this.globalEta = document.getElementById('global-eta')!;
+    this.exportGlobalRow = document.getElementById('export-global-row')!;
+    this.exportFileRows = document.getElementById('export-file-rows')!;
+    this.modelLoadProgress = document.getElementById('model-load-progress')!;
+    this.modelLoadBarFill = document.getElementById('model-load-bar-fill')!;
+    this.modelLoadText = document.getElementById('model-load-text')!;
+    this.trimSection = document.getElementById('trim-section')!;
+    this.trimStartInput = document.getElementById('trim-start') as HTMLInputElement;
+    this.trimEndInput = document.getElementById('trim-end') as HTMLInputElement;
+    this.trimTrackFill = document.getElementById('trim-track-fill')!;
+    this.trimStartLabel = document.getElementById('trim-start-label')!;
+    this.trimEndLabel = document.getElementById('trim-end-label')!;
+    this.trimDurationLabel = document.getElementById('trim-duration-label')!;
     this.detectStatusInline = document.getElementById('detect-status-inline')!;
-    this.detectResultEl     = document.getElementById('detect-result')!;
-    this.libavWarningEl     = document.getElementById('libav-warning')!;
-    this.loadedSummary      = document.getElementById('loaded-summary')!;
-    this.stepPreviewSubtitle= document.getElementById('step-preview-subtitle')!;
-    this.audioSettingRow    = document.getElementById('audio-setting-row')!;
+    this.detectResultEl = document.getElementById('detect-result')!;
+    this.libavWarningEl = document.getElementById('libav-warning')!;
+    this.loadedSummary = document.getElementById('loaded-summary')!;
+    this.stepPreviewSubtitle = document.getElementById('step-preview-subtitle')!;
+    this.audioSettingRow = document.getElementById('audio-setting-row')!;
 
     applyTranslations();
     this.bindEvents();
@@ -126,8 +136,11 @@ export class App {
 
     // Test globals
     const w = window as unknown as Record<string, unknown>;
-    w.__setDrawMode       = (m: string) => setConfig({ drawMode: m as AppConfig['drawMode'] });
-    w.__setMinConfidence  = (v: number) => { w.__lastDetections = undefined; setConfig({ minConfidence: v }); };
+    w.__setDrawMode = (m: string) => setConfig({ drawMode: m as AppConfig['drawMode'] });
+    w.__setMinConfidence = (v: number) => {
+      w.__lastDetections = undefined;
+      setConfig({ minConfidence: v });
+    };
     w.__setTrimStart = (t: number) => {
       const item = this.items[this.activeIndex];
       if (item?.isVideo) this.applyTrimStart(item, t);
@@ -135,7 +148,9 @@ export class App {
     // Sets trim without re-seeking (avoids triggering new inference for the test).
     w.__setTrimStartSilent = (t: number) => {
       const item = this.items[this.activeIndex];
-      if (item?.isVideo) { item.trimStart = t; }
+      if (item?.isVideo) {
+        item.trimStart = t;
+      }
     };
     w.__getActiveTrimValues = () => {
       const item = this.items[this.activeIndex];
@@ -148,7 +163,7 @@ export class App {
         saveTrim(`${item.file.name}|${item.file.size}`, item.trimStart ?? 0, t);
         item.exported = false;
         this.updateExportBtnState();
-        const dur   = item.player.duration;
+        const dur = item.player.duration;
         const steps = Number(this.trimEndInput.max);
         this.trimEndInput.value = String(Math.round((t / dur) * steps));
         this.updateTrimFill();
@@ -164,7 +179,7 @@ export class App {
         item.trimEnd = t;
         item.exported = false;
         this.updateExportBtnState();
-        const dur   = item.player.duration;
+        const dur = item.player.duration;
         const steps = Number(this.trimEndInput.max);
         this.trimEndInput.value = String(Math.round((t / dur) * steps));
         this.updateTrimFill();
@@ -179,9 +194,13 @@ export class App {
     if (mr) mr.checked = true;
     const dr = document.querySelector<HTMLInputElement>(`input[name="drawMode"][value="${cfg.drawMode}"]`);
     if (dr) dr.checked = true;
-    const meta = document.querySelector<HTMLInputElement>(`input[name="keepMetadata"][value="${cfg.keepMetadata ? 'keep' : 'strip'}"]`);
+    const meta = document.querySelector<HTMLInputElement>(
+      `input[name="keepMetadata"][value="${cfg.keepMetadata ? 'keep' : 'strip'}"]`,
+    );
     if (meta) meta.checked = true;
-    const audio = document.querySelector<HTMLInputElement>(`input[name="keepAudio"][value="${cfg.keepAudio ? 'keep' : 'strip'}"]`);
+    const audio = document.querySelector<HTMLInputElement>(
+      `input[name="keepAudio"][value="${cfg.keepAudio ? 'keep' : 'strip'}"]`,
+    );
     if (audio) audio.checked = true;
     const slider = document.getElementById('conf-slider') as HTMLInputElement | null;
     if (slider) {
@@ -191,7 +210,7 @@ export class App {
   }
 
   private updateAudioSettingVisibility(): void {
-    this.audioSettingRow.hidden = !this.items.some(it => it.isVideo);
+    this.audioSettingRow.hidden = !this.items.some((it) => it.isVideo);
   }
 
   // ── Debug log ───────────────────────────────────────────────────────────────
@@ -213,7 +232,9 @@ export class App {
       await copyToClipboard();
       const status = document.getElementById('copy-log-status')!;
       status.textContent = t('copied');
-      setTimeout(() => { status.textContent = ''; }, 2000);
+      setTimeout(() => {
+        status.textContent = '';
+      }, 2000);
     });
     document.getElementById('clear-log-btn')?.addEventListener('click', () => {
       clearEntries();
@@ -225,7 +246,9 @@ export class App {
     });
     document.getElementById('delete-detections-btn')?.addEventListener('click', () => {
       if (!confirm(t('confirm_delete_detections'))) return;
-      clearDetectionCache().then(() => this.rerenderActive()).catch(console.error);
+      clearDetectionCache()
+        .then(() => this.rerenderActive())
+        .catch(console.error);
     });
   }
 
@@ -234,9 +257,8 @@ export class App {
   private showDetecting(on: boolean): void {
     if (on) {
       const avg = getAverageInferenceMs();
-      this.detectStatusInline.textContent = avg === null
-        ? t('detecting_plain')
-        : tpl('detecting_timed', { t: (avg / 1000).toFixed(1) });
+      this.detectStatusInline.textContent =
+        avg === null ? t('detecting_plain') : tpl('detecting_timed', { t: (avg / 1000).toFixed(1) });
       this.detectStatusInline.classList.add('visible');
       this.detectResultEl.textContent = t('computing');
       this.detectResultEl.classList.add('visible');
@@ -250,9 +272,7 @@ export class App {
     const counts: Record<string, number> = {};
     for (const d of dets) counts[d.label] = (counts[d.label] ?? 0) + 1;
     const parts = Object.entries(counts).map(([label, n]) => `${n} ${translateLabel(label)}`);
-    this.detectResultEl.textContent = dets.length === 0
-      ? t('no_detections')
-      : parts.join(', ');
+    this.detectResultEl.textContent = dets.length === 0 ? t('no_detections') : parts.join(', ');
     this.detectResultEl.classList.add('visible');
   }
 
@@ -270,7 +290,7 @@ export class App {
       this.fileNav.classList.remove('visible');
     }
     // Update subtitle in step header
-    this.stepPreviewSubtitle.textContent = n > 0 ? this.items[i]?.name ?? '' : '';
+    this.stepPreviewSubtitle.textContent = n > 0 ? (this.items[i]?.name ?? '') : '';
   }
 
   private updateLoadedSummary(): void {
@@ -283,19 +303,19 @@ export class App {
   // ── Trim slider ─────────────────────────────────────────────────────────────
 
   private updateTrimFill(): void {
-    const s   = Number(this.trimStartInput.value);
-    const e   = Number(this.trimEndInput.value);
+    const s = Number(this.trimStartInput.value);
+    const e = Number(this.trimEndInput.value);
     const max = Number(this.trimStartInput.max);
-    this.trimTrackFill.style.left  = `${(s / max) * 100}%`;
+    this.trimTrackFill.style.left = `${(s / max) * 100}%`;
     this.trimTrackFill.style.width = `${((e - s) / max) * 100}%`;
   }
 
   private updateTrimLabels(item: MediaItem): void {
     const dur = item.player!.duration;
-    const s   = item.trimStart ?? 0;
-    const e   = item.trimEnd   ?? dur;
-    this.trimStartLabel.textContent    = formatTime(s);
-    this.trimEndLabel.textContent      = formatTime(e);
+    const s = item.trimStart ?? 0;
+    const e = item.trimEnd ?? dur;
+    this.trimStartLabel.textContent = formatTime(s);
+    this.trimEndLabel.textContent = formatTime(e);
     this.trimDurationLabel.textContent = tpl('selected', { s: `${(e - s).toFixed(2)}s` });
   }
 
@@ -325,7 +345,7 @@ export class App {
     item.trimStart = sec;
     saveTrim(`${item.file.name}|${item.file.size}`, sec, item.trimEnd ?? item.player!.duration);
     const steps = Number(this.trimStartInput.max);
-    const dur   = item.player!.duration;
+    const dur = item.player!.duration;
     this.trimStartInput.value = String(Math.round((sec / dur) * steps));
     this.updateTrimFill();
     this.updateTrimLabels(item);
@@ -335,27 +355,26 @@ export class App {
 
   private setActiveThumb(which: 'start' | 'end'): void {
     this.trimStartInput.classList.toggle('active-thumb', which === 'start');
-    this.trimEndInput.classList.toggle('active-thumb',   which === 'end');
+    this.trimEndInput.classList.toggle('active-thumb', which === 'end');
   }
 
   // ── Events ──────────────────────────────────────────────────────────────────
 
   private bindEvents(): void {
-    document.addEventListener('dragover', e => e.preventDefault());
-    document.addEventListener('drop', e => {
+    document.addEventListener('dragover', (e) => e.preventDefault());
+    document.addEventListener('drop', (e) => {
       e.preventDefault();
       document.getElementById('drop-zone')?.classList.remove('drag-over');
       if (e.dataTransfer?.files?.length) this.addFiles(e.dataTransfer.files);
     });
-    document.addEventListener('dragenter', () =>
-      document.getElementById('drop-zone')?.classList.add('drag-over'));
-    document.addEventListener('dragleave', e => {
-      if (e.relatedTarget === null)
-        document.getElementById('drop-zone')?.classList.remove('drag-over');
+    document.addEventListener('dragenter', () => document.getElementById('drop-zone')?.classList.add('drag-over'));
+    document.addEventListener('dragleave', (e) => {
+      if (e.relatedTarget === null) document.getElementById('drop-zone')?.classList.remove('drag-over');
     });
 
-    document.getElementById('drop-zone')!.addEventListener('click', () =>
-      (document.getElementById('file-input') as HTMLInputElement).click());
+    document
+      .getElementById('drop-zone')!
+      .addEventListener('click', () => (document.getElementById('file-input') as HTMLInputElement).click());
 
     const openPicker = () => (document.getElementById('file-input') as HTMLInputElement).click();
     document.getElementById('pick-btn')!.addEventListener('click', openPicker);
@@ -366,52 +385,54 @@ export class App {
     });
 
     this.fileSelect.addEventListener('change', () => this.switchTo(this.fileSelect.selectedIndex));
-    this.navPrev.addEventListener('click', () => { if (this.activeIndex > 0) this.switchTo(this.activeIndex - 1); });
-    this.navNext.addEventListener('click', () => { if (this.activeIndex < this.items.length - 1) this.switchTo(this.activeIndex + 1); });
+    this.navPrev.addEventListener('click', () => {
+      if (this.activeIndex > 0) this.switchTo(this.activeIndex - 1);
+    });
+    this.navNext.addEventListener('click', () => {
+      if (this.activeIndex < this.items.length - 1) this.switchTo(this.activeIndex + 1);
+    });
 
-    this.exportBtn.addEventListener('click',    () => this.startExport(false));
+    this.exportBtn.addEventListener('click', () => this.startExport(false));
     this.exportAllBtn.addEventListener('click', () => this.startExport(true));
 
     // Active-thumb highlight: set on pointerdown, so even a single tap highlights.
     this.trimStartInput.addEventListener('pointerdown', () => this.setActiveThumb('start'));
-    this.trimEndInput.addEventListener('pointerdown',   () => this.setActiveThumb('end'));
+    this.trimEndInput.addEventListener('pointerdown', () => this.setActiveThumb('end'));
 
     this.trimStartInput.addEventListener('input', () => this.onTrimStartInput());
-    this.trimEndInput.addEventListener('input',   () => this.onTrimEndInput());
+    this.trimEndInput.addEventListener('input', () => this.onTrimEndInput());
 
-    document.getElementById('model-radio-group')!.addEventListener('change', e => {
+    document.getElementById('model-radio-group')!.addEventListener('change', (e) => {
       const t = e.target as HTMLInputElement;
       if (t.name === 'model') setConfig({ model: t.value as ModelChoice });
     });
-    document.getElementById('mode-radio-group')!.addEventListener('change', e => {
+    document.getElementById('mode-radio-group')!.addEventListener('change', (e) => {
       const t = e.target as HTMLInputElement;
       if (t.name === 'drawMode') setConfig({ drawMode: t.value as AppConfig['drawMode'] });
     });
-    document.getElementById('metadata-radio-group')!.addEventListener('change', e => {
+    document.getElementById('metadata-radio-group')!.addEventListener('change', (e) => {
       const t = e.target as HTMLInputElement;
       if (t.name === 'keepMetadata') setConfig({ keepMetadata: t.value === 'keep' });
     });
-    document.getElementById('audio-radio-group')!.addEventListener('change', e => {
+    document.getElementById('audio-radio-group')!.addEventListener('change', (e) => {
       const t = e.target as HTMLInputElement;
       if (t.name === 'keepAudio') setConfig({ keepAudio: t.value === 'keep' });
     });
-    document.getElementById('conf-slider')!.addEventListener('input', e => {
+    document.getElementById('conf-slider')!.addEventListener('input', (e) => {
       const val = Number((e.target as HTMLInputElement).value) / 100;
       (document.getElementById('conf-value') as HTMLElement).textContent = val.toFixed(2);
       setConfig({ minConfidence: val });
     });
 
-    window.addEventListener('configchange', (e) =>
-      void this.onConfigChange((e as CustomEvent<AppConfig>).detail));
+    window.addEventListener('configchange', (e) => void this.onConfigChange((e as CustomEvent<AppConfig>).detail));
   }
 
   private onTrimStartInput(): void {
     const item = this.items[this.activeIndex];
     if (!item?.isVideo || !item.player) return;
-    const max    = Number(this.trimStartInput.max);
+    const max = Number(this.trimStartInput.max);
     const endVal = Number(this.trimEndInput.value);
-    if (Number(this.trimStartInput.value) >= endVal)
-      this.trimStartInput.value = String(Math.max(0, endVal - 1));
+    if (Number(this.trimStartInput.value) >= endVal) this.trimStartInput.value = String(Math.max(0, endVal - 1));
     item.trimStart = (Number(this.trimStartInput.value) / max) * item.player.duration;
     saveTrim(`${item.file.name}|${item.file.size}`, item.trimStart, item.trimEnd ?? item.player.duration);
     item.exported = false;
@@ -426,10 +447,9 @@ export class App {
   private onTrimEndInput(): void {
     const item = this.items[this.activeIndex];
     if (!item?.isVideo || !item.player) return;
-    const max      = Number(this.trimEndInput.max);
+    const max = Number(this.trimEndInput.max);
     const startVal = Number(this.trimStartInput.value);
-    if (Number(this.trimEndInput.value) <= startVal)
-      this.trimEndInput.value = String(Math.min(max, startVal + 1));
+    if (Number(this.trimEndInput.value) <= startVal) this.trimEndInput.value = String(Math.min(max, startVal + 1));
     item.trimEnd = (Number(this.trimEndInput.value) / max) * item.player.duration;
     saveTrim(`${item.file.name}|${item.file.size}`, item.trimStart ?? 0, item.trimEnd);
     item.exported = false;
@@ -441,7 +461,9 @@ export class App {
   }
 
   private async onConfigChange(cfg: AppConfig): Promise<void> {
-    this.items.forEach(it => { it.exported = false; });
+    this.items.forEach((it) => {
+      it.exported = false;
+    });
     this.updateExportBtnState();
     this.syncConfigUI();
     if (cfg.model !== this.prevModel) {
@@ -450,13 +472,15 @@ export class App {
       this.detectResultEl.textContent = t('downloading_model');
       this.modelLoadProgress.classList.add('visible');
       this.modelLoadBarFill.style.width = '0%';
-      this.modelLoadText.textContent = cfg.model === 'detect_n'
-        ? t('loading_model') : tpl('loading_chunks_start', { total: cfg.model === 'detect_x' ? 9 : '?' });
+      this.modelLoadText.textContent =
+        cfg.model === 'detect_n'
+          ? t('loading_model')
+          : tpl('loading_chunks_start', { total: cfg.model === 'detect_x' ? 9 : '?' });
       try {
         await setModel(cfg.model, (done, total) => {
-          this.modelLoadBarFill.style.width = `${Math.round(done / total * 100)}%`;
-          this.modelLoadText.textContent    = cfg.model === 'detect_n'
-            ? t('loading_model') : tpl('loading_chunks', { done, total });
+          this.modelLoadBarFill.style.width = `${Math.round((done / total) * 100)}%`;
+          this.modelLoadText.textContent =
+            cfg.model === 'detect_n' ? t('loading_model') : tpl('loading_chunks', { done, total });
         });
       } finally {
         this.modelLoadProgress.classList.remove('visible');
@@ -481,7 +505,7 @@ export class App {
         (window as unknown as Record<string, unknown>).__lastDetections = filtered;
       } else {
         this.showDetecting(true);
-        scheduleInference(item.canvas, key, dets => {
+        scheduleInference(item.canvas, key, (dets) => {
           this.showDetecting(false);
           const filtered = filterByConf(dets, getConfig().minConfidence);
           applyDetections(ctx, filtered, getConfig().drawMode);
@@ -505,7 +529,7 @@ export class App {
 
   private addFile(file: File): void {
     const isVideo = file.type.startsWith('video/');
-    const index   = this.items.length;
+    const index = this.items.length;
 
     // Canvas wrapper
     const wrapper = document.createElement('div');
@@ -524,7 +548,8 @@ export class App {
     exportRow.className = 'export-file-row';
     const rowName = document.createElement('span');
     rowName.className = 'export-file-name';
-    rowName.textContent = file.name; rowName.title = file.name;
+    rowName.textContent = file.name;
+    rowName.title = file.name;
     const rowBarTrack = document.createElement('div');
     rowBarTrack.className = 'export-file-bar-track';
     const rowBarFill = document.createElement('div');
@@ -536,9 +561,17 @@ export class App {
     this.exportFileRows.appendChild(exportRow);
 
     const item: MediaItem = {
-      name: file.name, isVideo, file, wrapper, canvas,
-      exportRow, exportBarFill: rowBarFill, exportEtaEl: rowEta,
-      loaded: false, exported: false, usesLibav: false,
+      name: file.name,
+      isVideo,
+      file,
+      wrapper,
+      canvas,
+      exportRow,
+      exportBarFill: rowBarFill,
+      exportEtaEl: rowEta,
+      loaded: false,
+      exported: false,
+      usesLibav: false,
     };
     this.items.push(item);
     this.updateAudioSettingVisibility();
@@ -568,44 +601,49 @@ export class App {
         if (this.activeIndex === index) this.showDetectionResult(dets);
       };
 
-      player.load(file).then(async () => {
-        item.loaded = true;
-        canvas.dataset.loaded = 'true';
-        const saved = await loadTrim(`${file.name}|${file.size}`);
-        if (saved && item.player) {
-          const dur = item.player.duration;
-          item.trimStart = Math.max(0, Math.min(saved.start, dur));
-          item.trimEnd   = Math.max(item.trimStart, Math.min(saved.end, dur));
-        }
-        if (this.activeIndex === index) this.setupTrimSlider(item);
-      }).catch(err => {
-        console.error(`Failed to load video "${file.name}":`, err);
-        this.showError(wrapper, canvas, err.message);
-      });
+      player
+        .load(file)
+        .then(async () => {
+          item.loaded = true;
+          canvas.dataset.loaded = 'true';
+          const saved = await loadTrim(`${file.name}|${file.size}`);
+          if (saved && item.player) {
+            const dur = item.player.duration;
+            item.trimStart = Math.max(0, Math.min(saved.start, dur));
+            item.trimEnd = Math.max(item.trimStart, Math.min(saved.end, dur));
+          }
+          if (this.activeIndex === index) this.setupTrimSlider(item);
+        })
+        .catch((err) => {
+          console.error(`Failed to load video "${file.name}":`, err);
+          this.showError(wrapper, canvas, err.message);
+        });
     } else {
-      renderImage(file, canvas).then(async () => {
-        item.loaded = true;
-        canvas.dataset.loaded = 'true';
-        const ctx = canvas.getContext('2d')!;
-        const key = makeImageKey(file, canvas.width, canvas.height);
-        const cached = await getCachedDetections(key);
-        if (cached !== null) {
-          const filtered = filterByConf(cached, getConfig().minConfidence);
-          applyDetections(ctx, filtered, getConfig().drawMode);
-          if (this.activeIndex === index) this.showDetectionResult(filtered);
-        } else {
-          this.showDetecting(true);
-          scheduleInference(canvas, key, dets => {
-            this.showDetecting(false);
-            const filtered = filterByConf(dets, getConfig().minConfidence);
+      renderImage(file, canvas)
+        .then(async () => {
+          item.loaded = true;
+          canvas.dataset.loaded = 'true';
+          const ctx = canvas.getContext('2d')!;
+          const key = makeImageKey(file, canvas.width, canvas.height);
+          const cached = await getCachedDetections(key);
+          if (cached !== null) {
+            const filtered = filterByConf(cached, getConfig().minConfidence);
             applyDetections(ctx, filtered, getConfig().drawMode);
             if (this.activeIndex === index) this.showDetectionResult(filtered);
-          });
-        }
-      }).catch(err => {
-        console.error(`Failed to render image "${file.name}":`, err);
-        this.showError(wrapper, canvas, err.message);
-      });
+          } else {
+            this.showDetecting(true);
+            scheduleInference(canvas, key, (dets) => {
+              this.showDetecting(false);
+              const filtered = filterByConf(dets, getConfig().minConfidence);
+              applyDetections(ctx, filtered, getConfig().drawMode);
+              if (this.activeIndex === index) this.showDetectionResult(filtered);
+            });
+          }
+        })
+        .catch((err) => {
+          console.error(`Failed to render image "${file.name}":`, err);
+          this.showError(wrapper, canvas, err.message);
+        });
     }
 
     this.switchTo(index);
@@ -620,10 +658,10 @@ export class App {
   }
 
   private setupTrimSlider(item: MediaItem): void {
-    const dur   = item.player!.duration;
+    const dur = item.player!.duration;
     const STEPS = 1000;
-    this.trimStartInput.value = String(Math.round(((item.trimStart ?? 0)   / dur) * STEPS));
-    this.trimEndInput.value   = String(Math.round(((item.trimEnd   ?? dur) / dur) * STEPS));
+    this.trimStartInput.value = String(Math.round(((item.trimStart ?? 0) / dur) * STEPS));
+    this.trimEndInput.value = String(Math.round(((item.trimEnd ?? dur) / dur) * STEPS));
     this.updateTrimFill();
     this.updateTrimLabels(item);
     // Default: start thumb is active (highlighted).
@@ -666,24 +704,26 @@ export class App {
   private updateExportBtnState(): void {
     if (this.exporting) return;
     const active = this.items[this.activeIndex];
-    this.exportBtn.disabled    = !active || active.exported;
-    this.exportAllBtn.disabled = this.items.length === 0 || this.items.every(it => it.exported);
+    this.exportBtn.disabled = !active || active.exported;
+    this.exportAllBtn.disabled = this.items.length === 0 || this.items.every((it) => it.exported);
   }
 
   private async startExport(forceAll: boolean): Promise<void> {
     if (this.exporting || this.items.length === 0) return;
     this.exporting = true;
-    this.exportBtn.disabled    = true;
+    this.exportBtn.disabled = true;
     this.exportAllBtn.disabled = true;
 
     if (forceAll) {
-      this.items.forEach(it => { it.exported = false; });
+      this.items.forEach((it) => {
+        it.exported = false;
+      });
     }
 
     // "Export current file" exports only the active item; "Export all" exports everything.
     const pending = forceAll
-      ? this.items.filter(it => !it.exported)
-      : [this.items[this.activeIndex]].filter(it => it !== undefined && !it.exported);
+      ? this.items.filter((it) => !it.exported)
+      : [this.items[this.activeIndex]].filter((it) => it !== undefined && !it.exported);
     if (pending.length === 0) {
       this.exporting = false;
       this.updateExportBtnState();
@@ -697,21 +737,21 @@ export class App {
       this.globalEta.textContent = t('estimating');
     }
 
-    pending.forEach(it => it.exportRow.classList.add('active'));
+    pending.forEach((it) => it.exportRow.classList.add('active'));
 
-    const exportStart    = performance.now();
-    let completedCount   = 0;
-    const total          = pending.length;
+    const exportStart = performance.now();
+    let completedCount = 0;
+    const total = pending.length;
     const fileStartTimes = new Array<number>(total).fill(0);
 
     const { keepMetadata, keepAudio } = getConfig();
-    const exportItems: ExportItem[] = pending.map(it => ({
-      name:      it.name,
-      isVideo:   it.isVideo,
-      canvas:    it.isVideo ? undefined : it.canvas,
-      file:      it.file,
+    const exportItems: ExportItem[] = pending.map((it) => ({
+      name: it.name,
+      isVideo: it.isVideo,
+      canvas: it.isVideo ? undefined : it.canvas,
+      file: it.file,
       trimStart: it.trimStart,
-      trimEnd:   it.trimEnd,
+      trimEnd: it.trimEnd,
       keepMetadata,
       keepAudio,
     }));
@@ -728,51 +768,53 @@ export class App {
         console.log(`[wakelock] request failed: ${err instanceof Error ? `${err.name}: ${err.message}` : String(err)}`);
       }
     }
-    if (wakeLock === null && navigator.maxTouchPoints > 0 && exportItems.some(it => it.isVideo)) {
+    if (wakeLock === null && navigator.maxTouchPoints > 0 && exportItems.some((it) => it.isVideo)) {
       alert(t('wakelock_warning'));
     }
-    try { await runBatch(exportItems, {
-      onFileStart: (i) => {
-        fileStartTimes[i] = performance.now();
-        pending[i].exportBarFill.style.width = '0%';
-        pending[i].exportEtaEl.textContent   = t('estimating');
-      },
-      onFileProgress: (i, p) => {
-        pending[i].exportBarFill.style.width = `${Math.round(p * 100)}%`;
-        if (p > 0.01) {
-          const elapsed = performance.now() - fileStartTimes[i];
-          pending[i].exportEtaEl.textContent = formatEta(elapsed * (1 - p) / p);
-        }
-        if (showGlobal) {
-          const gp = (completedCount + p) / total;
-          this.globalProgressFill.style.width = `${Math.round(gp * 100)}%`;
-          const elapsed = performance.now() - exportStart;
-          if (gp > 0.01) this.globalEta.textContent = formatEta(elapsed * (1 - gp) / gp);
-        }
-      },
-      onFileEnd: (i, error) => {
-        if (!error) {
-          // Only mark as exported if trim wasn't changed during the export run.
-          const trimUnchanged = pending[i].trimStart === exportItems[i].trimStart
-            && pending[i].trimEnd === exportItems[i].trimEnd;
-          if (trimUnchanged) pending[i].exported = true;
-          pending[i].exportBarFill.style.width = '100%';
-          pending[i].exportEtaEl.textContent   = t('done');
-        } else {
-          pending[i].exportEtaEl.textContent = t('failed');
-        }
-      },
-      onGlobalProgress: (completed) => {
-        completedCount = completed;
-        if (showGlobal) {
-          const p = completed / total;
-          this.globalProgressFill.style.width = `${Math.round(p * 100)}%`;
-          const elapsed = performance.now() - exportStart;
-          this.globalEta.textContent = p >= 1 ? t('done') : formatEta(elapsed * (1 - p) / p);
-        }
-      },
-    }); } finally {
-    wakeLock?.release().catch(() => {});
+    try {
+      await runBatch(exportItems, {
+        onFileStart: (i) => {
+          fileStartTimes[i] = performance.now();
+          pending[i].exportBarFill.style.width = '0%';
+          pending[i].exportEtaEl.textContent = t('estimating');
+        },
+        onFileProgress: (i, p) => {
+          pending[i].exportBarFill.style.width = `${Math.round(p * 100)}%`;
+          if (p > 0.01) {
+            const elapsed = performance.now() - fileStartTimes[i];
+            pending[i].exportEtaEl.textContent = formatEta((elapsed * (1 - p)) / p);
+          }
+          if (showGlobal) {
+            const gp = (completedCount + p) / total;
+            this.globalProgressFill.style.width = `${Math.round(gp * 100)}%`;
+            const elapsed = performance.now() - exportStart;
+            if (gp > 0.01) this.globalEta.textContent = formatEta((elapsed * (1 - gp)) / gp);
+          }
+        },
+        onFileEnd: (i, error) => {
+          if (!error) {
+            // Only mark as exported if trim wasn't changed during the export run.
+            const trimUnchanged =
+              pending[i].trimStart === exportItems[i].trimStart && pending[i].trimEnd === exportItems[i].trimEnd;
+            if (trimUnchanged) pending[i].exported = true;
+            pending[i].exportBarFill.style.width = '100%';
+            pending[i].exportEtaEl.textContent = t('done');
+          } else {
+            pending[i].exportEtaEl.textContent = t('failed');
+          }
+        },
+        onGlobalProgress: (completed) => {
+          completedCount = completed;
+          if (showGlobal) {
+            const p = completed / total;
+            this.globalProgressFill.style.width = `${Math.round(p * 100)}%`;
+            const elapsed = performance.now() - exportStart;
+            this.globalEta.textContent = p >= 1 ? t('done') : formatEta((elapsed * (1 - p)) / p);
+          }
+        },
+      });
+    } finally {
+      wakeLock?.release().catch(() => {});
     }
     this.exporting = false;
     this.updateExportBtnState();
@@ -783,6 +825,6 @@ export class App {
         this.globalProgressFill.style.width = '0%';
       }, 3000);
     }
-    pending.forEach(it => setTimeout(() => it.exportRow.classList.remove('active'), 3000));
+    pending.forEach((it) => setTimeout(() => it.exportRow.classList.remove('active'), 3000));
   }
 }

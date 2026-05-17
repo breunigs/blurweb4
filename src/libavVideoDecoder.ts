@@ -19,12 +19,7 @@
  * distribute only for internal/local use, consistent with existing hevc-aac usage.
  */
 
-import {
-  CustomVideoDecoder,
-  VideoSample,
-  EncodedPacket,
-  registerDecoder,
-} from 'mediabunny';
+import { CustomVideoDecoder, VideoSample, EncodedPacket, registerDecoder } from 'mediabunny';
 import type { VideoSamplePixelFormat, VideoCodec } from 'mediabunny';
 import { areAllWebCodecsFailed } from './softwareDecoder';
 
@@ -35,19 +30,20 @@ const LIBAV_MJS = new URL('../vendor/libav-avc-av1/libav-6.8.8.0-avc-av1.wasm.mj
 // ── Pixel format maps (same as hevcDecoder.ts) ─────────────────────────────
 
 const AV_PIX_FMT_MAP: Record<number, VideoSamplePixelFormat> = {
-  0: 'I420',      // AV_PIX_FMT_YUV420P
-  4: 'I422',      // AV_PIX_FMT_YUV422P
-  5: 'I444',      // AV_PIX_FMT_YUV444P
-  12: 'I420',      // AV_PIX_FMT_YUVJ420P  (full-range, same layout)
-  23: 'NV12',      // AV_PIX_FMT_NV12
-  63: 'I420P10',   // AV_PIX_FMT_YUV420P10LE
+  0: 'I420', // AV_PIX_FMT_YUV420P
+  4: 'I422', // AV_PIX_FMT_YUV422P
+  5: 'I444', // AV_PIX_FMT_YUV444P
+  12: 'I420', // AV_PIX_FMT_YUVJ420P  (full-range, same layout)
+  23: 'NV12', // AV_PIX_FMT_NV12
+  63: 'I420P10', // AV_PIX_FMT_YUV420P10LE
 };
 
 const CHROMA_PLANES: Partial<Record<VideoSamplePixelFormat, 1 | 2>> = {
-  'I420': 2, 'I420P10': 2,
-  'I422': 2,
-  'I444': 2,
-  'NV12': 1,
+  I420: 2,
+  I420P10: 2,
+  I422: 2,
+  I444: 2,
+  NV12: 1,
 };
 
 // ── FFmpeg constants ───────────────────────────────────────────────────────
@@ -56,8 +52,8 @@ const AVMEDIA_TYPE_VIDEO = 0;
 
 // Stable AV_CODEC_ID values across FFmpeg 4–8.
 const CODEC_ID: Partial<Record<VideoCodec, number>> = {
-  avc: 27,   // AV_CODEC_ID_H264
-  av1: 226,  // AV_CODEC_ID_AV1
+  avc: 27, // AV_CODEC_ID_H264
+  av1: 226, // AV_CODEC_ID_AV1
 };
 const CODEC_NAME: Partial<Record<VideoCodec, string>> = {
   avc: 'h264',
@@ -90,9 +86,9 @@ let wasmAvailable: boolean | null = null;
 export class LibavVideoFallbackDecoder extends CustomVideoDecoder {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private libav: any = null;
-  private c = 0;  // AVCodecContext*
-  private pkt = 0;  // AVPacket*
-  private frame = 0;  // AVFrame*
+  private c = 0; // AVCodecContext*
+  private pkt = 0; // AVPacket*
+  private frame = 0; // AVFrame*
 
   static override supports(codec: string, _config: VideoDecoderConfig): boolean {
     if (!HANDLED_CODECS.has(codec as VideoCodec)) return false;
@@ -112,7 +108,7 @@ export class LibavVideoFallbackDecoder extends CustomVideoDecoder {
 
     // Dynamic import via runtime string — prevents esbuild from bundling the vendor file.
     // eslint-disable-next-line @typescript-eslint/no-implied-eval
-    const { default: LibAVFactory } = await (new Function('u', 'return import(u)'))(LIBAV_MJS) as {
+    const { default: LibAVFactory } = (await new Function('u', 'return import(u)')(LIBAV_MJS)) as {
       default: (opts?: object) => Promise<unknown>;
     };
     this.libav = await LibAVFactory();
@@ -123,7 +119,7 @@ export class LibavVideoFallbackDecoder extends CustomVideoDecoder {
       extradata = d instanceof Uint8Array ? d : new Uint8Array(d as ArrayBuffer);
     }
 
-    [, this.c, this.pkt, this.frame] = await this.libav.ff_init_decoder(codecName, {
+    [, this.c, this.pkt, this.frame] = (await this.libav.ff_init_decoder(codecName, {
       codecpar: {
         codec_type: AVMEDIA_TYPE_VIDEO,
         codec_id: codecId,
@@ -133,7 +129,7 @@ export class LibavVideoFallbackDecoder extends CustomVideoDecoder {
         extradata,
       },
       time_base: [1, 1_000_000],
-    }) as [number, number, number, number];
+    })) as [number, number, number, number];
 
     window.dispatchEvent(new CustomEvent('libavfallback', { detail: codec }));
     console.log(`[libavVideoDecoder] ${codec} (${codecName}) decoder initialized`);
@@ -143,15 +139,19 @@ export class LibavVideoFallbackDecoder extends CustomVideoDecoder {
     if (!this.libav) return;
     const pts = Math.round(packet.timestamp * 1_000_000);
     const rawFrames: unknown[] = await this.libav.ff_decode_multi(
-      this.c, this.pkt, this.frame,
-      [{
-        data: packet.data,
-        pts,
-        dts: pts,
-        flags: packet.type === 'key' ? 1 : 0,
-        time_base_num: 1,
-        time_base_den: 1_000_000,
-      }],
+      this.c,
+      this.pkt,
+      this.frame,
+      [
+        {
+          data: packet.data,
+          pts,
+          dts: pts,
+          flags: packet.type === 'key' ? 1 : 0,
+          time_base_num: 1,
+          time_base_den: 1_000_000,
+        },
+      ],
       { copyoutFrame: 'video_packed' },
     );
     this.emitFrames(rawFrames);
@@ -159,10 +159,10 @@ export class LibavVideoFallbackDecoder extends CustomVideoDecoder {
 
   async flush(): Promise<void> {
     if (!this.libav) return;
-    const rawFrames: unknown[] = await this.libav.ff_decode_multi(
-      this.c, this.pkt, this.frame, [],
-      { fin: true, copyoutFrame: 'video_packed' },
-    );
+    const rawFrames: unknown[] = await this.libav.ff_decode_multi(this.c, this.pkt, this.frame, [], {
+      fin: true,
+      copyoutFrame: 'video_packed',
+    });
     this.emitFrames(rawFrames);
   }
 
@@ -178,9 +178,7 @@ export class LibavVideoFallbackDecoder extends CustomVideoDecoder {
     for (const frame of frames) {
       const format = AV_PIX_FMT_MAP[frame.format as number];
       if (!format) {
-        console.warn(
-          `LibavVideoFallbackDecoder: unsupported pixel format ${frame.format as number}; skipping`,
-        );
+        console.warn(`LibavVideoFallbackDecoder: unsupported pixel format ${frame.format as number}; skipping`);
         continue;
       }
 
@@ -197,24 +195,22 @@ export class LibavVideoFallbackDecoder extends CustomVideoDecoder {
         else displayHeight = Math.round(h / aspect);
       }
 
-      this.onSample(new VideoSample(frame.data as Uint8Array, {
-        format,
-        codedWidth: w,
-        codedHeight: h,
-        displayWidth,
-        displayHeight,
-        timestamp: ((frame.pts as number) ?? 0) / 1_000_000,
-        duration: 0,
-        layout,
-      }));
+      this.onSample(
+        new VideoSample(frame.data as Uint8Array, {
+          format,
+          codedWidth: w,
+          codedHeight: h,
+          displayWidth,
+          displayHeight,
+          timestamp: ((frame.pts as number) ?? 0) / 1_000_000,
+          duration: 0,
+          layout,
+        }),
+      );
     }
   }
 
-  private packedLayout(
-    format: VideoSamplePixelFormat,
-    w: number,
-    h: number,
-  ): { offset: number; stride: number }[] {
+  private packedLayout(format: VideoSamplePixelFormat, w: number, h: number): { offset: number; stride: number }[] {
     const yStride = w;
     const ySize = yStride * h;
     const nChroma = CHROMA_PLANES[format] ?? 2;
@@ -229,7 +225,7 @@ export class LibavVideoFallbackDecoder extends CustomVideoDecoder {
     const is422 = format.startsWith('I422');
     const is444 = format.startsWith('I444');
     const chromaW = is444 ? w : w >> 1;
-    const chromaH = (is422 || is444) ? h : h >> 1;
+    const chromaH = is422 || is444 ? h : h >> 1;
     const uvStride = chromaW;
     const uvSize = uvStride * chromaH;
 

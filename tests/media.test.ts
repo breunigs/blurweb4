@@ -25,9 +25,7 @@ const EXAMPLES = path.join(__dirname, '..', 'examples');
 async function waitForCanvas(page: Page, timeoutMs = 30_000) {
   await page.waitForFunction(
     () => {
-      const canvas = document.querySelector<HTMLCanvasElement>(
-        '.canvas-wrapper.active canvas[data-loaded="true"]',
-      );
+      const canvas = document.querySelector<HTMLCanvasElement>('.canvas-wrapper.active canvas[data-loaded="true"]');
       return canvas !== null && canvas.width > 0 && canvas.height > 0;
     },
     { timeout: timeoutMs },
@@ -37,9 +35,7 @@ async function waitForCanvas(page: Page, timeoutMs = 30_000) {
 /** Return canvas dimensions and sampled pixel values from the active canvas. */
 function sampleCanvas(page: Page, coords: [number, number][]) {
   return page.evaluate((coords) => {
-    const canvas = document.querySelector<HTMLCanvasElement>(
-      '.canvas-wrapper.active canvas',
-    )!;
+    const canvas = document.querySelector<HTMLCanvasElement>('.canvas-wrapper.active canvas')!;
     const ctx = canvas.getContext('2d')!;
     const pixels: [number, number, number][] = coords.map(([x, y]) => {
       const d = ctx.getImageData(x, y, 1, 1).data;
@@ -61,11 +57,7 @@ async function webCodecsSupported(page: Page): Promise<boolean> {
 }
 
 /** Check that every [expected, actual] pair is within `tol` per channel. */
-function withinTolerance(
-  actual: [number, number, number],
-  expected: [number, number, number],
-  tol: number,
-): boolean {
+function withinTolerance(actual: [number, number, number], expected: [number, number, number], tol: number): boolean {
   return (
     Math.abs(actual[0] - expected[0]) <= tol &&
     Math.abs(actual[1] - expected[1]) <= tol &&
@@ -126,13 +118,17 @@ function hasExifGps(bytes: Buffer): boolean {
   // Walk JPEG segments looking for APP1 (FF E1) with Exif\0\0 marker.
   let pos = 2; // skip SOI
   while (pos + 4 <= bytes.length) {
-    if (bytes[pos] !== 0xFF) break;
+    if (bytes[pos] !== 0xff) break;
     const marker = bytes[pos + 1];
-    if (marker === 0xDA) break; // SOS
+    if (marker === 0xda) break; // SOS
     const segLen = (bytes[pos + 2] << 8) | bytes[pos + 3];
-    if (marker === 0xE1 &&
-        bytes[pos + 4] === 0x45 && bytes[pos + 5] === 0x78 &&
-        bytes[pos + 6] === 0x69 && bytes[pos + 7] === 0x66) {
+    if (
+      marker === 0xe1 &&
+      bytes[pos + 4] === 0x45 &&
+      bytes[pos + 5] === 0x78 &&
+      bytes[pos + 6] === 0x69 &&
+      bytes[pos + 7] === 0x66
+    ) {
       return true; // found Exif APP1
     }
     pos += 2 + segLen;
@@ -162,7 +158,7 @@ test.describe('JPEG export — EXIF preservation', () => {
       const bytes = (await import('fs')).readFileSync(tmpPath);
       hasExif = hasExifGps(bytes);
     } finally {
-      import('fs').then(fs => fs.unlinkSync(tmpPath)).catch(() => {});
+      import('fs').then((fs) => fs.unlinkSync(tmpPath)).catch(() => {});
     }
     expect(hasExif, 'Exported JPEG should contain EXIF APP1 segment').toBe(true);
   });
@@ -188,7 +184,7 @@ test.describe('JPEG export — EXIF preservation', () => {
       const bytes = (await import('fs')).readFileSync(tmpPath);
       hasExif = hasExifGps(bytes);
     } finally {
-      import('fs').then(fs => fs.unlinkSync(tmpPath)).catch(() => {});
+      import('fs').then((fs) => fs.unlinkSync(tmpPath)).catch(() => {});
     }
     expect(hasExif, 'Exported JPEG should NOT contain EXIF when strip is selected').toBe(false);
   });
@@ -201,7 +197,7 @@ test.describe('JPEG export — EXIF preservation', () => {
 
 const VIDEO_CASES: { file: string; codec: string; wasmFallback?: boolean }[] = [
   { file: 'x264.mp4', codec: 'H.264' },
-  { file: 'av1.mp4',  codec: 'AV1'   },
+  { file: 'av1.mp4', codec: 'AV1' },
   { file: 'x265.mp4', codec: 'H.265', wasmFallback: true },
 ];
 
@@ -222,23 +218,22 @@ for (const { file, codec, wasmFallback } of VIDEO_CASES) {
       // Wait for either: frame decoded onto canvas, or an error message shown.
       // The WASM fallback needs extra time to download and initialise.
       const waitMs = wasmFallback ? 90_000 : 45_000;
-      await page.waitForFunction(() => {
-        const wrapper = document.querySelector('.canvas-wrapper.active');
-        if (!wrapper) return false;
-        const canvas = wrapper.querySelector<HTMLCanvasElement>(
-          'canvas[data-loaded="true"]',
-        );
-        if (canvas && canvas.width > 0 && canvas.height > 0) return true;
-        return !!wrapper.querySelector('.error-msg');
-      }, { timeout: waitMs });
+      await page.waitForFunction(
+        () => {
+          const wrapper = document.querySelector('.canvas-wrapper.active');
+          if (!wrapper) return false;
+          const canvas = wrapper.querySelector<HTMLCanvasElement>('canvas[data-loaded="true"]');
+          if (canvas && canvas.width > 0 && canvas.height > 0) return true;
+          return !!wrapper.querySelector('.error-msg');
+        },
+        { timeout: waitMs },
+      );
 
       // Verify canvas state
       const state = await page.evaluate(() => {
         const wrapper = document.querySelector('.canvas-wrapper.active');
         if (!wrapper) return { kind: 'none' } as const;
-        const canvas = wrapper.querySelector<HTMLCanvasElement>(
-          'canvas[data-loaded="true"]',
-        );
+        const canvas = wrapper.querySelector<HTMLCanvasElement>('canvas[data-loaded="true"]');
         if (canvas && canvas.width > 0 && canvas.height > 0) {
           const ctx = canvas.getContext('2d')!;
           const total = canvas.width * canvas.height;
@@ -288,27 +283,26 @@ test.describe('H.265 playback — frame-by-frame updates (libav.js fallback)', (
     }
 
     // Wait for first frame to appear.
-    await page.waitForFunction(() => {
-      const canvas = document.querySelector<HTMLCanvasElement>(
-        '.canvas-wrapper.active canvas[data-loaded="true"]',
-      );
-      return canvas !== null && canvas.width > 0;
-    }, { timeout: 90_000 });
+    await page.waitForFunction(
+      () => {
+        const canvas = document.querySelector<HTMLCanvasElement>('.canvas-wrapper.active canvas[data-loaded="true"]');
+        return canvas !== null && canvas.width > 0;
+      },
+      { timeout: 90_000 },
+    );
 
     // Install a 'videoframe' listener on the canvas.  On each event we compute
     // a pixel signature (sum of a 16×16 centre block) and push it to a window
     // variable that Playwright can read back.
     await page.evaluate(() => {
-      const canvas = document.querySelector<HTMLCanvasElement>(
-        '.canvas-wrapper.active canvas',
-      )!;
+      const canvas = document.querySelector<HTMLCanvasElement>('.canvas-wrapper.active canvas')!;
       (window as unknown as Record<string, unknown>).__frameSignatures = [] as number[];
       canvas.addEventListener('videoframe', () => {
         const ctx = canvas.getContext('2d')!;
-        const cx  = Math.floor(canvas.width  / 2) - 8;
-        const cy  = Math.floor(canvas.height / 2) - 8;
-        const d   = ctx.getImageData(cx, cy, 16, 16).data;
-        let sum   = 0;
+        const cx = Math.floor(canvas.width / 2) - 8;
+        const cy = Math.floor(canvas.height / 2) - 8;
+        const d = ctx.getImageData(cx, cy, 16, 16).data;
+        let sum = 0;
         for (let i = 0; i < d.length; i += 4) sum += d[i] + d[i + 1] + d[i + 2];
         (window as unknown as Record<string, unknown[]>).__frameSignatures.push(sum);
       });
@@ -329,10 +323,9 @@ test.describe('H.265 playback — frame-by-frame updates (libav.js fallback)', (
 
     // Per-frame ONNX inference makes each frame slow; 240 s gives headroom for
     // WASM-only browsers (Firefox) where inference is significantly slower.
-    await page.waitForFunction(
-      () => (window as unknown as Record<string, unknown>).__playbackEnded === true,
-      { timeout: 240_000 },
-    );
+    await page.waitForFunction(() => (window as unknown as Record<string, unknown>).__playbackEnded === true, {
+      timeout: 240_000,
+    });
 
     // Collect results.
     const signatures = await page.evaluate(
@@ -347,7 +340,7 @@ test.describe('H.265 playback — frame-by-frame updates (libav.js fallback)', (
     expect(
       distinct,
       `Only ${distinct} distinct frame signatures across ${signatures.length} 'videoframe' events — ` +
-      'frames are not being individually committed to the canvas.',
+        'frames are not being individually committed to the canvas.',
     ).toBeGreaterThanOrEqual(5);
   });
 });
@@ -358,24 +351,19 @@ test.describe('H.265 playback — frame-by-frame updates (libav.js fallback)', (
 // then assert it is within 0.1 s of the source file's duration.
 
 function ffprobeDuration(filePath: string): number {
-  const out = execFileSync('ffprobe', [
-    '-v', 'quiet',
-    '-print_format', 'json',
-    '-show_format',
-    filePath,
-  ], { encoding: 'utf8' });
+  const out = execFileSync('ffprobe', ['-v', 'quiet', '-print_format', 'json', '-show_format', filePath], {
+    encoding: 'utf8',
+  });
   const fmt = (JSON.parse(out) as { format: { duration: string } }).format;
   return parseFloat(fmt.duration);
 }
 
 function ffprobeHasVideo(filePath: string): boolean {
-  const out = execFileSync('ffprobe', [
-    '-v', 'quiet',
-    '-print_format', 'json',
-    '-show_streams',
-    '-select_streams', 'v',
-    filePath,
-  ], { encoding: 'utf8' });
+  const out = execFileSync(
+    'ffprobe',
+    ['-v', 'quiet', '-print_format', 'json', '-show_streams', '-select_streams', 'v', filePath],
+    { encoding: 'utf8' },
+  );
   const streams = (JSON.parse(out) as { streams: unknown[] }).streams;
   return streams.length > 0;
 }
@@ -383,7 +371,7 @@ function ffprobeHasVideo(filePath: string): boolean {
 const EXPORT_CASES = [
   { file: 'x264.mp4', codec: 'H.264' },
   { file: 'x265.mp4', codec: 'H.265', wasmFallback: true },
-  { file: 'av1.mp4',  codec: 'AV1' },
+  { file: 'av1.mp4', codec: 'AV1' },
 ];
 
 for (const { file, codec, wasmFallback } of EXPORT_CASES) {
@@ -405,12 +393,13 @@ for (const { file, codec, wasmFallback } of EXPORT_CASES) {
 
       // Wait for the first frame so the player is fully initialised.
       const firstFrameWait = wasmFallback ? 90_000 : 45_000;
-      await page.waitForFunction(() => {
-        const c = document.querySelector<HTMLCanvasElement>(
-          '.canvas-wrapper.active canvas[data-loaded="true"]',
-        );
-        return c !== null && c.width > 0;
-      }, { timeout: firstFrameWait });
+      await page.waitForFunction(
+        () => {
+          const c = document.querySelector<HTMLCanvasElement>('.canvas-wrapper.active canvas[data-loaded="true"]');
+          return c !== null && c.width > 0;
+        },
+        { timeout: firstFrameWait },
+      );
 
       // Wait for the first-frame background inference to complete and warm the
       // cache before export starts.  This avoids running inference twice for
@@ -434,7 +423,7 @@ for (const { file, codec, wasmFallback } of EXPORT_CASES) {
         outputDuration = ffprobeDuration(tmpPath);
         hasVideoStream = ffprobeHasVideo(tmpPath);
       } finally {
-        import('fs').then(fs => fs.unlinkSync(tmpPath)).catch(() => {});
+        import('fs').then((fs) => fs.unlinkSync(tmpPath)).catch(() => {});
       }
 
       expect(hasVideoStream, 'Exported file must contain a video stream').toBe(true);
@@ -452,15 +441,18 @@ for (const { file, codec, wasmFallback } of EXPORT_CASES) {
 interface RefDetection {
   label: string;
   conf_min: number;
-  x: number; y: number; w: number; h: number;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
 }
 
 // Reference detections for examples/jpeg.jpg (iPhone 12 mini photo, 1536×2048).
 // With letterbox preprocessing the model now finds 3 plates (matches PyTorch output).
 const JPEG_REF_DETECTIONS: RefDetection[] = [
   { label: 'plate', conf_min: 0.85, x: 479, y: 1588, w: 208, h: 51 },
-  { label: 'plate', conf_min: 0.60, x:  54, y: 1377, w:  35, h: 10 },
-  { label: 'plate', conf_min: 0.35, x: 253, y: 1365, w:  26, h:  8 },
+  { label: 'plate', conf_min: 0.6, x: 54, y: 1377, w: 35, h: 10 },
+  { label: 'plate', conf_min: 0.35, x: 253, y: 1365, w: 26, h: 8 },
 ];
 
 // Reference detections for the three test videos (all same road scene, display 2704×1521).
@@ -472,7 +464,9 @@ const VIDEO_REF_DETECTIONS: RefDetection[] = [
 const BOX_TOL = 5; // pixels
 
 function assertDetectionsMatch(actual: Detection[], ref: RefDetection[]): void {
-  expect(actual.length, `expected ${ref.length} detections, got ${actual.length}: ${JSON.stringify(actual)}`).toBe(ref.length);
+  expect(actual.length, `expected ${ref.length} detections, got ${actual.length}: ${JSON.stringify(actual)}`).toBe(
+    ref.length,
+  );
   for (let i = 0; i < ref.length; i++) {
     const a = actual[i];
     const r = ref[i];
@@ -486,13 +480,10 @@ function assertDetectionsMatch(actual: Detection[], ref: RefDetection[]): void {
 }
 
 async function waitForDetections(page: Page, timeoutMs = 60_000): Promise<Detection[]> {
-  await page.waitForFunction(
-    () => (window as unknown as Record<string, unknown>).__lastDetections !== undefined,
-    { timeout: timeoutMs },
-  );
-  return page.evaluate(
-    () => (window as unknown as Record<string, unknown>).__lastDetections as Detection[],
-  );
+  await page.waitForFunction(() => (window as unknown as Record<string, unknown>).__lastDetections !== undefined, {
+    timeout: timeoutMs,
+  });
+  return page.evaluate(() => (window as unknown as Record<string, unknown>).__lastDetections as Detection[]);
 }
 
 test.describe('Object detection — JPEG first frame', () => {
@@ -509,7 +500,7 @@ test.describe('Object detection — JPEG first frame', () => {
     await loadFile(page, path.join(EXAMPLES, 'jpeg.jpg'));
     await waitForCanvas(page);
     await waitForDetections(page);
-    await page.evaluate(() => (window as any).__setMinConfidence(0.10));
+    await page.evaluate(() => (window as any).__setMinConfidence(0.1));
     const detections = await waitForDetections(page);
     expect(detections.length).toBe(3);
   });
@@ -518,16 +509,16 @@ test.describe('Object detection — JPEG first frame', () => {
     await loadFile(page, path.join(EXAMPLES, 'jpeg.jpg'));
     await waitForCanvas(page);
     await waitForDetections(page);
-    await page.evaluate(() => (window as any).__setMinConfidence(0.50));
+    await page.evaluate(() => (window as any).__setMinConfidence(0.5));
     const detections = await waitForDetections(page);
     expect(detections.length).toBe(2);
-    expect(detections.every((d: any) => d.conf >= 0.50)).toBe(true);
+    expect(detections.every((d: any) => d.conf >= 0.5)).toBe(true);
   });
 });
 
 const DETECTION_VIDEO_CASES = [
   { file: 'x264.mp4', codec: 'H.264' },
-  { file: 'av1.mp4',  codec: 'AV1' },
+  { file: 'av1.mp4', codec: 'AV1' },
   { file: 'x265.mp4', codec: 'H.265', wasmFallback: true },
 ];
 
@@ -601,13 +592,14 @@ test.describe('Blurrer unit tests', () => {
     page: Page,
     detection: { label: string; conf: number; x: number; y: number; w: number; h: number },
     coords: [number, number][],
-    canvasW = 400, canvasH = 300,
+    canvasW = 400,
+    canvasH = 300,
   ) {
     return page.evaluate(
       ({ det, coords, cw, ch }) => {
         const blurrer = (window as any).__blurrer;
-        const canvas  = new OffscreenCanvas(cw, ch);
-        const ctx     = canvas.getContext('2d') as OffscreenCanvasRenderingContext2D;
+        const canvas = new OffscreenCanvas(cw, ch);
+        const ctx = canvas.getContext('2d') as OffscreenCanvasRenderingContext2D;
         // Fill with a non-uniform checkerboard so blur always changes values.
         for (let y = 0; y < ch; y++) {
           for (let x = 0; x < cw; x++) {
@@ -633,12 +625,18 @@ test.describe('Blurrer unit tests', () => {
     const det = { label: 'plate', conf: 0.9, x: 100, y: 100, w: 80, h: 40 };
     // Sample 9 points inside the box (corners + midpoints + centre).
     const interior: [number, number][] = [
-      [102, 102], [140, 102], [178, 102],  // top edge row
-      [102, 120], [140, 120], [178, 120],  // mid row
-      [102, 138], [140, 138], [178, 138],  // bottom edge row
+      [102, 102],
+      [140, 102],
+      [178, 102], // top edge row
+      [102, 120],
+      [140, 120],
+      [178, 120], // mid row
+      [102, 138],
+      [140, 138],
+      [178, 138], // bottom edge row
     ];
     // Baseline: same positions without blur.
-    const baseline = await page.evaluate(
+    const baseline = (await page.evaluate(
       ({ det: _det, coords, cw, ch }) => {
         const canvas = new OffscreenCanvas(cw, ch);
         const ctx = canvas.getContext('2d') as OffscreenCanvasRenderingContext2D;
@@ -653,17 +651,14 @@ test.describe('Blurrer unit tests', () => {
         });
       },
       { det, coords: interior, cw: 400, ch: 300 },
-    ) as [number, number, number][];
+    )) as [number, number, number][];
 
     const after = await applyBlur(page, det, interior);
 
     // Every interior sample must have changed (blur applied uniformly).
     for (let i = 0; i < interior.length; i++) {
       const changed = baseline[i].some((v: number, ch: number) => Math.abs(v - after[i][ch]) > 5);
-      expect(
-        changed,
-        `Interior pixel at ${interior[i]} unchanged: before=${baseline[i]} after=${after[i]}`,
-      ).toBe(true);
+      expect(changed, `Interior pixel at ${interior[i]} unchanged: before=${baseline[i]} after=${after[i]}`).toBe(true);
     }
   });
 
@@ -673,14 +668,17 @@ test.describe('Blurrer unit tests', () => {
     const det = { label: 'plate', conf: 0.9, x: 100, y: 100, w: 80, h: 40 };
     // Points well outside the box (should be unchanged = no blur applied).
     const outside: [number, number][] = [
-      [10, 10], [390, 10], [10, 290], [390, 290],
+      [10, 10],
+      [390, 10],
+      [10, 290],
+      [390, 290],
     ];
     const after = await applyBlur(page, det, outside);
     // Checkerboard corners should be pure red or pure blue — near 0 or 255.
     // A pixel that was pure red [255,0,0] blurred to [200,0,50] would fail this;
     // pixels well outside the feather region should be nearly unchanged.
     const canvasWH = { cw: 400, ch: 300 };
-    const baseline = await page.evaluate(
+    const baseline = (await page.evaluate(
       ({ coords, cw, ch }) => {
         const canvas = new OffscreenCanvas(cw, ch);
         const ctx = canvas.getContext('2d') as OffscreenCanvasRenderingContext2D;
@@ -695,7 +693,7 @@ test.describe('Blurrer unit tests', () => {
         });
       },
       { coords: outside, ...canvasWH },
-    ) as [number, number, number][];
+    )) as [number, number, number][];
 
     for (let i = 0; i < outside.length; i++) {
       const unchanged = baseline[i].every((v: number, ch: number) => Math.abs(v - after[i][ch]) <= 5);
@@ -713,9 +711,11 @@ test.describe('Blurrer unit tests', () => {
     const det = { label: 'plate', conf: 0.9, x: 0, y: 100, w: 60, h: 40 };
     // Sample at the very left edge (x=1) inside the box.
     const edgePoints: [number, number][] = [
-      [1, 110], [1, 120], [1, 130],
+      [1, 110],
+      [1, 120],
+      [1, 130],
     ];
-    const baseline = await page.evaluate(
+    const baseline = (await page.evaluate(
       ({ coords, cw, ch }) => {
         const canvas = new OffscreenCanvas(cw, ch);
         const ctx = canvas.getContext('2d') as OffscreenCanvasRenderingContext2D;
@@ -730,16 +730,15 @@ test.describe('Blurrer unit tests', () => {
         });
       },
       { coords: edgePoints, cw: 300, ch: 300 },
-    ) as [number, number, number][];
+    )) as [number, number, number][];
 
     const after = await applyBlur(page, det, edgePoints, 300, 300);
 
     for (let i = 0; i < edgePoints.length; i++) {
       const changed = baseline[i].some((v: number, ch: number) => Math.abs(v - after[i][ch]) > 5);
-      expect(
-        changed,
-        `Border pixel at ${edgePoints[i]} was not blurred: before=${baseline[i]} after=${after[i]}`,
-      ).toBe(true);
+      expect(changed, `Border pixel at ${edgePoints[i]} was not blurred: before=${baseline[i]} after=${after[i]}`).toBe(
+        true,
+      );
     }
   });
 });
@@ -754,8 +753,8 @@ test.describe('Per-model inference stats', () => {
     await waitForDetections(page, 60_000);
 
     type ModelStatMap = Record<string, { count: number; totalMs: number; avgMs: number | null }>;
-    const stats = await page.evaluate(
-      () => ((window as unknown as Record<string, unknown>).__getInferenceStats as () => ModelStatMap)(),
+    const stats = await page.evaluate(() =>
+      ((window as unknown as Record<string, unknown>).__getInferenceStats as () => ModelStatMap)(),
     );
 
     // Both model keys must be present.
@@ -781,19 +780,21 @@ test.describe('Trim persistence', () => {
   test('trim values are saved to IDB and restored on reload', async ({ page }) => {
     const videoPath = path.join(EXAMPLES, 'x264.mp4');
     const TRIM_START = 0.2;
-    const TRIM_END   = 0.8;
+    const TRIM_END = 0.8;
     const TOL = 0.05; // seconds
 
     // Load video and set trim.
     await loadFile(page, videoPath);
     await waitForCanvas(page);
-    await page.waitForFunction(() =>
-      document.getElementById('trim-section')?.classList.contains('visible'));
+    await page.waitForFunction(() => document.getElementById('trim-section')?.classList.contains('visible'));
 
-    await page.evaluate(({ s, e }) => {
-      (window as any).__setTrimStart(s);
-      (window as any).__setTrimEnd(e);
-    }, { s: TRIM_START, e: TRIM_END });
+    await page.evaluate(
+      ({ s, e }) => {
+        (window as any).__setTrimStart(s);
+        (window as any).__setTrimEnd(e);
+      },
+      { s: TRIM_START, e: TRIM_END },
+    );
 
     // Wait for the IDB write (fire-and-forget, resolves quickly).
     await page.waitForTimeout(300);
@@ -802,8 +803,7 @@ test.describe('Trim persistence', () => {
     await page.goto('http://localhost:3100');
     await page.locator('#file-input').setInputFiles(videoPath);
     await waitForCanvas(page);
-    await page.waitForFunction(() =>
-      document.getElementById('trim-section')?.classList.contains('visible'));
+    await page.waitForFunction(() => document.getElementById('trim-section')?.classList.contains('visible'));
     // Give the async IDB read + setupTrimSlider a moment to complete.
     await page.waitForTimeout(300);
 
@@ -811,10 +811,11 @@ test.describe('Trim persistence', () => {
       () => (window as any).__getActiveTrimValues() as { start: number; end: number } | null,
     );
     expect(vals).not.toBeNull();
-    expect(Math.abs(vals!.start - TRIM_START),
-      `trimStart: got ${vals!.start}, expected ~${TRIM_START}`).toBeLessThanOrEqual(TOL);
-    expect(Math.abs(vals!.end - TRIM_END),
-      `trimEnd: got ${vals!.end}, expected ~${TRIM_END}`).toBeLessThanOrEqual(TOL);
+    expect(
+      Math.abs(vals!.start - TRIM_START),
+      `trimStart: got ${vals!.start}, expected ~${TRIM_START}`,
+    ).toBeLessThanOrEqual(TOL);
+    expect(Math.abs(vals!.end - TRIM_END), `trimEnd: got ${vals!.end}, expected ~${TRIM_END}`).toBeLessThanOrEqual(TOL);
   });
 });
 
@@ -831,12 +832,16 @@ test.describe('Trim cache alignment', () => {
     await page.goto('http://localhost:3100');
     // makeVideoKey is exposed on window after the bundle loads.
     const result = await page.evaluate(() => {
-      const mk = (window as unknown as Record<string, unknown>).__makeVideoKey as
-        (file: { name: string; size: number }, w: number, h: number, ts: number) => string;
+      const mk = (window as unknown as Record<string, unknown>).__makeVideoKey as (
+        file: { name: string; size: number },
+        w: number,
+        h: number,
+        ts: number,
+      ) => string;
       const file = { name: 'v.mp4', size: 1000 };
       // Same absolute timestamp → same cache key, regardless of trim.
-      const key1 = mk(file, 1280, 720, 5_000_000);  // frame at 5 s, no trim
-      const key2 = mk(file, 1280, 720, 5_000_000);  // frame at 5 s, trim start = 5 s
+      const key1 = mk(file, 1280, 720, 5_000_000); // frame at 5 s, no trim
+      const key2 = mk(file, 1280, 720, 5_000_000); // frame at 5 s, trim start = 5 s
       return {
         same: key1 === key2,
         containsTs: key1.includes('5000000'),
@@ -847,10 +852,12 @@ test.describe('Trim cache alignment', () => {
   });
 
   test('trim-start frame re-uses preview cache during export', async ({ page }) => {
-    if (!(await (async () => {
-      await page.goto('http://localhost:3100');
-      return page.evaluate(() => typeof VideoDecoder !== 'undefined');
-    })())) {
+    if (
+      !(await (async () => {
+        await page.goto('http://localhost:3100');
+        return page.evaluate(() => typeof VideoDecoder !== 'undefined');
+      })())
+    ) {
       test.skip(true, 'WebCodecs not available');
       return;
     }
@@ -858,12 +865,13 @@ test.describe('Trim cache alignment', () => {
     await loadFile(page, path.join(EXAMPLES, 'x264.mp4'));
 
     // Wait for first frame decoded (t ≈ 0) and its inference cached.
-    await page.waitForFunction(() => {
-      const c = document.querySelector<HTMLCanvasElement>(
-        '.canvas-wrapper.active canvas[data-loaded="true"]',
-      );
-      return c !== null && c.width > 0;
-    }, { timeout: 30_000 });
+    await page.waitForFunction(
+      () => {
+        const c = document.querySelector<HTMLCanvasElement>('.canvas-wrapper.active canvas[data-loaded="true"]');
+        return c !== null && c.width > 0;
+      },
+      { timeout: 30_000 },
+    );
     await waitForDetections(page, 30_000);
 
     // Seek to ~0.5 s (≈ frame 15 of 30) to cache that frame in preview.
@@ -888,14 +896,16 @@ test.describe('Trim cache alignment', () => {
     // Set trim start silently (no re-seek, so __lastDetections stays valid and
     // no new inference is triggered that would race with the export).
     await page.evaluate(() => {
-      const fn = (window as unknown as Record<string, unknown>).__setTrimStartSilent as ((t: number) => void) | undefined;
+      const fn = (window as unknown as Record<string, unknown>).__setTrimStartSilent as
+        | ((t: number) => void)
+        | undefined;
       fn?.(0.5);
     });
 
     // Record inference count before export.
     type StatMap = Record<string, { count: number; totalMs: number; avgMs: number | null }>;
-    const statsBefore = await page.evaluate(
-      () => ((window as unknown as Record<string, unknown>).__getInferenceStats as () => StatMap)(),
+    const statsBefore = await page.evaluate(() =>
+      ((window as unknown as Record<string, unknown>).__getInferenceStats as () => StatMap)(),
     );
     const countBefore = statsBefore.detect_n.count;
 
@@ -905,8 +915,8 @@ test.describe('Trim cache alignment', () => {
     await downloadPromise;
 
     // Check inference count after export.
-    const statsAfter = await page.evaluate(
-      () => ((window as unknown as Record<string, unknown>).__getInferenceStats as () => StatMap)(),
+    const statsAfter = await page.evaluate(() =>
+      ((window as unknown as Record<string, unknown>).__getInferenceStats as () => StatMap)(),
     );
     const newInferences = statsAfter.detect_n.count - countBefore;
 
@@ -937,18 +947,19 @@ for (const { file, codec, wasmFallback } of DETECTION_VIDEO_CASES) {
 
       // Wait for the canvas to be painted (first frame decoded + inference done).
       const waitMs = wasmFallback ? 90_000 : 45_000;
-      await page.waitForFunction(() => {
-        const wrapper = document.querySelector('.canvas-wrapper.active');
-        if (!wrapper) return false;
-        const canvas = wrapper.querySelector<HTMLCanvasElement>('canvas[data-loaded="true"]');
-        if (canvas && canvas.width > 0) return true;
-        return !!wrapper.querySelector('.error-msg');
-      }, { timeout: waitMs });
+      await page.waitForFunction(
+        () => {
+          const wrapper = document.querySelector('.canvas-wrapper.active');
+          if (!wrapper) return false;
+          const canvas = wrapper.querySelector<HTMLCanvasElement>('canvas[data-loaded="true"]');
+          if (canvas && canvas.width > 0) return true;
+          return !!wrapper.querySelector('.error-msg');
+        },
+        { timeout: waitMs },
+      );
 
       // Skip if decoding failed (e.g. HEVC on Linux without WASM fallback support).
-      const hasError = await page.evaluate(
-        () => !!document.querySelector('.canvas-wrapper.active .error-msg'),
-      );
+      const hasError = await page.evaluate(() => !!document.querySelector('.canvas-wrapper.active .error-msg'));
       if (hasError) {
         const msg = await page.evaluate(
           () => document.querySelector('.canvas-wrapper.active .error-msg')?.textContent ?? '',
@@ -976,12 +987,9 @@ const GOPRO_TRIM_END = 0.133; // seconds — short enough to keep the test fast
  * (i.e. "Invalid data found when processing input" or similar).
  */
 function ffprobeCheck(filePath: string): { valid: boolean; duration: number | null } {
-  const result = spawnSync('ffprobe', [
-    '-v', 'quiet',
-    '-print_format', 'json',
-    '-show_format',
-    filePath,
-  ], { encoding: 'utf8' });
+  const result = spawnSync('ffprobe', ['-v', 'quiet', '-print_format', 'json', '-show_format', filePath], {
+    encoding: 'utf8',
+  });
   if (result.status !== 0) return { valid: false, duration: null };
   try {
     const fmt = (JSON.parse(result.stdout) as { format?: { duration?: string } }).format;
@@ -1009,22 +1017,25 @@ test.describe('AV export from large GoPro source file', () => {
 
     // Capture browser console errors for diagnostics.
     const consoleErrors: string[] = [];
-    page.on('console', msg => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') consoleErrors.push(msg.text());
+    });
 
     await loadFile(page, GOPRO_SOURCE);
 
     // Wait for the first frame or a decode error.
-    await page.waitForFunction(() => {
-      const wrapper = document.querySelector('.canvas-wrapper.active');
-      if (!wrapper) return false;
-      const canvas = wrapper.querySelector<HTMLCanvasElement>('canvas[data-loaded="true"]');
-      if (canvas && canvas.width > 0) return true;
-      return !!wrapper.querySelector('.error-msg');
-    }, { timeout: 120_000 });
-
-    const hasError = await page.evaluate(
-      () => !!document.querySelector('.canvas-wrapper.active .error-msg'),
+    await page.waitForFunction(
+      () => {
+        const wrapper = document.querySelector('.canvas-wrapper.active');
+        if (!wrapper) return false;
+        const canvas = wrapper.querySelector<HTMLCanvasElement>('canvas[data-loaded="true"]');
+        if (canvas && canvas.width > 0) return true;
+        return !!wrapper.querySelector('.error-msg');
+      },
+      { timeout: 120_000 },
     );
+
+    const hasError = await page.evaluate(() => !!document.querySelector('.canvas-wrapper.active .error-msg'));
     if (hasError) {
       const msg = await page.evaluate(
         () => document.querySelector('.canvas-wrapper.active .error-msg')?.textContent ?? '',
@@ -1035,8 +1046,7 @@ test.describe('AV export from large GoPro source file', () => {
 
     // Set trim end to GOPRO_TRIM_END without seeking (no extra inference needed).
     await page.evaluate((trimEnd) => {
-      const fn = (window as unknown as Record<string, unknown>).__setTrimEndSilent as
-        ((t: number) => void) | undefined;
+      const fn = (window as unknown as Record<string, unknown>).__setTrimEndSilent as ((t: number) => void) | undefined;
       fn?.(trimEnd);
     }, GOPRO_TRIM_END);
 
@@ -1049,43 +1059,41 @@ test.describe('AV export from large GoPro source file', () => {
     await page.locator('#export-btn').click();
 
     // Also watch for the export row showing "Failed" (encoding error, no download).
-    const failedPromise = page.waitForFunction(
-      () => {
-        const etas = document.querySelectorAll('.export-file-eta');
-        return Array.from(etas).some(el => el.textContent === 'Failed');
-      },
-      { timeout: 800_000 },
-    ).then(() => null as null); // resolve to null on failure
+    const failedPromise = page
+      .waitForFunction(
+        () => {
+          const etas = document.querySelectorAll('.export-file-eta');
+          return Array.from(etas).some((el) => el.textContent === 'Failed');
+        },
+        { timeout: 800_000 },
+      )
+      .then(() => null as null); // resolve to null on failure
 
     const outcome = await Promise.race([
-      downloadPromise.then(dl => ({ kind: 'download' as const, dl })),
+      downloadPromise.then((dl) => ({ kind: 'download' as const, dl })),
       failedPromise.then(() => ({ kind: 'failed' as const })),
     ]);
 
     if (outcome.kind === 'failed') {
       throw new Error(
         `Export reported "Failed" without producing a download.\n` +
-        `Console errors: ${consoleErrors.slice(-10).join('\n') || '(none)'}`,
+          `Console errors: ${consoleErrors.slice(-10).join('\n') || '(none)'}`,
       );
     }
 
-    const tmpPath = path.join(
-      path.dirname(fileURLToPath(import.meta.url)),
-      '../.tmp-gopro-export',
-    );
+    const tmpPath = path.join(path.dirname(fileURLToPath(import.meta.url)), '../.tmp-gopro-export');
     await outcome.dl.saveAs(tmpPath);
 
     let result: { valid: boolean; duration: number | null };
     try {
       result = ffprobeCheck(tmpPath);
     } finally {
-      import('fs').then(fs => fs.unlinkSync(tmpPath)).catch(() => {});
+      import('fs').then((fs) => fs.unlinkSync(tmpPath)).catch(() => {});
     }
 
-    expect(
-      result.valid,
-      'Exported file must be a valid MP4 parseable by ffprobe (no "Invalid data found" error)',
-    ).toBe(true);
+    expect(result.valid, 'Exported file must be a valid MP4 parseable by ffprobe (no "Invalid data found" error)').toBe(
+      true,
+    );
 
     // Duration should be ≤ trim end + a small GOP tolerance.
     if (result.duration !== null) {
