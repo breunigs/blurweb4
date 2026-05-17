@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#0d1117"/>
+  <!-- Redaction bars suggesting blurred license plate / person outline -->
+  <rect x="80" y="152" width="352" height="56" rx="10" fill="#3b82f6"/>
+  <rect x="80" y="228" width="264" height="56" rx="10" fill="#3b82f6" opacity="0.55"/>
+  <rect x="80" y="304" width="312" height="56" rx="10" fill="#3b82f6" opacity="0.3"/>
+</svg>

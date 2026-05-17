@@ -1,0 +1,17 @@
+{
+  "name": "Media Redactor",
+  "short_name": "Redactor",
+  "description": "Blur, blackout, or outline license plates and people in photos and videos — fully on-device.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0d1117",
+  "theme_color": "#3b82f6",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

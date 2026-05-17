@@ -53,6 +53,7 @@ func makeHandler(files fs.FS) http.Handler {
 	mime.AddExtensionType(".js", "text/javascript")
 	mime.AddExtensionType(".html", "text/html; charset=utf-8")
 	mime.AddExtensionType(".json", "application/json")
+	mime.AddExtensionType(".svg", "image/svg+xml")
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		p := strings.TrimPrefix(path.Clean("/"+r.URL.Path), "/")
