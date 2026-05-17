@@ -168,6 +168,17 @@ export function getInferenceStats(): Record<ModelChoice, InferenceModelStats> {
 
 const memCache = new Map<string, Detection[]>();
 
+/** Clear the in-memory cache and all cached detections from IndexedDB. */
+export function clearDetectionCache(): Promise<void> {
+  memCache.clear();
+  return openDB().then(db => new Promise((resolve, reject) => {
+    const tx = db.transaction('frames', 'readwrite');
+    tx.objectStore('frames').clear();
+    tx.oncomplete = () => resolve();
+    tx.onerror   = () => reject(tx.error);
+  }));
+}
+
 // ── Session singleton ─────────────────────────────────────────────────────────
 
 let sessionPromise: Promise<ort.InferenceSession> | null = null;

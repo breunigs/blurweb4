@@ -57,8 +57,10 @@ const STRINGS = {
     // Step 5 — Debug
     step_debug:      'Debug log',
     debug_subtitle:  'All console output captured here',
-    btn_copy:        'Copy to clipboard',
-    btn_clear:       'Clear',
+    btn_copy:               'Copy to clipboard',
+    btn_clear:              'Clear',
+    btn_delete_detections:    'Delete detections',
+    confirm_delete_detections:'Delete all cached detections?',
 
     // Dynamic — ETA
     almost_done: 'almost done',
@@ -126,8 +128,10 @@ const STRINGS = {
 
     step_debug:     'Debug-Protokoll',
     debug_subtitle: 'Alle Konsolenausgaben hier',
-    btn_copy:       'In Zwischenablage kopieren',
-    btn_clear:      'Leeren',
+    btn_copy:               'In Zwischenablage kopieren',
+    btn_clear:              'Leeren',
+    btn_delete_detections:    'Erkennungen l\u00f6schen',
+    confirm_delete_detections:'Alle gespeicherten Erkennungen l\u00f6schen?',
 
     almost_done: 'fast fertig',
     eta_s:       '~{s}s',
