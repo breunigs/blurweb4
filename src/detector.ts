@@ -267,22 +267,33 @@ async function loadModelBuffer(
   if (model === 'detect_n') {
     return new URL('../models/detect_n_2024_04.onnx', import.meta.url).href;
   }
-  // Fetch detect_x chunks and concatenate
-  const chunks: ArrayBuffer[] = [];
-  for (let i = 0; i < DETECT_X_CHUNKS; i++) {
-    const resp = await fetch(new URL(`../models/detect_x_2024_04.onnx.${i}`, import.meta.url).href);
-    if (!resp.ok) throw new Error(`Failed to fetch model chunk ${i}: ${resp.status}`);
-    chunks.push(await resp.arrayBuffer());
-    onProgress?.(i + 1, DETECT_X_CHUNKS);
-  }
-  const totalBytes = chunks.reduce((s, c) => s + c.byteLength, 0);
-  const out = new Uint8Array(totalBytes);
-  let offset = 0;
-  for (const c of chunks) {
-    out.set(new Uint8Array(c), offset);
-    offset += c.byteLength;
-  }
-  return out.buffer;
+  // Fetch all detect_x chunks in parallel, then concatenate via Blob (avoids a
+  // manual Uint8Array copy loop over ~170 MB — the browser handles it natively).
+  const blobs: (Blob | null)[] = new Array(DETECT_X_CHUNKS).fill(null);
+  let done = 0;
+  const t0 = performance.now();
+  await Promise.all(
+    Array.from({ length: DETECT_X_CHUNKS }, async (_, i) => {
+      const url = new URL(`../models/detect_x_2024_04.onnx.${i}`, import.meta.url).href;
+      const tChunk = performance.now();
+      console.log(`[detector] chunk ${i} fetch start`);
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error(`Failed to fetch model chunk ${i}: ${resp.status}`);
+      const blob = await resp.blob();
+      console.log(
+        `[detector] chunk ${i} done ${(performance.now() - tChunk).toFixed(0)}ms ${(blob.size / 1024).toFixed(0)} KB`,
+      );
+      blobs[i] = blob;
+      onProgress?.(++done, DETECT_X_CHUNKS);
+    }),
+  );
+  console.log(`[detector] all chunks fetched ${(performance.now() - t0).toFixed(0)}ms`);
+  const tBlob = performance.now();
+  const buf = await new Blob(blobs as Blob[]).arrayBuffer();
+  console.log(
+    `[detector] blob concat ${(performance.now() - tBlob).toFixed(0)}ms total=${(buf.byteLength / 1024 / 1024).toFixed(1)} MB`,
+  );
+  return buf;
 }
 
 export function getSession(onProgress?: (done: number, total: number) => void): Promise<ort.InferenceSession> {
