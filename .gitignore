@@ -9,3 +9,5 @@ vendor/libav-avc-av1/*.mjs
 models/detect_x_*
 test-results/.last-run.json
 TODO
+server/dist-embedded
+release
