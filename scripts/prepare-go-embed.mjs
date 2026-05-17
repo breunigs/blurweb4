@@ -76,6 +76,10 @@ console.log('  src/style.css');
 copyDist(join(ROOT, 'dist'), join(OUT, 'dist'));
 console.log('  dist/');
 
+// examples/ — served at /examples/* for the "Load examples" button
+walkAndCopy(join(ROOT, 'examples'), join(OUT, 'examples'));
+console.log('  examples/');
+
 // models/
 walkAndCopy(join(ROOT, 'models'), join(OUT, 'models'));
 console.log('  models/');

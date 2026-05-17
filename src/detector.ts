@@ -687,7 +687,10 @@ function drawOutline(ctx: AnyCtx, detections: Detection[]): void {
   ctx.save();
   ctx.strokeStyle = '#ff0000';
   ctx.lineWidth = 2;
-  const fontSize = 28;
+  // Scale font to the shorter canvas dimension so labels are readable regardless
+  // of canvas resolution or CSS zoom. Use pixel dimensions (not clientWidth) so
+  // this works even when the canvas is display:none (e.g. loaded in background).
+  const fontSize = Math.max(14, Math.round(Math.min(ctx.canvas.width, ctx.canvas.height) * 0.025));
   ctx.font = `${fontSize}px monospace`;
   for (const d of detections) {
     ctx.strokeRect(d.x, d.y, d.w, d.h);

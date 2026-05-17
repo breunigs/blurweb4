@@ -441,6 +441,8 @@ export class App {
       fi.value = '';
     });
 
+    document.getElementById('examples-btn')!.addEventListener('click', () => this.loadExamples());
+
     this.fileSelect.addEventListener('change', () => this.switchTo(this.fileSelect.selectedIndex));
     this.navPrev.addEventListener('click', () => {
       if (this.activeIndex > 0) this.switchTo(this.activeIndex - 1);
@@ -600,7 +602,29 @@ export class App {
     }
   }
 
-  private addFile(file: File): void {
+  private async loadExamples(): Promise<void> {
+    const btn = document.getElementById('examples-btn') as HTMLButtonElement;
+    btn.disabled = true;
+    try {
+      const [imgResp, vidResp] = await Promise.all([
+        fetch('examples/jpeg.jpg'),
+        fetch('examples/av1.mp4'),
+      ]);
+      if (!imgResp.ok || !vidResp.ok) throw new Error('Failed to fetch example files');
+      const [imgBlob, vidBlob] = await Promise.all([imgResp.blob(), vidResp.blob()]);
+      const imgFile = new File([imgBlob], 'jpeg.jpg', { type: 'image/jpeg' });
+      const vidFile = new File([vidBlob], 'av1.mp4', { type: 'video/mp4' });
+      // Add image first and switch to it; add video without switching.
+      this.addFile(imgFile, true);
+      this.addFile(vidFile, false);
+    } catch (err) {
+      console.error('Failed to load examples:', err);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  private addFile(file: File, switchToFile = true): void {
     const isVideo = file.type.startsWith('video/');
     const index = this.items.length;
 
@@ -664,6 +688,7 @@ export class App {
     }
 
     this.updateLoadedSummary();
+    this.updateFileNav();
 
     if (isVideo) {
       const player = new VideoPlayer(canvas, this.detectStatusInline);
@@ -733,7 +758,7 @@ export class App {
         });
     }
 
-    this.switchTo(index);
+    if (switchToFile) this.switchTo(index);
   }
 
   private showError(wrapper: HTMLDivElement, canvas: HTMLCanvasElement, msg: string): void {
