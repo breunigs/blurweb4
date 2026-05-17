@@ -46,7 +46,7 @@ const CODEC_ID: Partial<Record<VideoCodec, number>> = {
 
 const CODEC_NAME: Partial<Record<VideoCodec, string>> = {
   avc: 'h264',
-  av1: 'av1',
+  av1: 'libaom-av1', // the WASM is built with decoder-libaom_av1; registered name is 'libaom-av1' not 'av1'
 };
 
 export const LIBAV_AVC_AV1_CODECS = new Set<VideoCodec>(['avc', 'av1']);
