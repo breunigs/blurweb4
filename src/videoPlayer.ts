@@ -80,7 +80,7 @@ export class VideoPlayer {
 
       this.inferenceGen++;
       const gen = this.inferenceGen;
-      this.statusEl.hidden = true;
+      this.statusEl.classList.remove('visible');
 
       const key = makeVideoKey(this.file, this.canvas.width, this.canvas.height, firstSample.microsecondTimestamp);
       firstSample.close();
@@ -91,10 +91,10 @@ export class VideoPlayer {
         this.applyAndNotify(cached);
       } else {
         this.statusEl.textContent = detStatusText();
-        this.statusEl.hidden = false;
+        this.statusEl.classList.add('visible');
         scheduleInference(this.canvas, key, (dets) => {
           if (this.inferenceGen !== gen) return;
-          this.statusEl.hidden = true;
+          this.statusEl.classList.remove('visible');
           this.applyAndNotify(dets);
         });
       }
@@ -132,7 +132,7 @@ export class VideoPlayer {
 
       this.inferenceGen++;
       const gen = this.inferenceGen;
-      this.statusEl.hidden = true;
+      this.statusEl.classList.remove('visible');
 
       const key = makeVideoKey(this.file, this.canvas.width, this.canvas.height, sample.microsecondTimestamp);
       sample.close();
@@ -147,11 +147,11 @@ export class VideoPlayer {
         this.applyAndNotify(cached);
       } else {
         this.statusEl.textContent = detStatusText();
-        this.statusEl.hidden = false;
+        this.statusEl.classList.add('visible');
         console.log(`[videoPlayer] scheduleInference key="${key}"`);
         scheduleInference(this.canvas, key, (dets) => {
           if (this.inferenceGen !== gen) return;
-          this.statusEl.hidden = true;
+          this.statusEl.classList.remove('visible');
           this.applyAndNotify(dets);
         });
       }
@@ -190,7 +190,7 @@ export class VideoPlayer {
 
       this.inferenceGen++;
       const gen = this.inferenceGen;
-      this.statusEl.hidden = true;
+      this.statusEl.classList.remove('visible');
 
       const key = makeVideoKey(this.file, this.canvas.width, this.canvas.height, sample.microsecondTimestamp);
       sample.close();
@@ -201,10 +201,10 @@ export class VideoPlayer {
         this.applyAndNotify(cached);
       } else {
         this.statusEl.textContent = detStatusText();
-        this.statusEl.hidden = false;
+        this.statusEl.classList.add('visible');
         scheduleInference(this.canvas, key, (dets) => {
           if (this.inferenceGen !== gen) return;
-          this.statusEl.hidden = true;
+          this.statusEl.classList.remove('visible');
           this.applyAndNotify(dets);
         });
       }
@@ -223,7 +223,7 @@ export class VideoPlayer {
   dispose(): void {
     this.playing = false;
     this.seekGen++; // invalidate any in-flight seek
-    this.statusEl.hidden = true;
+    this.statusEl.classList.remove('visible');
     window.removeEventListener('libavfallback', this.libavHandler);
     this.input?.dispose();
     this.input = null;
