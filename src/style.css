@@ -209,17 +209,14 @@ body {
 
 /* File nav row */
 #file-nav {
-  display: flex;
+  display: none;
   align-items: center;
   gap: 8px;
   margin-bottom: 14px;
-  /* Always takes up space even when hidden to avoid layout shift */
-  min-height: 36px;
-  visibility: hidden;
 }
 
 #file-nav.visible {
-  visibility: visible;
+  display: flex;
 }
 
 .nav-btn {
