@@ -1,7 +1,4 @@
-export async function renderImage(
-  file: File,
-  canvas: HTMLCanvasElement,
-): Promise<void> {
+export async function renderImage(file: File, canvas: HTMLCanvasElement): Promise<void> {
   const bitmap = await createImageBitmap(file);
   canvas.width = bitmap.width;
   canvas.height = bitmap.height;

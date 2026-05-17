@@ -2,7 +2,7 @@ import * as esbuild from 'esbuild';
 import { existsSync, mkdirSync, copyFileSync, readdirSync } from 'fs';
 import { spawnSync } from 'child_process';
 
-const dev  = process.argv.includes('--dev');
+const dev = process.argv.includes('--dev');
 const port = Number(process.env.PORT ?? 3000);
 
 // ── HEVC WASM artifacts ───────────────────────────────────────────────────
@@ -35,7 +35,7 @@ copyOrtWasm();
 
 const buildConfig = {
   entryPoints: {
-    bundle:     'src/main.ts',
+    bundle: 'src/main.ts',
     hevcWorker: 'src/hevcWorker.ts',
   },
   bundle: true,

@@ -21,8 +21,8 @@ export interface BatchCallbacks {
 
 function triggerDownload(data: ArrayBuffer | Blob, filename: string): void {
   const blob = data instanceof Blob ? data : new Blob([data]);
-  const url  = URL.createObjectURL(blob);
-  const a    = Object.assign(document.createElement('a'), { href: url, download: filename });
+  const url = URL.createObjectURL(blob);
+  const a = Object.assign(document.createElement('a'), { href: url, download: filename });
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }

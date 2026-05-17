@@ -45,10 +45,14 @@ let currentModel: ModelChoice = getConfig().model;
 let currentEP: string | null = null;
 
 /** Human-readable model identifier (used in cache keys). */
-export function getModelName(): string { return MODEL_NAMES[currentModel]; }
+export function getModelName(): string {
+  return MODEL_NAMES[currentModel];
+}
 
 /** Execution provider used by the active session, or null if not yet loaded. */
-export function getCurrentEP(): string | null { return currentEP; }
+export function getCurrentEP(): string | null {
+  return currentEP;
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -65,9 +69,9 @@ interface Snapshot {
   data: Uint8ClampedArray;
   origW: number;
   origH: number;
-  scale: number;  // uniform scale applied to fit content into MODEL_W×MODEL_H
-  padX: number;   // horizontal padding added on each side (letterbox)
-  padY: number;   // vertical padding added on each side (letterbox)
+  scale: number; // uniform scale applied to fit content into MODEL_W×MODEL_H
+  padX: number; // horizontal padding added on each side (letterbox)
+  padY: number; // vertical padding added on each side (letterbox)
 }
 
 interface PendingItem {
@@ -109,20 +113,26 @@ function openDB(): Promise<IDBDatabase> {
 }
 
 function idbGet<T>(store: string, key: string): Promise<T | undefined> {
-  return openDB().then(db => new Promise((resolve, reject) => {
-    const req = db.transaction(store, 'readonly').objectStore(store).get(key);
-    req.onsuccess = () => resolve(req.result as T | undefined);
-    req.onerror = () => reject(req.error);
-  }));
+  return openDB().then(
+    (db) =>
+      new Promise((resolve, reject) => {
+        const req = db.transaction(store, 'readonly').objectStore(store).get(key);
+        req.onsuccess = () => resolve(req.result as T | undefined);
+        req.onerror = () => reject(req.error);
+      }),
+  );
 }
 
 function idbPut(store: string, value: unknown): Promise<void> {
-  return openDB().then(db => new Promise((resolve, reject) => {
-    const tx = db.transaction(store, 'readwrite');
-    tx.objectStore(store).put(value);
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-  }));
+  return openDB().then(
+    (db) =>
+      new Promise((resolve, reject) => {
+        const tx = db.transaction(store, 'readwrite');
+        tx.objectStore(store).put(value);
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+      }),
+  );
 }
 
 // ── Statistics (per-model) ────────────────────────────────────────────────────
@@ -138,14 +148,19 @@ const inferenceStats: Record<ModelChoice, ModelStats> = {
   for (const model of ['detect_n', 'detect_x'] as ModelChoice[]) {
     try {
       const rec = await idbGet<{ id: string; count: number; totalMs: number }>('stats', `inference-${model}`);
-      if (rec) { inferenceStats[model].count = rec.count; inferenceStats[model].totalMs = rec.totalMs; }
-    } catch { /* ok */ }
+      if (rec) {
+        inferenceStats[model].count = rec.count;
+        inferenceStats[model].totalMs = rec.totalMs;
+      }
+    } catch {
+      /* ok */
+    }
   }
 })();
 
 function persistStats(model: ModelChoice): void {
   const s = inferenceStats[model];
-  idbPut('stats', { id: `inference-${model}`, count: s.count, totalMs: s.totalMs }).catch(() => { });
+  idbPut('stats', { id: `inference-${model}`, count: s.count, totalMs: s.totalMs }).catch(() => {});
 }
 
 export function getAverageInferenceMs(model?: ModelChoice): number | null {
@@ -153,11 +168,21 @@ export function getAverageInferenceMs(model?: ModelChoice): number | null {
   return s.count > 0 ? s.totalMs / s.count : null;
 }
 
-export interface InferenceModelStats { count: number; totalMs: number; avgMs: number | null; }
+export interface InferenceModelStats {
+  count: number;
+  totalMs: number;
+  avgMs: number | null;
+}
 export function getInferenceStats(): Record<ModelChoice, InferenceModelStats> {
   return {
-    detect_n: { ...inferenceStats.detect_n, avgMs: inferenceStats.detect_n.count > 0 ? inferenceStats.detect_n.totalMs / inferenceStats.detect_n.count : null },
-    detect_x: { ...inferenceStats.detect_x, avgMs: inferenceStats.detect_x.count > 0 ? inferenceStats.detect_x.totalMs / inferenceStats.detect_x.count : null },
+    detect_n: {
+      ...inferenceStats.detect_n,
+      avgMs: inferenceStats.detect_n.count > 0 ? inferenceStats.detect_n.totalMs / inferenceStats.detect_n.count : null,
+    },
+    detect_x: {
+      ...inferenceStats.detect_x,
+      avgMs: inferenceStats.detect_x.count > 0 ? inferenceStats.detect_x.totalMs / inferenceStats.detect_x.count : null,
+    },
   };
 }
 
@@ -179,23 +204,28 @@ export async function loadTrim(fileKey: string): Promise<{ start: number; end: n
   try {
     const rec = await idbGet<{ key: string; start: number; end: number }>('trims', fileKey);
     return rec ? { start: rec.start, end: rec.end } : null;
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 
 /** Filter detections by a minimum combined confidence score. */
 export function filterByConf(dets: Detection[], minConf: number): Detection[] {
-  return minConf <= 0 ? dets : dets.filter(d => d.conf >= minConf);
+  return minConf <= 0 ? dets : dets.filter((d) => d.conf >= minConf);
 }
 
 /** Clear the in-memory cache and all cached detections from IndexedDB. */
 export function clearDetectionCache(): Promise<void> {
   memCache.clear();
-  return openDB().then(db => new Promise((resolve, reject) => {
-    const tx = db.transaction('frames', 'readwrite');
-    tx.objectStore('frames').clear();
-    tx.oncomplete = () => resolve();
-    tx.onerror   = () => reject(tx.error);
-  }));
+  return openDB().then(
+    (db) =>
+      new Promise((resolve, reject) => {
+        const tx = db.transaction('frames', 'readwrite');
+        tx.objectStore('frames').clear();
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+      }),
+  );
 }
 
 // ── Session singleton ─────────────────────────────────────────────────────────
@@ -206,18 +236,26 @@ async function resolveEps(): Promise<string[]> {
   const eps: string[] = [];
   if (typeof navigator !== 'undefined' && 'gpu' in navigator) {
     try {
-      const gpu = (navigator as unknown as { gpu: { requestAdapter(opts: object): Promise<{ requestDevice(): Promise<GPUDevice> } | null> } }).gpu;
+      const gpu = (
+        navigator as unknown as {
+          gpu: { requestAdapter(opts: object): Promise<{ requestDevice(): Promise<GPUDevice> } | null> };
+        }
+      ).gpu;
       const adapter = await gpu.requestAdapter({ powerPreference: 'high-performance' });
       if (adapter) {
-        ort.env.webgpu.device = await adapter.requestDevice() as unknown as GPUDevice;
+        ort.env.webgpu.device = (await adapter.requestDevice()) as unknown as GPUDevice;
         eps.push('webgpu');
       }
-    } catch { /* skip */ }
+    } catch {
+      /* skip */
+    }
   }
   try {
     const canvas = document.createElement('canvas');
     if (canvas.getContext('webgl2') ?? canvas.getContext('webgl')) eps.push('webgl');
-  } catch { /* skip */ }
+  } catch {
+    /* skip */
+  }
   eps.push('wasm');
   return eps;
 }
@@ -240,7 +278,10 @@ async function loadModelBuffer(
   const totalBytes = chunks.reduce((s, c) => s + c.byteLength, 0);
   const out = new Uint8Array(totalBytes);
   let offset = 0;
-  for (const c of chunks) { out.set(new Uint8Array(c), offset); offset += c.byteLength; }
+  for (const c of chunks) {
+    out.set(new Uint8Array(c), offset);
+    offset += c.byteLength;
+  }
   return out.buffer;
 }
 
@@ -273,16 +314,13 @@ export function getSession(onProgress?: (done: number, total: number) => void): 
  * will load the new model. In-memory cache is cleared (IDB entries for the old
  * model stay, keyed by model name, and won't be hit for the new model).
  */
-export function setModel(
-  model: ModelChoice,
-  onProgress?: (done: number, total: number) => void,
-): Promise<void> {
+export function setModel(model: ModelChoice, onProgress?: (done: number, total: number) => void): Promise<void> {
   if (model === currentModel && sessionPromise !== null) return Promise.resolve();
   currentModel = model;
   sessionPromise = null;
   memCache.clear();
   // Pre-warm the session so the UI can show progress before the first inference
-  return getSession(onProgress).then(() => { });
+  return getSession(onProgress).then(() => {});
 }
 
 // ── Preprocessing ─────────────────────────────────────────────────────────────
@@ -292,11 +330,14 @@ const LETTERBOX_FILL = 'rgb(114,114,114)';
 
 function captureSnapshot(source: HTMLCanvasElement | OffscreenCanvas): Snapshot {
   const t0 = performance.now();
-  const srcW = source.width, srcH = source.height;
+  const srcW = source.width,
+    srcH = source.height;
   // Uniform scale so content fits inside MODEL_W×MODEL_H without distortion.
   const scale = Math.min(MODEL_W / srcW, MODEL_H / srcH);
-  const scaledW = Math.round(srcW * scale), scaledH = Math.round(srcH * scale);
-  const padX = (MODEL_W - scaledW) / 2, padY = (MODEL_H - scaledH) / 2;
+  const scaledW = Math.round(srcW * scale),
+    scaledH = Math.round(srcH * scale);
+  const padX = (MODEL_W - scaledW) / 2,
+    padY = (MODEL_H - scaledH) / 2;
   const tmp = new OffscreenCanvas(MODEL_W, MODEL_H);
   const ctx = tmp.getContext('2d')!;
   ctx.fillStyle = LETTERBOX_FILL;
@@ -328,19 +369,34 @@ function buildTensor(snap: Snapshot): ort.Tensor {
     // Per-channel stats to check for BGR vs RGB issues.
     // If model expects BGR and we feed RGB, channel 0 will have blue-biased stats for a scene
     // that should be red-heavy (and vice versa). Compare against known PyTorch preprocessing.
-    let rSum = 0, gSum = 0, bSum = 0, rMin = 1, gMin = 1, bMin = 1, rMax = 0, gMax = 0, bMax = 0;
+    let rSum = 0,
+      gSum = 0,
+      bSum = 0,
+      rMin = 1,
+      gMin = 1,
+      bMin = 1,
+      rMax = 0,
+      gMax = 0,
+      bMax = 0;
     for (let i = 0; i < pixels; i++) {
-      const r = tensor[i], g = tensor[pixels + i], b = tensor[pixels * 2 + i];
-      rSum += r; gSum += g; bSum += b;
-      if (r < rMin) rMin = r; if (r > rMax) rMax = r;
-      if (g < gMin) gMin = g; if (g > gMax) gMax = g;
-      if (b < bMin) bMin = b; if (b > bMax) bMax = b;
+      const r = tensor[i],
+        g = tensor[pixels + i],
+        b = tensor[pixels * 2 + i];
+      rSum += r;
+      gSum += g;
+      bSum += b;
+      if (r < rMin) rMin = r;
+      if (r > rMax) rMax = r;
+      if (g < gMin) gMin = g;
+      if (g > gMax) gMax = g;
+      if (b < bMin) bMin = b;
+      if (b > bMax) bMax = b;
     }
     console.log(
       `[detector][debug] tensor channel stats (channel order sent to model: R G B)`,
-      `\n  R: mean=${(rSum/pixels).toFixed(3)} min=${rMin.toFixed(3)} max=${rMax.toFixed(3)}`,
-      `\n  G: mean=${(gSum/pixels).toFixed(3)} min=${gMin.toFixed(3)} max=${gMax.toFixed(3)}`,
-      `\n  B: mean=${(bSum/pixels).toFixed(3)} min=${bMin.toFixed(3)} max=${bMax.toFixed(3)}`,
+      `\n  R: mean=${(rSum / pixels).toFixed(3)} min=${rMin.toFixed(3)} max=${rMax.toFixed(3)}`,
+      `\n  G: mean=${(gSum / pixels).toFixed(3)} min=${gMin.toFixed(3)} max=${gMax.toFixed(3)}`,
+      `\n  B: mean=${(bSum / pixels).toFixed(3)} min=${bMin.toFixed(3)} max=${bMax.toFixed(3)}`,
       `\n  (if model expects BGR, swap R↔B in buildTensor)`,
     );
   }
@@ -349,14 +405,28 @@ function buildTensor(snap: Snapshot): ort.Tensor {
 
 // ── Postprocessing & NMS ──────────────────────────────────────────────────────
 
-interface RawBox { label: 'plate' | 'person'; conf: number; cx: number; cy: number; w: number; h: number; }
+interface RawBox {
+  label: 'plate' | 'person';
+  conf: number;
+  cx: number;
+  cy: number;
+  w: number;
+  h: number;
+}
 
 function iou(a: RawBox, b: RawBox): number {
-  const ax1 = a.cx - a.w / 2, ay1 = a.cy - a.h / 2, ax2 = a.cx + a.w / 2, ay2 = a.cy + a.h / 2;
-  const bx1 = b.cx - b.w / 2, by1 = b.cy - b.h / 2, bx2 = b.cx + b.w / 2, by2 = b.cy + b.h / 2;
+  const ax1 = a.cx - a.w / 2,
+    ay1 = a.cy - a.h / 2,
+    ax2 = a.cx + a.w / 2,
+    ay2 = a.cy + a.h / 2;
+  const bx1 = b.cx - b.w / 2,
+    by1 = b.cy - b.h / 2,
+    bx2 = b.cx + b.w / 2,
+    by2 = b.cy + b.h / 2;
   const ix = Math.max(0, Math.min(ax2, bx2) - Math.max(ax1, bx1));
   const iy = Math.max(0, Math.min(ay2, by2) - Math.max(ay1, by1));
-  const inter = ix * iy, union = a.w * a.h + b.w * b.h - inter;
+  const inter = ix * iy,
+    union = a.w * a.h + b.w * b.h - inter;
   return union > 0 ? inter / union : 0;
 }
 
@@ -364,17 +434,24 @@ function postprocess(output: ort.Tensor, scale: number, padX: number, padY: numb
   const data = output.data as Float32Array;
   const [, rows, cols] = output.dims as [number, number, number];
   if (dbg()) console.log(`[detector][debug] raw output: ${rows} rows × ${cols} cols`);
-  let nObjPass = 0, nClassPass = 0;
+  let nObjPass = 0,
+    nClassPass = 0;
   const raw: RawBox[] = [];
   for (let r = 0; r < rows; r++) {
     const base = r * cols;
-    const objConf = data[base + 4], pc = data[base + 5], nc = data[base + 6];
+    const objConf = data[base + 4],
+      pc = data[base + 5],
+      nc = data[base + 6];
     if (objConf >= THRESHOLD_CONF) nObjPass++;
     if (objConf < THRESHOLD_CONF || Math.max(pc, nc) < THRESHOLD_CLASS) continue;
     nClassPass++;
     raw.push({
-      label: pc >= nc ? LABELS[0] : LABELS[1], conf: objConf * Math.max(pc, nc),
-      cx: data[base], cy: data[base + 1], w: data[base + 2], h: data[base + 3]
+      label: pc >= nc ? LABELS[0] : LABELS[1],
+      conf: objConf * Math.max(pc, nc),
+      cx: data[base],
+      cy: data[base + 1],
+      w: data[base + 2],
+      h: data[base + 3],
     });
   }
   raw.sort((a, b) => b.conf - a.conf);
@@ -386,20 +463,26 @@ function postprocess(output: ort.Tensor, scale: number, padX: number, padY: numb
     const top = raw.slice(0, 20);
     console.log(`[detector][debug] top-${top.length} candidates before NMS (model-pixel coords):`);
     for (const b of top) {
-      const x1 = (b.cx - b.w/2).toFixed(1), y1 = (b.cy - b.h/2).toFixed(1);
-      console.log(`  ${b.label} conf=${b.conf.toFixed(3)} cx=${b.cx.toFixed(1)} cy=${b.cy.toFixed(1)} w=${b.w.toFixed(1)} h=${b.h.toFixed(1)}  →  x1=${x1} y1=${y1}`);
+      const x1 = (b.cx - b.w / 2).toFixed(1),
+        y1 = (b.cy - b.h / 2).toFixed(1);
+      console.log(
+        `  ${b.label} conf=${b.conf.toFixed(3)} cx=${b.cx.toFixed(1)} cy=${b.cy.toFixed(1)} w=${b.w.toFixed(1)} h=${b.h.toFixed(1)}  →  x1=${x1} y1=${y1}`,
+      );
     }
   }
-  const kept: RawBox[] = [], sup = new Uint8Array(raw.length);
+  const kept: RawBox[] = [],
+    sup = new Uint8Array(raw.length);
   for (let i = 0; i < raw.length; i++) {
     if (sup[i]) continue;
     kept.push(raw[i]);
     for (let j = i + 1; j < raw.length; j++) if (!sup[j] && iou(raw[i], raw[j]) > THRESHOLD_IOU) sup[j] = 1;
   }
   if (dbg()) console.log(`[detector][debug] after NMS: ${raw.length} → ${kept.length} detections`);
-  if (dbg()) console.log(`[detector][debug] unmap: scale=${scale.toFixed(4)} padX=${padX.toFixed(1)} padY=${padY.toFixed(1)}`);
-  return kept.map(b => ({
-    label: b.label, conf: b.conf,
+  if (dbg())
+    console.log(`[detector][debug] unmap: scale=${scale.toFixed(4)} padX=${padX.toFixed(1)} padY=${padY.toFixed(1)}`);
+  return kept.map((b) => ({
+    label: b.label,
+    conf: b.conf,
     x: Math.round((b.cx - b.w / 2 - padX) / scale),
     y: Math.round((b.cy - b.h / 2 - padY) / scale),
     w: Math.round(b.w / scale),
@@ -423,7 +506,7 @@ async function runOnnx(snap: Snapshot): Promise<Detection[]> {
     console.log(`[detector] runOnnx total ${(performance.now() - t0).toFixed(1)}ms`);
     return detections;
   });
-  onnxChain = result.catch(() => { });
+  onnxChain = result.catch(() => {});
   return result;
 }
 
@@ -444,7 +527,9 @@ export async function getCachedDetections(key: string): Promise<Detection[] | nu
       (window as unknown as Record<string, unknown>).__lastDetections = rec.detections;
       return rec.detections;
     }
-  } catch { /* ok */ }
+  } catch {
+    /* ok */
+  }
   return null;
 }
 
@@ -462,7 +547,7 @@ async function drainQueue(): Promise<void> {
     // Yield the main thread so slider/pointer events can process before we spend
     // ~130 ms in captureSnapshot.  If a newer inference was scheduled during the
     // yield, nextPending will be non-null → skip this (now stale) request.
-    await new Promise<void>(resolve => setTimeout(resolve, 0));
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
     if (nextPending !== null) continue;
 
     console.log(`[detector] drainQueue: starting inference key="${req.key}"`);
@@ -473,12 +558,14 @@ async function drainQueue(): Promise<void> {
     inferenceStats[currentModel].count++;
     inferenceStats[currentModel].totalMs += ms;
     const avg = inferenceStats[currentModel].totalMs / inferenceStats[currentModel].count;
-    console.log(`[detector] inference model=${currentModel} key="${req.key}" ${ms.toFixed(0)}ms detections=${detections.length} avg=${avg.toFixed(0)}ms`);
+    console.log(
+      `[detector] inference model=${currentModel} key="${req.key}" ${ms.toFixed(0)}ms detections=${detections.length} avg=${avg.toFixed(0)}ms`,
+    );
     const tIdb = performance.now();
     memCache.set(req.key, detections);
     idbPut('frames', { key: req.key, detections, cachedAt: Date.now() })
       .then(() => console.log(`[detector] idbPut ${(performance.now() - tIdb).toFixed(1)}ms`))
-      .catch(() => { });
+      .catch(() => {});
     persistStats(currentModel);
     (window as unknown as Record<string, unknown>).__lastDetections = detections;
     req.callback(detections);
@@ -497,15 +584,12 @@ export function scheduleInference(
   // after a main-thread yield, so this call is non-blocking.
   nextPending = { source, key, callback };
   console.log(`[detector] scheduleInference key="${key}" replacing=${replacing} queueRunning=${queueRunning}`);
-  if (!queueRunning) drainQueue().catch(err => console.error('[detector] queue error:', err));
+  if (!queueRunning) drainQueue().catch((err) => console.error('[detector] queue error:', err));
 }
 
 // ── Export path ───────────────────────────────────────────────────────────────
 
-export async function detectForExport(
-  source: HTMLCanvasElement | OffscreenCanvas,
-  key: string,
-): Promise<Detection[]> {
+export async function detectForExport(source: HTMLCanvasElement | OffscreenCanvas, key: string): Promise<Detection[]> {
   const mem = memCache.get(key);
   if (mem !== undefined) {
     console.log(`[detector] export cache hit (memory) key="${key}" detections=${mem.length}`);
@@ -518,16 +602,20 @@ export async function detectForExport(
       console.log(`[detector] export cache hit (IDB) key="${key}" detections=${rec.detections.length}`);
       return rec.detections;
     }
-  } catch { /* fall through */ }
+  } catch {
+    /* fall through */
+  }
   const t0 = performance.now();
   const detections = await runOnnx(captureSnapshot(source));
   const ms = performance.now() - t0;
   inferenceStats[currentModel].count++;
   inferenceStats[currentModel].totalMs += ms;
   const avg = inferenceStats[currentModel].totalMs / inferenceStats[currentModel].count;
-  console.log(`[detector] export inference model=${currentModel} key="${key}" ${ms.toFixed(0)}ms detections=${detections.length} avg=${avg.toFixed(0)}ms`);
+  console.log(
+    `[detector] export inference model=${currentModel} key="${key}" ${ms.toFixed(0)}ms detections=${detections.length} avg=${avg.toFixed(0)}ms`,
+  );
   memCache.set(key, detections);
-  idbPut('frames', { key, detections, cachedAt: Date.now() }).catch(() => { });
+  idbPut('frames', { key, detections, cachedAt: Date.now() }).catch(() => {});
   persistStats(currentModel);
   return detections;
 }

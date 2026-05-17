@@ -1,7 +1,12 @@
 import { Input, ALL_FORMATS, BlobSource, VideoSampleSink } from 'mediabunny';
 import {
-  getCachedDetections, scheduleInference, applyDetections,
-  makeVideoKey, getAverageInferenceMs, filterByConf, type Detection,
+  getCachedDetections,
+  scheduleInference,
+  applyDetections,
+  makeVideoKey,
+  getAverageInferenceMs,
+  filterByConf,
+  type Detection,
 } from './detector';
 import { getConfig } from './config';
 
@@ -27,8 +32,8 @@ export class VideoPlayer {
   private seekGen = 0;
 
   playing = false;
-  currentTime = 0;  // seconds
-  duration = 0;     // seconds
+  currentTime = 0; // seconds
+  duration = 0; // seconds
 
   onTimeUpdate: ((time: number) => void) | null = null;
   onEnd: (() => void) | null = null;
@@ -40,8 +45,8 @@ export class VideoPlayer {
   };
 
   constructor(canvas: HTMLCanvasElement, statusEl: HTMLElement) {
-    this.canvas   = canvas;
-    this.ctx      = canvas.getContext('2d')!;
+    this.canvas = canvas;
+    this.ctx = canvas.getContext('2d')!;
     this.statusEl = statusEl;
   }
 
@@ -68,7 +73,7 @@ export class VideoPlayer {
 
     const firstSample = await this.sink.getSample(0);
     if (firstSample) {
-      this.canvas.width  = firstSample.displayWidth;
+      this.canvas.width = firstSample.displayWidth;
       this.canvas.height = firstSample.displayHeight;
       firstSample.draw(this.ctx, 0, 0);
       this.currentTime = firstSample.timestamp;
@@ -108,7 +113,9 @@ export class VideoPlayer {
 
     const t0 = performance.now();
     const sample = await this.sink.getSample(time);
-    console.log(`[videoPlayer] getSample(${time.toFixed(3)}s) ${(performance.now() - t0).toFixed(1)}ms${myGen !== this.seekGen ? ' (superseded)' : ''}`);
+    console.log(
+      `[videoPlayer] getSample(${time.toFixed(3)}s) ${(performance.now() - t0).toFixed(1)}ms${myGen !== this.seekGen ? ' (superseded)' : ''}`,
+    );
 
     // If another seekTo() was called while we awaited, discard this result.
     if (myGen !== this.seekGen) {
@@ -117,7 +124,7 @@ export class VideoPlayer {
     }
 
     if (sample) {
-      this.canvas.width  = sample.displayWidth;
+      this.canvas.width = sample.displayWidth;
       this.canvas.height = sample.displayHeight;
       sample.draw(this.ctx, 0, 0);
       this.currentTime = sample.timestamp;
@@ -132,7 +139,9 @@ export class VideoPlayer {
 
       const tCacheStart = performance.now();
       const cached = await getCachedDetections(key);
-      console.log(`[videoPlayer] getCachedDetections ${(performance.now() - tCacheStart).toFixed(1)}ms hit=${cached !== null}`);
+      console.log(
+        `[videoPlayer] getCachedDetections ${(performance.now() - tCacheStart).toFixed(1)}ms hit=${cached !== null}`,
+      );
       if (gen !== this.inferenceGen) return true; // frame was drawn even if inference skipped
       if (cached !== null) {
         this.applyAndNotify(cached);
@@ -154,19 +163,25 @@ export class VideoPlayer {
     if (this.playing || !this.sink || !this.file) return;
     this.playing = true;
 
-    const wallStart  = performance.now();
+    const wallStart = performance.now();
     const mediaStart = this.currentTime;
 
     for await (const sample of this.sink.samples(this.currentTime)) {
-      if (!this.playing) { sample.close(); break; }
+      if (!this.playing) {
+        sample.close();
+        break;
+      }
 
       const targetWall = wallStart + (sample.timestamp - mediaStart) * 1000;
       const delay = targetWall - performance.now();
-      if (delay > 16) await new Promise<void>(resolve => setTimeout(resolve, delay - 8));
+      if (delay > 16) await new Promise<void>((resolve) => setTimeout(resolve, delay - 8));
 
-      await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
-      if (!this.playing) { sample.close(); break; }
+      if (!this.playing) {
+        sample.close();
+        break;
+      }
 
       sample.draw(this.ctx, 0, 0);
       this.currentTime = sample.timestamp;
@@ -201,16 +216,18 @@ export class VideoPlayer {
     }
   }
 
-  pause(): void { this.playing = false; }
+  pause(): void {
+    this.playing = false;
+  }
 
   dispose(): void {
     this.playing = false;
-    this.seekGen++;   // invalidate any in-flight seek
+    this.seekGen++; // invalidate any in-flight seek
     this.statusEl.hidden = true;
     window.removeEventListener('libavfallback', this.libavHandler);
     this.input?.dispose();
     this.input = null;
-    this.sink  = null;
-    this.file  = null;
+    this.sink = null;
+    this.file = null;
   }
 }
