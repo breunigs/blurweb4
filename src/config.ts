@@ -8,6 +8,7 @@ export interface AppConfig {
   keepMetadata: MetadataMode;
   keepAudio: boolean;
   minConfidence: number;
+  namingPattern: string;
 }
 
 const STORAGE_KEY = 'blurweb4-config';
@@ -17,6 +18,7 @@ const DEFAULTS: AppConfig = {
   keepMetadata: 'keep',
   keepAudio: true,
   minConfidence: 0.1,
+  namingPattern: '{input}',
 };
 
 function load(): AppConfig {

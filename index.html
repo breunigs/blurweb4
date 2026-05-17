@@ -164,6 +164,41 @@
           </div>
         </div>
 
+        <!-- Filename pattern -->
+        <div class="setting-row">
+          <span class="setting-row-label" data-i18n="naming_pattern">Filename pattern</span>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <input type="text" id="naming-pattern-input"
+              style="font-family:var(--mono);padding:6px 10px;border:1px solid var(--border);
+                     background:var(--card2);color:var(--text);border-radius:6px;font-size:13px;
+                     min-width:160px;flex:1;max-width:320px;outline:none;">
+            <button id="naming-info-btn"
+              style="width:24px;height:24px;border-radius:50%;border:1px solid var(--border);
+                     background:var(--card2);color:var(--dim);cursor:pointer;font-size:13px;
+                     font-style:italic;font-family:Georgia,serif;flex-shrink:0;
+                     display:flex;align-items:center;justify-content:center;padding:0;"
+              title="Show variables">i</button>
+          </div>
+        </div>
+        <div id="naming-info-panel" hidden
+          style="margin-top:-10px;border:1px solid var(--border);border-radius:6px;
+                 padding:10px 12px;background:var(--card2);overflow-x:auto;">
+          <table id="naming-vars-table"
+            style="border-collapse:collapse;width:100%;min-width:300px;font-size:12px;">
+            <thead>
+              <tr>
+                <th style="text-align:left;padding:2px 10px 6px 0;color:var(--muted);font-weight:600;white-space:nowrap;"
+                  data-i18n="naming_col_variable">Variable</th>
+                <th style="text-align:left;padding:2px 10px 6px 0;color:var(--muted);font-weight:600;"
+                  data-i18n="naming_col_desc">Description</th>
+                <th style="text-align:left;padding:2px 0 6px 0;color:var(--muted);font-weight:600;white-space:nowrap;"
+                  data-i18n="naming_col_value">Value</th>
+              </tr>
+            </thead>
+            <tbody id="naming-vars-body"></tbody>
+          </table>
+        </div>
+
         <div style="display:flex;justify-content:flex-end;margin-top:4px;">
           <button id="defaults-btn" style="
             padding:6px 14px;

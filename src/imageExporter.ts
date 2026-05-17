@@ -200,6 +200,7 @@ export async function exportAsJpeg(
   sourceFile?: File,
   keepMetadata: 'keep' | 'gps' | 'strip' = 'keep',
   quality = 0.92,
+  outputStem?: string,
 ): Promise<ImageExportResult> {
   const needsSource = keepMetadata !== 'strip' && sourceFile?.type === 'image/jpeg';
   const [canvasBlob, sourceBytes] = await Promise.all([
@@ -219,6 +220,6 @@ export async function exportAsJpeg(
     }
   }
 
-  const stem = sourceFilename.replace(/\.[^.]+$/, '');
+  const stem = outputStem ?? sourceFilename.replace(/\.[^.]+$/, '');
   return { blob: finalBlob, filename: stem + '.jpg' };
 }
