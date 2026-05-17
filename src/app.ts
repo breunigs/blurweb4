@@ -7,6 +7,7 @@ import {
   makeImageKey, getAverageInferenceMs, setModel,
 } from './detector';
 import { getConfig, setConfig, type AppConfig, type ModelChoice } from './config';
+import { t, tpl, translateLabel, applyTranslations } from './i18n';
 import { getEntries, clearEntries, setOnUpdate, copyToClipboard } from './debugLog';
 
 interface MediaItem {
@@ -34,10 +35,10 @@ function formatTime(s: number): string {
 
 function formatEta(ms: number): string {
   const s = Math.round(ms / 1000);
-  if (s < 5)  return 'almost done';
-  if (s < 60) return `~${s}s`;
-  const m = Math.floor(s / 60), rs = s % 60;
-  return `~${m}m ${rs.toString().padStart(2, '0')}s`;
+  if (s < 5)  return t('almost_done');
+  if (s < 60) return tpl('eta_s', { s });
+  const m = Math.floor(s / 60), r = s % 60;
+  return tpl('eta_ms', { m, r: r.toString().padStart(2, '0') });
 }
 
 /** Simple debounce — returns a wrapper that fires `fn` only after `ms` ms of silence. */
@@ -116,6 +117,7 @@ export class App {
     this.stepPreviewSubtitle= document.getElementById('step-preview-subtitle')!;
     this.audioSettingRow    = document.getElementById('audio-setting-row')!;
 
+    applyTranslations();
     this.bindEvents();
     this.syncConfigUI();
     this.initDebugLog();
@@ -198,7 +200,7 @@ export class App {
     document.getElementById('copy-log-btn')?.addEventListener('click', async () => {
       await copyToClipboard();
       const status = document.getElementById('copy-log-status')!;
-      status.textContent = 'Copied!';
+      status.textContent = t('copied');
       setTimeout(() => { status.textContent = ''; }, 2000);
     });
     document.getElementById('clear-log-btn')?.addEventListener('click', () => {
@@ -214,8 +216,8 @@ export class App {
     if (on) {
       const avg = getAverageInferenceMs();
       this.detectStatusInline.textContent = avg === null
-        ? 'Detecting…'
-        : `Detecting… (~${(avg / 1000).toFixed(1)}s)`;
+        ? t('detecting_plain')
+        : tpl('detecting_timed', { t: (avg / 1000).toFixed(1) });
       this.detectStatusInline.classList.add('visible');
       this.detectResultEl.classList.remove('visible');
     } else {
@@ -227,9 +229,9 @@ export class App {
     this.detectStatusInline.classList.remove('visible');
     const counts: Record<string, number> = {};
     for (const d of dets) counts[d.label] = (counts[d.label] ?? 0) + 1;
-    const parts = Object.entries(counts).map(([label, n]) => `${n} ${label}`);
+    const parts = Object.entries(counts).map(([label, n]) => `${n} ${translateLabel(label)}`);
     this.detectResultEl.textContent = dets.length === 0
-      ? '0 detections'
+      ? t('no_detections')
       : parts.join(', ');
     this.detectResultEl.classList.add('visible');
   }
@@ -253,7 +255,7 @@ export class App {
 
   private updateLoadedSummary(): void {
     const n = this.items.length;
-    this.loadedSummary.textContent = n === 0 ? '' : `${n} file${n > 1 ? 's' : ''} loaded`;
+    this.loadedSummary.textContent = n === 0 ? '' : n === 1 ? t('files_loaded_one') : tpl('files_loaded_n', { n });
     // "Export all" is only meaningful when there are multiple files.
     this.exportAllBtn.style.display = n > 1 ? '' : 'none';
   }
@@ -274,7 +276,7 @@ export class App {
     const e   = item.trimEnd   ?? dur;
     this.trimStartLabel.textContent    = formatTime(s);
     this.trimEndLabel.textContent      = formatTime(e);
-    this.trimDurationLabel.textContent = `${(e - s).toFixed(2)}s selected`;
+    this.trimDurationLabel.textContent = tpl('selected', { s: `${(e - s).toFixed(2)}s` });
   }
 
   /** Mark the canvas as stale (blurred/dimmed) while a seek is in flight. */
@@ -415,13 +417,13 @@ export class App {
       this.prevModel = cfg.model;
       this.modelLoadProgress.classList.add('visible');
       this.modelLoadBarFill.style.width = '0%';
-      this.modelLoadText.textContent = cfg.model === 'detect_x'
-        ? 'Loading chunks (0/9)…' : 'Loading model…';
+      this.modelLoadText.textContent = cfg.model === 'detect_n'
+        ? t('loading_model') : tpl('loading_chunks_start', { total: cfg.model === 'detect_x' ? 9 : '?' });
       try {
         await setModel(cfg.model, (done, total) => {
           this.modelLoadBarFill.style.width = `${Math.round(done / total * 100)}%`;
-          this.modelLoadText.textContent    = cfg.model === 'detect_x'
-            ? `Loading chunks (${done}/${total})…` : 'Loading model…';
+          this.modelLoadText.textContent    = cfg.model === 'detect_n'
+            ? t('loading_model') : tpl('loading_chunks', { done, total });
         });
       } finally {
         this.modelLoadProgress.classList.remove('visible');
@@ -648,7 +650,7 @@ export class App {
     if (showGlobal) {
       this.exportGlobalRow.classList.add('visible');
       this.globalProgressFill.style.width = '0%';
-      this.globalEta.textContent = 'Estimating…';
+      this.globalEta.textContent = t('estimating');
     }
 
     pending.forEach(it => it.exportRow.classList.add('active'));
@@ -674,7 +676,7 @@ export class App {
       onFileStart: (i) => {
         fileStartTimes[i] = performance.now();
         pending[i].exportBarFill.style.width = '0%';
-        pending[i].exportEtaEl.textContent   = 'Estimating…';
+        pending[i].exportEtaEl.textContent   = t('estimating');
       },
       onFileProgress: (i, p) => {
         pending[i].exportBarFill.style.width = `${Math.round(p * 100)}%`;
@@ -696,9 +698,9 @@ export class App {
             && pending[i].trimEnd === exportItems[i].trimEnd;
           if (trimUnchanged) pending[i].exported = true;
           pending[i].exportBarFill.style.width = '100%';
-          pending[i].exportEtaEl.textContent   = 'Done';
+          pending[i].exportEtaEl.textContent   = t('done');
         } else {
-          pending[i].exportEtaEl.textContent = 'Failed';
+          pending[i].exportEtaEl.textContent = t('failed');
         }
       },
       onGlobalProgress: (completed) => {
@@ -707,7 +709,7 @@ export class App {
           const p = completed / total;
           this.globalProgressFill.style.width = `${Math.round(p * 100)}%`;
           const elapsed = performance.now() - exportStart;
-          this.globalEta.textContent = p >= 1 ? 'Done' : formatEta(elapsed * (1 - p) / p);
+          this.globalEta.textContent = p >= 1 ? t('done') : formatEta(elapsed * (1 - p) / p);
         }
       },
     });
