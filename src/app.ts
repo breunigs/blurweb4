@@ -548,12 +548,16 @@ export class App {
         cfg.model === 'detect_n'
           ? t('loading_model')
           : tpl('loading_chunks_start', { total: cfg.model === 'detect_x' ? 9 : '?' });
+      // setModel() clears memCache synchronously before downloading. Start the
+      // clear-render immediately so detections disappear while the model loads.
+      const modelPromise = setModel(cfg.model, (done, total) => {
+        this.modelLoadBarFill.style.width = `${Math.round((done / total) * 100)}%`;
+        this.modelLoadText.textContent =
+          cfg.model === 'detect_n' ? t('loading_model') : tpl('loading_chunks', { done, total });
+      });
+      void this.rerenderActive();
       try {
-        await setModel(cfg.model, (done, total) => {
-          this.modelLoadBarFill.style.width = `${Math.round((done / total) * 100)}%`;
-          this.modelLoadText.textContent =
-            cfg.model === 'detect_n' ? t('loading_model') : tpl('loading_chunks', { done, total });
-        });
+        await modelPromise;
       } finally {
         this.modelLoadProgress.classList.remove('visible');
       }
