@@ -7,6 +7,7 @@
     "dev": "node build.mjs --dev",
     "build": "node build.mjs",
     "build:hevc": "node scripts/build-hevc.mjs",
+    "build:avc-av1": "node scripts/build-avc-av1.mjs",
     "test": "playwright test"
   },
   "dependencies": {
