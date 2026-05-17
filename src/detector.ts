@@ -367,18 +367,27 @@ export function getSession(onProgress?: (done: number, total: number) => void): 
   return sessionPromise;
 }
 
+// Serialises concurrent setModel() calls so rapid model switches don't race.
+// Each call is chained onto the previous one; only the last model wins because
+// getSession() short-circuits when the model/session are already current.
+let setModelChain: Promise<void> = Promise.resolve();
+
 /**
  * Switch to a different model. Clears the current session; the next inference
  * will load the new model. In-memory cache is cleared (IDB entries for the old
  * model stay, keyed by model name, and won't be hit for the new model).
+ * Concurrent calls are serialised — the last caller's model always wins.
  */
 export function setModel(model: ModelChoice, onProgress?: (done: number, total: number) => void): Promise<void> {
-  if (model === currentModel && sessionPromise !== null) return Promise.resolve();
-  currentModel = model;
-  sessionPromise = null;
-  memCache.clear();
-  // Pre-warm the session so the UI can show progress before the first inference
-  return getSession(onProgress).then(() => {});
+  setModelChain = setModelChain.then(() => {
+    if (model === currentModel && sessionPromise !== null) return;
+    currentModel = model;
+    sessionPromise = null;
+    memCache.clear();
+    // Pre-warm the session so the UI can show progress before the first inference
+    return getSession(onProgress).then(() => {});
+  });
+  return setModelChain;
 }
 
 // ── Preprocessing ─────────────────────────────────────────────────────────────
