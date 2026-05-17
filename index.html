@@ -118,18 +118,20 @@
         <!-- Model -->
         <div class="setting-row">
           <span class="setting-row-label" data-i18n="setting_model">Detection model</span>
-          <div class="pill-group" id="model-radio-group">
-            <label><input type="radio" name="model" value="detect_n" checked><span data-i18n="model_small">Small &mdash;
-                fast (8 MB)</span></label>
-            <label><input type="radio" name="model" value="detect_x"><span data-i18n="model_large">Large &mdash;
-                accurate (342 MB)</span></label>
-          </div>
-          <!-- Fixed-height indicator — visibility toggled, no layout shift -->
-          <div class="model-load-indicator" id="model-load-progress">
-            <div id="model-load-bar-track">
-              <div id="model-load-bar-fill"></div>
+          <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+            <div class="pill-group" id="model-radio-group">
+              <label><input type="radio" name="model" value="detect_n" checked><span data-i18n="model_small">Small &mdash;
+                  fast (8 MB)</span></label>
+              <label><input type="radio" name="model" value="detect_x"><span data-i18n="model_large">Large &mdash;
+                  accurate (342 MB)</span></label>
             </div>
-            <span id="model-load-text"></span>
+            <!-- Sits inline with buttons on desktop; wraps below on narrow screens -->
+            <div class="model-load-indicator" id="model-load-progress">
+              <div id="model-load-bar-track">
+                <div id="model-load-bar-fill"></div>
+              </div>
+              <span id="model-load-text"></span>
+            </div>
           </div>
         </div>
 
