@@ -1,12 +1,16 @@
 GO := $(shell mise which go)
 .PHONY: dev build test vendor-hevc vendor-avc-av1 go-build go-run prepare-go-embed deploy
 
+node_modules/.package-lock.json: package-lock.json
+	npm install
+	@touch $@
+
 ## Start the development server (hot-reload on port 3000)
-dev:
+dev: node_modules/.package-lock.json
 	node build.mjs --dev
 
 ## Production build → dist/bundle.js (requires vendor-hevc + vendor-avc-av1 first)
-build: vendor-hevc vendor-avc-av1
+build: node_modules/.package-lock.json vendor-hevc vendor-avc-av1
 	node build.mjs
 
 ## Run Playwright tests (Chromium + Firefox, port 3100)

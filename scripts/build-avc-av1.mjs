@@ -121,5 +121,13 @@ try {
 
   console.log(`\nDone. Artifacts written to vendor/libav-avc-av1/`);
 } finally {
+  // Docker wrote files as root inside tmpDir, so plain rmSync fails with EACCES.
+  // Run a throwaway Alpine container to delete them first.
+  spawnSync('docker', [
+    'run', '--rm',
+    '-v', `${tmpDir}:/work`,
+    'alpine',
+    'sh', '-c', 'rm -rf /work/*',
+  ], { stdio: 'ignore' });
   rmSync(tmpDir, { recursive: true, force: true });
 }
