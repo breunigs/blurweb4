@@ -32,6 +32,7 @@ const OUT_MJS = join(VENDOR_DIR, 'libav-6.8.8.0-avc-av1.wasm.mjs');
 const OUT_WASM = join(VENDOR_DIR, 'libav-6.8.8.0-avc-av1.wasm.wasm');
 
 const AVC_AV1_COMPONENTS = JSON.stringify([
+  'avcodec', // enables ff_init_decoder, ff_decode_multi, ff_free_decoder, av_packet_alloc, av_frame_alloc
   'format-mp4',
   'parser-h264',
   'decoder-h264',

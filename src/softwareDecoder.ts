@@ -8,9 +8,10 @@
  * Runtime error handling:
  *   All EncodedVideoChunks are buffered in pendingPackets.  If the active
  *   VideoDecoder errors (error callback fires → decoder state = 'closed'),
- *   our flush() detects this, switches to the next available mode, and
- *   replays all buffered packets through the new decoder.  This transparently
- *   handles browsers that report false-positive isConfigSupported() results.
+ *   our flush() detects this, cycles through all remaining WebCodecs modes,
+ *   and — if all WebCodecs modes are exhausted — falls back to libav inline.
+ *   This transparently handles browsers that report false-positive
+ *   isConfigSupported() results (e.g. iOS Safari).
  *
  * Note: for streams where the failed decoder produced some frames before
  * erroring, the replay will re-emit those frames (potential duplicates).
@@ -18,12 +19,13 @@
  *
  * Codecs handled: avc, vp9, av1, vp8  (everything except hevc).
  *
- * If all WebCodecs modes fail, areAllWebCodecsFailed(codec) returns true,
- * allowing libavVideoDecoder.ts to take over.
+ * If VideoDecoder is entirely unavailable, areAllWebCodecsFailed(codec)
+ * returns true, allowing LibavVideoFallbackDecoder to take over instead.
  */
 
 import { CustomVideoDecoder, VideoSample, EncodedPacket, registerDecoder } from 'mediabunny';
 import type { VideoCodec } from 'mediabunny';
+import { LibavAvcAv1Core, wasmAvailable, LIBAV_AVC_AV1_CODECS } from './libavCore';
 
 // ── Codec / mode tables ────────────────────────────────────────────────────
 
@@ -106,9 +108,10 @@ function availableModes(codec: VideoCodec): HwMode[] {
 export class SmartWebCodecsDecoder extends CustomVideoDecoder {
   private decoder: VideoDecoder | null = null;
   private runtimeError: Error | null = null;
+  private libavCore: LibavAvcAv1Core | null = null;
   /**
    * All EncodedVideoChunks sent since the last successful flush.
-   * Kept so we can replay them if the decoder mode needs to switch.
+   * Kept so we can replay them through a new decoder mode or libav.
    */
   private pendingPackets: EncodedVideoChunk[] = [];
 
@@ -117,10 +120,14 @@ export class SmartWebCodecsDecoder extends CustomVideoDecoder {
     if (typeof VideoDecoder === 'undefined') return false;
     const vc = codec as VideoCodec;
     if (!modeStatus.has(vc)) return false;
-    return ALL_MODES.some((mode) => {
+    const anyWebCodecs = ALL_MODES.some((mode) => {
       const s = modeStatus.get(vc)!.get(mode)!;
       return s !== 'probe-fail' && s !== 'runtime-fail';
     });
+    if (anyWebCodecs) return true;
+    // All WebCodecs modes failed — still claim the codec if libav can handle it,
+    // so we don't hand off to LibavVideoFallbackDecoder mid-session.
+    return wasmAvailable === true && LIBAV_AVC_AV1_CODECS.has(vc);
   }
 
   /**
@@ -195,6 +202,12 @@ export class SmartWebCodecsDecoder extends CustomVideoDecoder {
         return;
       }
     }
+    // All WebCodecs modes failed at probe time but libav can handle this codec —
+    // succeed here and let flush() activate libav when packets arrive.
+    if (wasmAvailable && LIBAV_AVC_AV1_CODECS.has(codec)) {
+      console.log(`[webCodecsDecoder] ${codec}: WebCodecs unavailable, libav fallback will be used`);
+      return;
+    }
     throw new Error(`SmartWebCodecsDecoder: all WebCodecs modes failed for ${codec}`);
   }
 
@@ -205,28 +218,34 @@ export class SmartWebCodecsDecoder extends CustomVideoDecoder {
       duration: Math.round(packet.duration * 1_000_000),
       data: packet.data,
     });
-    // Always buffer — needed to replay if mode switching happens in flush().
+    // Always buffer — needed to replay if mode switching or libav fallback happens in flush().
     this.pendingPackets.push(chunk);
 
-    // Skip the actual decode if the decoder has already closed (error will be
-    // handled in flush()).  Try/catch guards against closing between the check
-    // and the call.
-    if (this.decoder && this.decoder.state === 'configured') {
-      try {
-        this.decoder.decode(chunk);
-      } catch {
-        /* decoder closed asynchronously */
-      }
+    // Skip WebCodecs if libav has already taken over or decoder is unavailable.
+    if (this.libavCore || !this.decoder || this.decoder.state !== 'configured') return;
+
+    try {
+      this.decoder.decode(chunk);
+    } catch {
+      /* decoder closed asynchronously */
     }
   }
 
   async flush(): Promise<void> {
-    if (!this.decoder) return;
+    // Fast path: libav has already taken over — drain pending packets through it.
+    if (this.libavCore) {
+      await this.drainThroughLibav();
+      return;
+    }
 
-    /**
-     * Attempt to flush the current decoder.
-     * Returns true on success, false if the decoder errored or closed.
-     */
+    // No WebCodecs decoder (all probe-fail, or all modes exhausted already) — go straight to libav.
+    if (!this.decoder) {
+      await this.activateLibav();
+      return;
+    }
+
+    // Try to flush the current WebCodecs decoder, cycling through all remaining
+    // modes on failure until one succeeds or all are exhausted.
     const tryFlush = async (): Promise<boolean> => {
       if (!this.decoder || this.decoder.state !== 'configured') return false;
       try {
@@ -237,35 +256,31 @@ export class SmartWebCodecsDecoder extends CustomVideoDecoder {
       }
     };
 
-    // If the decoder is already in an error/closed state (runtimeError set by
-    // the async error callback, or decoder.state already closed), skip straight
-    // to retry.  Otherwise attempt the flush and treat failure as an error.
-    const ok = this.runtimeError === null && this.decoder.state === 'configured' && (await tryFlush());
+    let ok = this.runtimeError === null && this.decoder.state === 'configured' && (await tryFlush());
+
+    while (!ok) {
+      this.reinitWithNextMode();
+      if (!this.decoder) break; // All WebCodecs modes exhausted.
+
+      for (const chunk of this.pendingPackets) {
+        if (this.decoder.state !== 'configured') break;
+        try {
+          this.decoder.decode(chunk);
+        } catch {
+          break;
+        }
+      }
+
+      ok = await tryFlush();
+    }
 
     if (ok) {
       this.pendingPackets = [];
       return;
     }
 
-    // The current mode failed.  Switch and replay all buffered packets.
-    this.reinitWithNextMode();
-    if (!this.decoder) {
-      throw new Error(`SmartWebCodecsDecoder: all WebCodecs modes exhausted for ${this.codec}`);
-    }
-
-    for (const chunk of this.pendingPackets) {
-      if (this.decoder.state !== 'configured') break;
-      try {
-        this.decoder.decode(chunk);
-      } catch {
-        break;
-      }
-    }
-
-    if (!(await tryFlush())) {
-      throw new Error(`SmartWebCodecsDecoder: fallback mode also failed for ${this.codec}`);
-    }
-    this.pendingPackets = [];
+    // All WebCodecs modes exhausted — activate libav.
+    await this.activateLibav();
   }
 
   async close(): Promise<void> {
@@ -278,6 +293,35 @@ export class SmartWebCodecsDecoder extends CustomVideoDecoder {
     }
     this.decoder = null;
     this.runtimeError = null;
+    this.pendingPackets = [];
+    if (this.libavCore) {
+      await this.libavCore.close();
+      this.libavCore = null;
+    }
+  }
+
+  private async activateLibav(): Promise<void> {
+    const codec = this.codec as VideoCodec;
+    if (!wasmAvailable || !LIBAV_AVC_AV1_CODECS.has(codec)) {
+      throw new Error(`SmartWebCodecsDecoder: all WebCodecs modes failed and libav unavailable for ${codec}`);
+    }
+    this.libavCore = new LibavAvcAv1Core(codec, this.config, (s) => this.onSample(s));
+    await this.libavCore.init();
+    await this.drainThroughLibav();
+  }
+
+  private async drainThroughLibav(): Promise<void> {
+    for (const chunk of this.pendingPackets) {
+      const buf = new ArrayBuffer(chunk.byteLength);
+      chunk.copyTo(buf);
+      await this.libavCore!.decode({
+        data: new Uint8Array(buf),
+        timestamp: chunk.timestamp / 1_000_000,
+        duration: (chunk.duration ?? 0) / 1_000_000,
+        type: chunk.type,
+      } as unknown as EncodedPacket);
+    }
+    await this.libavCore!.flush();
     this.pendingPackets = [];
   }
 }
