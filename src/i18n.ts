@@ -22,6 +22,7 @@ const STRINGS = {
     step_load: 'Load files',
     dropzone_text: 'Drop images or videos here',
     btn_choose_files: 'Choose files',
+    btn_load_examples: 'Load examples',
 
     // Step 2 — Preview & trim
     step_preview: 'Preview & trim',
@@ -118,6 +119,7 @@ const STRINGS = {
     step_load: 'Dateien laden',
     dropzone_text: 'Bilder oder Videos hier ablegen',
     btn_choose_files: 'Dateien ausw\u00e4hlen',
+    btn_load_examples: 'Beispiele laden',
 
     step_preview: 'Vorschau & Schnitt',
     aria_prev: 'Vorherige Datei',

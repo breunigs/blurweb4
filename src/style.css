@@ -169,10 +169,9 @@ body {
   align-items: center;
 }
 
-#pick-btn {
+#pick-btn,
+#examples-btn {
   padding: 9px 20px;
-  background: var(--accent);
-  color: #fff;
   border: none;
   border-radius: 8px;
   cursor: pointer;
@@ -181,8 +180,27 @@ body {
   font-weight: 500;
 }
 
+#pick-btn {
+  background: var(--accent);
+  color: #fff;
+}
+
 #pick-btn:hover {
   background: var(--accent-h);
+}
+
+#examples-btn {
+  background: var(--card2);
+  color: var(--dim);
+}
+
+#examples-btn:hover {
+  color: var(--text);
+}
+
+#examples-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 
 #file-input {
