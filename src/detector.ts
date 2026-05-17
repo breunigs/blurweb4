@@ -12,6 +12,7 @@
 import * as ort from 'onnxruntime-web';
 import { getConfig, type DrawMode, type ModelChoice } from './config';
 import { blurrer } from './blurrer';
+import { LruMap } from './lruMap';
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -199,7 +200,7 @@ export function getInferenceStats(): Record<ModelChoice, InferenceModelStats> {
 
 // ── In-memory cache ───────────────────────────────────────────────────────────
 
-const memCache = new Map<string, Detection[]>();
+const memCache = new LruMap<string, Detection[]>(500);
 
 // ── Trim persistence ──────────────────────────────────────────────────────────
 
