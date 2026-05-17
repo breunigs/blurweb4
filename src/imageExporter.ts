@@ -38,7 +38,7 @@ function extractExif(jpeg: Uint8Array): Uint8Array | null {
  * Return a new JPEG buffer with all APPn segments from the canvas-produced
  * JPEG replaced by the given EXIF APP1 segment.
  */
-function injectExif(canvasJpeg: Uint8Array, exifSegment: Uint8Array): Uint8Array {
+function injectExif(canvasJpeg: Uint8Array, exifSegment: Uint8Array): Uint8Array<ArrayBuffer> {
   // Skip over all existing APP0..APP15 segments (markers E0..EF).
   let pos = 2; // skip SOI
   while (pos + 4 <= canvasJpeg.length) {
