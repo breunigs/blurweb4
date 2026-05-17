@@ -239,7 +239,14 @@ export function clearDetectionCache(): Promise<void> {
 
 let sessionPromise: Promise<ort.InferenceSession> | null = null;
 
+// Resolved once at first session creation and reused for all subsequent sessions.
+// Re-requesting the adapter/device on each model switch causes the second call to
+// silently fail (the adapter becomes lost after the first session is destroyed),
+// which drops WebGPU and falls back to WASM even when it was working before.
+let resolvedEps: string[] | null = null;
+
 async function resolveEps(): Promise<string[]> {
+  if (resolvedEps !== null) return resolvedEps;
   const eps: string[] = [];
   if (typeof navigator !== 'undefined' && 'gpu' in navigator) {
     try {
@@ -258,6 +265,7 @@ async function resolveEps(): Promise<string[]> {
     }
   }
   eps.push('wasm');
+  resolvedEps = eps;
   return eps;
 }
 
