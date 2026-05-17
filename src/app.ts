@@ -195,7 +195,7 @@ export class App {
     const dr = document.querySelector<HTMLInputElement>(`input[name="drawMode"][value="${cfg.drawMode}"]`);
     if (dr) dr.checked = true;
     const meta = document.querySelector<HTMLInputElement>(
-      `input[name="keepMetadata"][value="${cfg.keepMetadata ? 'keep' : 'strip'}"]`,
+      `input[name="keepMetadata"][value="${cfg.keepMetadata}"]`,
     );
     if (meta) meta.checked = true;
     const audio = document.querySelector<HTMLInputElement>(
@@ -242,7 +242,7 @@ export class App {
       if (area) area.textContent = '';
     });
     document.getElementById('defaults-btn')!.addEventListener('click', () => {
-      setConfig({ model: 'detect_n', drawMode: 'blur', keepMetadata: true, keepAudio: true, minConfidence: 0.1 });
+      setConfig({ model: 'detect_n', drawMode: 'blur', keepMetadata: 'keep', keepAudio: true, minConfidence: 0.1 });
     });
     document.getElementById('delete-detections-btn')?.addEventListener('click', () => {
       if (!confirm(t('confirm_delete_detections'))) return;
@@ -412,7 +412,7 @@ export class App {
     });
     document.getElementById('metadata-radio-group')!.addEventListener('change', (e) => {
       const t = e.target as HTMLInputElement;
-      if (t.name === 'keepMetadata') setConfig({ keepMetadata: t.value === 'keep' });
+      if (t.name === 'keepMetadata') setConfig({ keepMetadata: t.value as AppConfig['keepMetadata'] });
     });
     document.getElementById('audio-radio-group')!.addEventListener('change', (e) => {
       const t = e.target as HTMLInputElement;

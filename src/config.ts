@@ -1,10 +1,11 @@
 export type DrawMode = 'outline' | 'blackout' | 'blur';
 export type ModelChoice = 'detect_n' | 'detect_x';
+export type MetadataMode = 'keep' | 'gps' | 'strip';
 
 export interface AppConfig {
   model: ModelChoice;
   drawMode: DrawMode;
-  keepMetadata: boolean;
+  keepMetadata: MetadataMode;
   keepAudio: boolean;
   minConfidence: number;
 }
@@ -13,7 +14,7 @@ const STORAGE_KEY = 'blurweb4-config';
 const DEFAULTS: AppConfig = {
   model: 'detect_n',
   drawMode: 'blur',
-  keepMetadata: true,
+  keepMetadata: 'keep',
   keepAudio: true,
   minConfidence: 0.1,
 };
@@ -21,6 +22,10 @@ const DEFAULTS: AppConfig = {
 function load(): AppConfig {
   try {
     const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}');
+    // Migrate old boolean keepMetadata from pre-GPS-option versions
+    if (typeof stored.keepMetadata === 'boolean') {
+      stored.keepMetadata = stored.keepMetadata ? 'keep' : 'strip';
+    }
     return { ...DEFAULTS, ...stored };
   } catch {
     return { ...DEFAULTS };
