@@ -606,6 +606,7 @@ export class App {
         .then(async () => {
           item.loaded = true;
           canvas.dataset.loaded = 'true';
+          if (this.activeIndex === index) this.updatePreviewAspectRatio();
           const saved = await loadTrim(`${file.name}|${file.size}`);
           if (saved && item.player) {
             const dur = item.player.duration;
@@ -623,6 +624,7 @@ export class App {
         .then(async () => {
           item.loaded = true;
           canvas.dataset.loaded = 'true';
+          if (this.activeIndex === index) this.updatePreviewAspectRatio();
           const ctx = canvas.getContext('2d')!;
           const key = makeImageKey(file, canvas.width, canvas.height);
           const cached = await getCachedDetections(key);
@@ -697,6 +699,16 @@ export class App {
 
     this.updateFileNav();
     this.updateExportBtnState();
+    this.updatePreviewAspectRatio();
+  }
+
+  private updatePreviewAspectRatio(): void {
+    const item = this.items[this.activeIndex];
+    if (!item) return;
+    const { width, height } = item.canvas;
+    if (width > 0 && height > 0) {
+      this.previewArea.style.aspectRatio = `${width} / ${height}`;
+    }
   }
 
   // ── Export ──────────────────────────────────────────────────────────────────
