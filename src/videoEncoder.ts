@@ -5,7 +5,7 @@ import {
 } from 'mediabunny';
 import type { VideoSample } from 'mediabunny';
 import { detectEncoder } from './encoderConfig';
-import { detectForExport, makeVideoKey, applyDetections } from './detector';
+import { detectForExport, makeVideoKey, applyDetections, filterByConf } from './detector';
 import { getConfig } from './config';
 
 export interface EncodeResult {
@@ -95,7 +95,7 @@ export async function encodeVideo(
           // Key uses the absolute container timestamp — same as preview seek.
           // Frames previewed at the trim-start position hit the cache here.
           const key = makeVideoKey(file, offscreen.width, offscreen.height, sample.microsecondTimestamp);
-          const detections = await detectForExport(offscreen, key);
+          const detections = filterByConf(await detectForExport(offscreen, key), getConfig().minConfidence);
           applyDetections(offCtx!, detections, drawMode);
           return offscreen;
         },

@@ -6,10 +6,11 @@ export interface AppConfig {
   drawMode: DrawMode;
   keepMetadata: boolean;
   keepAudio: boolean;
+  minConfidence: number;
 }
 
 const STORAGE_KEY = 'blurweb4-config';
-const DEFAULTS: AppConfig = { model: 'detect_n', drawMode: 'blur', keepMetadata: true, keepAudio: true };
+const DEFAULTS: AppConfig = { model: 'detect_n', drawMode: 'blur', keepMetadata: true, keepAudio: true, minConfidence: 0.1 };
 
 function load(): AppConfig {
   try {

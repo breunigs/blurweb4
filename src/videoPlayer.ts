@@ -1,7 +1,7 @@
 import { Input, ALL_FORMATS, BlobSource, VideoSampleSink } from 'mediabunny';
 import {
   getCachedDetections, scheduleInference, applyDetections,
-  makeVideoKey, getAverageInferenceMs, type Detection,
+  makeVideoKey, getAverageInferenceMs, filterByConf, type Detection,
 } from './detector';
 import { getConfig } from './config';
 
@@ -46,8 +46,9 @@ export class VideoPlayer {
   }
 
   private applyAndNotify(dets: Detection[]): void {
-    applyDetections(this.ctx, dets, getConfig().drawMode);
-    this.onDetection?.(dets);
+    const filtered = filterByConf(dets, getConfig().minConfidence);
+    applyDetections(this.ctx, filtered, getConfig().drawMode);
+    this.onDetection?.(filtered);
   }
 
   async load(file: File): Promise<void> {

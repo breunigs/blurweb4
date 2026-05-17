@@ -168,6 +168,11 @@ export function getInferenceStats(): Record<ModelChoice, InferenceModelStats> {
 
 const memCache = new Map<string, Detection[]>();
 
+/** Filter detections by a minimum combined confidence score. */
+export function filterByConf(dets: Detection[], minConf: number): Detection[] {
+  return minConf <= 0 ? dets : dets.filter(d => d.conf >= minConf);
+}
+
 /** Clear the in-memory cache and all cached detections from IndexedDB. */
 export function clearDetectionCache(): Promise<void> {
   memCache.clear();

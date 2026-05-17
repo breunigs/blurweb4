@@ -4,7 +4,7 @@ import { runBatch } from './batchExporter';
 import type { ExportItem } from './batchExporter';
 import {
   getCachedDetections, scheduleInference, applyDetections,
-  makeImageKey, getAverageInferenceMs, setModel, clearDetectionCache,
+  makeImageKey, getAverageInferenceMs, setModel, clearDetectionCache, filterByConf,
 } from './detector';
 import { getConfig, setConfig, type AppConfig, type ModelChoice } from './config';
 import { t, tpl, translateLabel, applyTranslations } from './i18n';
@@ -125,7 +125,8 @@ export class App {
 
     // Test globals
     const w = window as unknown as Record<string, unknown>;
-    w.__setDrawMode  = (m: string) => setConfig({ drawMode: m as AppConfig['drawMode'] });
+    w.__setDrawMode       = (m: string) => setConfig({ drawMode: m as AppConfig['drawMode'] });
+    w.__setMinConfidence  = (v: number) => { w.__lastDetections = undefined; setConfig({ minConfidence: v }); };
     w.__setTrimStart = (t: number) => {
       const item = this.items[this.activeIndex];
       if (item?.isVideo) this.applyTrimStart(item, t);
@@ -176,6 +177,11 @@ export class App {
     if (meta) meta.checked = true;
     const audio = document.querySelector<HTMLInputElement>(`input[name="keepAudio"][value="${cfg.keepAudio ? 'keep' : 'strip'}"]`);
     if (audio) audio.checked = true;
+    const slider = document.getElementById('conf-slider') as HTMLInputElement | null;
+    if (slider) {
+      slider.value = String(Math.round(cfg.minConfidence * 100));
+      (document.getElementById('conf-value') as HTMLElement).textContent = cfg.minConfidence.toFixed(2);
+    }
   }
 
   private updateAudioSettingVisibility(): void {
@@ -379,6 +385,11 @@ export class App {
       const t = e.target as HTMLInputElement;
       if (t.name === 'keepAudio') setConfig({ keepAudio: t.value === 'keep' });
     });
+    document.getElementById('conf-slider')!.addEventListener('input', e => {
+      const val = Number((e.target as HTMLInputElement).value) / 100;
+      (document.getElementById('conf-value') as HTMLElement).textContent = val.toFixed(2);
+      setConfig({ minConfidence: val });
+    });
 
     window.addEventListener('configchange', (e) =>
       void this.onConfigChange((e as CustomEvent<AppConfig>).detail));
@@ -451,14 +462,17 @@ export class App {
       const cached = await getCachedDetections(key);
       if (cached !== null) {
         this.showDetecting(false);
-        applyDetections(ctx, cached, getConfig().drawMode);
-        this.showDetectionResult(cached);
+        const filtered = filterByConf(cached, getConfig().minConfidence);
+        applyDetections(ctx, filtered, getConfig().drawMode);
+        this.showDetectionResult(filtered);
+        (window as unknown as Record<string, unknown>).__lastDetections = filtered;
       } else {
         this.showDetecting(true);
         scheduleInference(item.canvas, key, dets => {
           this.showDetecting(false);
-          applyDetections(ctx, dets, getConfig().drawMode);
-          this.showDetectionResult(dets);
+          const filtered = filterByConf(dets, getConfig().minConfidence);
+          applyDetections(ctx, filtered, getConfig().drawMode);
+          this.showDetectionResult(filtered);
         });
       }
     } else {
@@ -557,14 +571,16 @@ export class App {
         const key = makeImageKey(file, canvas.width, canvas.height);
         const cached = await getCachedDetections(key);
         if (cached !== null) {
-          applyDetections(ctx, cached, getConfig().drawMode);
-          if (this.activeIndex === index) this.showDetectionResult(cached);
+          const filtered = filterByConf(cached, getConfig().minConfidence);
+          applyDetections(ctx, filtered, getConfig().drawMode);
+          if (this.activeIndex === index) this.showDetectionResult(filtered);
         } else {
           this.showDetecting(true);
           scheduleInference(canvas, key, dets => {
             this.showDetecting(false);
-            applyDetections(ctx, dets, getConfig().drawMode);
-            if (this.activeIndex === index) this.showDetectionResult(dets);
+            const filtered = filterByConf(dets, getConfig().minConfidence);
+            applyDetections(ctx, filtered, getConfig().drawMode);
+            if (this.activeIndex === index) this.showDetectionResult(filtered);
           });
         }
       }).catch(err => {
