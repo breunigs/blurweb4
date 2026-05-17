@@ -21,10 +21,16 @@ const OUT = join(ROOT, 'server', 'dist-embedded');
 if (existsSync(OUT)) rmSync(OUT, { recursive: true });
 mkdirSync(OUT, { recursive: true });
 
-function copyGzipped(srcFile, destFile) {
-  mkdirSync(dirname(destFile), { recursive: true });
+/**
+ * Write both the original file and a pre-compressed `.gz` variant to destBase.
+ * - destBase          — served by nginx as-is (fallback for non-gzip clients)
+ * - destBase + '.gz'  — served by nginx via gzip_static; embedded in the Go binary
+ */
+function embedFile(srcFile, destBase) {
+  mkdirSync(dirname(destBase), { recursive: true });
   const data = readFileSync(srcFile);
-  writeFileSync(destFile, gzipSync(data, { level: 9 }));
+  writeFileSync(destBase, data);
+  writeFileSync(destBase + '.gz', gzipSync(data, { level: 9 }));
 }
 
 function walkAndCopy(srcDir, destDir) {
@@ -34,7 +40,7 @@ function walkAndCopy(srcDir, destDir) {
     if (entry.isDirectory()) {
       walkAndCopy(src, dest);
     } else {
-      copyGzipped(src, dest);
+      embedFile(src, dest);
     }
   }
 }
@@ -49,17 +55,17 @@ function copyDist(srcDir, destDir) {
     if (entry.isDirectory()) {
       copyDist(src, dest);
     } else {
-      copyGzipped(src, dest);
+      embedFile(src, dest);
     }
   }
 }
 
 // index.html
-copyGzipped(join(ROOT, 'index.html'), join(OUT, 'index.html'));
+embedFile(join(ROOT, 'index.html'), join(OUT, 'index.html'));
 console.log('  index.html');
 
 // src/style.css — referenced directly from index.html as "src/style.css"
-copyGzipped(join(ROOT, 'src', 'style.css'), join(OUT, 'src', 'style.css'));
+embedFile(join(ROOT, 'src', 'style.css'), join(OUT, 'src', 'style.css'));
 console.log('  src/style.css');
 
 // dist/

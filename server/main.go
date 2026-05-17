@@ -60,13 +60,13 @@ func makeHandler(files fs.FS) http.Handler {
 			p = "index.html"
 		}
 
-		data, err := fs.ReadFile(files, p)
+		data, err := fs.ReadFile(files, p+".gz")
 		if err != nil {
 			http.NotFound(w, r)
 			return
 		}
 
-		ext := path.Ext(p)
+		ext := path.Ext(p) // use original extension for MIME, not ".gz"
 		ct := mime.TypeByExtension(ext)
 		if ct == "" {
 			ct = "application/octet-stream"
