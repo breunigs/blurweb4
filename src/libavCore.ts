@@ -39,14 +39,15 @@ const CHROMA_PLANES: Partial<Record<VideoSamplePixelFormat, 1 | 2>> = {
 
 const AVMEDIA_TYPE_VIDEO = 0;
 
-const CODEC_ID: Partial<Record<VideoCodec, number>> = {
-  avc: 27, // AV_CODEC_ID_H264
-  av1: 226, // AV_CODEC_ID_AV1
-};
-
+// Decoder names as registered in the WASM binary.
+// AVC: built-in FFmpeg h264 decoder.
+// AV1: libaom decoder — registered as 'libaom-av1', NOT 'av1'.
+// codec_id is intentionally omitted from the codecpar so ff_init_decoder
+// infers it from the decoder found by name, avoiding hardcoded-value mismatches
+// across FFmpeg versions.
 const CODEC_NAME: Partial<Record<VideoCodec, string>> = {
   avc: 'h264',
-  av1: 'libaom-av1', // the WASM is built with decoder-libaom_av1; registered name is 'libaom-av1' not 'av1'
+  av1: 'libaom-av1',
 };
 
 export const LIBAV_AVC_AV1_CODECS = new Set<VideoCodec>(['avc', 'av1']);
@@ -86,9 +87,8 @@ export class LibavAvcAv1Core {
   ) {}
 
   async init(): Promise<void> {
-    const codecId = CODEC_ID[this.codec];
     const codecName = CODEC_NAME[this.codec];
-    if (codecId === undefined || !codecName) {
+    if (!codecName) {
       throw new Error(`LibavAvcAv1Core: unsupported codec ${this.codec}`);
     }
 
@@ -105,10 +105,11 @@ export class LibavAvcAv1Core {
       extradata = d instanceof Uint8Array ? d : new Uint8Array(d as ArrayBuffer);
     }
 
+    // codec_id is omitted — ff_init_decoder infers it from the decoder found by name,
+    // avoiding mismatches from hardcoded values that vary across FFmpeg versions.
     [, this.c, this.pkt, this.frame] = (await this.libav.ff_init_decoder(codecName, {
       codecpar: {
         codec_type: AVMEDIA_TYPE_VIDEO,
-        codec_id: codecId,
         format: -1,
         width: this.config.codedWidth ?? 0,
         height: this.config.codedHeight ?? 0,
