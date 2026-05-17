@@ -87,6 +87,7 @@ interface PendingItem {
   source: HTMLCanvasElement | OffscreenCanvas;
   key: string;
   callback: (d: Detection[]) => void;
+  onError?: (err: Error) => void;
 }
 
 // ── Cache keys ────────────────────────────────────────────────────────────────
@@ -586,7 +587,15 @@ async function drainQueue(): Promise<void> {
     console.log(`[detector] drainQueue: starting inference key="${req.key}"`);
     const snap = captureSnapshot(req.source);
     const t0 = performance.now();
-    const detections = await runOnnx(snap);
+    let detections: Detection[];
+    try {
+      detections = await runOnnx(snap);
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      console.error(`[detector] inference failed key="${req.key}":`, error);
+      req.onError?.(error);
+      continue;
+    }
     const ms = performance.now() - t0;
     inferenceStats[currentModel].count++;
     inferenceStats[currentModel].totalMs += ms;
@@ -610,12 +619,13 @@ export function scheduleInference(
   source: HTMLCanvasElement | OffscreenCanvas,
   key: string,
   callback: (d: Detection[]) => void,
+  onError?: (err: Error) => void,
 ): void {
   (window as unknown as Record<string, unknown>).__lastDetections = undefined;
   const replacing = nextPending !== null;
   // Store source reference only — snapshot is taken lazily inside drainQueue
   // after a main-thread yield, so this call is non-blocking.
-  nextPending = { source, key, callback };
+  nextPending = { source, key, callback, onError };
   console.log(`[detector] scheduleInference key="${key}" replacing=${replacing} queueRunning=${queueRunning}`);
   if (!queueRunning) drainQueue().catch((err) => console.error('[detector] queue error:', err));
 }

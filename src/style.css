@@ -369,6 +369,10 @@ body {
   visibility: visible;
 }
 
+#detect-result.error {
+  color: #f87171;
+}
+
 /* Trim controls */
 #trim-section {
   margin-top: 16px;

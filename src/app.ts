@@ -322,7 +322,15 @@ export class App {
     for (const d of dets) counts[d.label] = (counts[d.label] ?? 0) + 1;
     const parts = Object.entries(counts).map(([label, n]) => `${n} ${translateLabel(label)}`);
     this.detectResultEl.textContent = dets.length === 0 ? t('no_detections') : parts.join(', ');
+    this.detectResultEl.classList.remove('error');
     this.detectResultEl.classList.add('visible');
+  }
+
+  private showInferenceError(err: Error): void {
+    this.detectStatusInline.classList.remove('visible');
+    this.detectResultEl.textContent = t('detection_failed');
+    this.detectResultEl.classList.add('visible', 'error');
+    console.error('[app] inference error shown in UI:', err.message);
   }
 
   // ── File nav ────────────────────────────────────────────────────────────────
@@ -565,12 +573,17 @@ export class App {
         (window as unknown as Record<string, unknown>).__lastDetections = filtered;
       } else {
         this.showDetecting(true);
-        scheduleInference(item.canvas, key, (dets) => {
-          this.showDetecting(false);
-          const filtered = filterByConf(dets, getConfig().minConfidence);
-          applyDetections(ctx, filtered, getConfig().drawMode);
-          this.showDetectionResult(filtered);
-        });
+        scheduleInference(
+          item.canvas,
+          key,
+          (dets) => {
+            this.showDetecting(false);
+            const filtered = filterByConf(dets, getConfig().minConfidence);
+            applyDetections(ctx, filtered, getConfig().drawMode);
+            this.showDetectionResult(filtered);
+          },
+          (err) => this.showInferenceError(err),
+        );
       }
     } else {
       await item.player?.seekTo(item.player.currentTime);
@@ -701,12 +714,17 @@ export class App {
             if (this.activeIndex === index) this.showDetectionResult(filtered);
           } else {
             this.showDetecting(true);
-            scheduleInference(canvas, key, (dets) => {
-              this.showDetecting(false);
-              const filtered = filterByConf(dets, getConfig().minConfidence);
-              applyDetections(ctx, filtered, getConfig().drawMode);
-              if (this.activeIndex === index) this.showDetectionResult(filtered);
-            });
+            scheduleInference(
+              canvas,
+              key,
+              (dets) => {
+                this.showDetecting(false);
+                const filtered = filterByConf(dets, getConfig().minConfidence);
+                applyDetections(ctx, filtered, getConfig().drawMode);
+                if (this.activeIndex === index) this.showDetectionResult(filtered);
+              },
+              (err) => { if (this.activeIndex === index) this.showInferenceError(err); },
+            );
           }
         })
         .catch((err) => {
@@ -745,7 +763,7 @@ export class App {
     this.activeIndex = index;
     this.fileSelect.selectedIndex = index;
     // Clear detection result when switching to a new file.
-    this.detectResultEl.classList.remove('visible');
+    this.detectResultEl.classList.remove('visible', 'error');
     this.detectStatusInline.classList.remove('visible');
 
     const item = this.items[index];
