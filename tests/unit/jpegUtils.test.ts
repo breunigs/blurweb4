@@ -64,7 +64,7 @@ test('returns null when APP1 marker is present but has no Exif identifier', () =
 });
 
 test('returns null when SOS is reached before any EXIF APP1', () => {
-  const jpeg = build(...SOS_MARKER);
+  const jpeg = build(SOS_MARKER);
   assert.equal(findJpegApp1(jpeg), null);
 });
 

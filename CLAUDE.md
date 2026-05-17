@@ -378,9 +378,12 @@ with WASM/WebGL runtimes.
 **Export path:** `detectForExport(source, key)` — checks memory cache, then
 IDB, then runs inference directly (no queue). Used by `videoEncoder.ts`.
 
-**Cache key:** `{MODEL_NAME}|{filename}|{filesize}|{WxH}|{frameRef}`
-where `frameRef` is `img` for images or `t{microseconds}` for video frames.
-No mtime — file name + size + dimensions are sufficient for identity.
+**Cache key:** `{MODEL_NAME}|{hash8}|{filename}|{filesize}|{WxH}|{frameRef}`
+where `frameRef` is `img` for images or `t{microseconds}` for video frames,
+and `hash8` is the first 8 hex bytes of a SHA-256 over the file's first 8 KB
+(cached in a `WeakMap<File>` after the first call). This makes the key stable
+across sessions for identical files while preventing collisions between different
+files that share the same name and size.
 
 **Persistent statistics:** inference count and total ms are stored in IDB
 (`blurweb4-detections` / `stats` store) and loaded at startup. Used to
