@@ -9,7 +9,7 @@
  * - Model selection (detect_n = single file, detect_x = 9 chunks) via setModel().
  */
 
-import * as ort from 'onnxruntime-web/all';
+import * as ort from 'onnxruntime-web';
 import { getConfig, type DrawMode, type ModelChoice } from './config';
 import { blurrer } from './blurrer';
 
@@ -249,12 +249,6 @@ async function resolveEps(): Promise<string[]> {
     } catch {
       /* skip */
     }
-  }
-  try {
-    const canvas = document.createElement('canvas');
-    if (canvas.getContext('webgl2') ?? canvas.getContext('webgl')) eps.push('webgl');
-  } catch {
-    /* skip */
   }
   eps.push('wasm');
   return eps;
