@@ -414,6 +414,8 @@ export class App {
   }
 
   private async onConfigChange(cfg: AppConfig): Promise<void> {
+    this.items.forEach(it => { it.exported = false; });
+    this.updateExportBtnState();
     if (cfg.model !== this.prevModel) {
       this.prevModel = cfg.model;
       this.showDetecting(true);
