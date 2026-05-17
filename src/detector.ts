@@ -9,7 +9,7 @@
  * - Model selection (detect_n = single file, detect_x = 9 chunks) via setModel().
  */
 
-import * as ort from 'onnxruntime-web';
+import * as ort from 'onnxruntime-web/all';
 import { getConfig, type DrawMode, type ModelChoice } from './config';
 import { blurrer } from './blurrer';
 
@@ -206,8 +206,12 @@ async function resolveEps(): Promise<string[]> {
   const eps: string[] = [];
   if (typeof navigator !== 'undefined' && 'gpu' in navigator) {
     try {
-      const adapter = await (navigator as unknown as { gpu: { requestAdapter(): Promise<unknown> } }).gpu.requestAdapter();
-      if (adapter) eps.push('webgpu');
+      const gpu = (navigator as unknown as { gpu: { requestAdapter(opts: object): Promise<{ requestDevice(): Promise<GPUDevice> } | null> } }).gpu;
+      const adapter = await gpu.requestAdapter({ powerPreference: 'high-performance' });
+      if (adapter) {
+        ort.env.webgpu.device = await adapter.requestDevice() as unknown as GPUDevice;
+        eps.push('webgpu');
+      }
     } catch { /* skip */ }
   }
   try {
