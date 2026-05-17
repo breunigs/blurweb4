@@ -813,7 +813,7 @@
   <div class="step-card" id="step-load">
     <div class="step-header">
       <div class="step-number">1</div>
-      <span class="step-title">Load files</span>
+      <span class="step-title" data-i18n="step_load">Load files</span>
     </div>
     <div class="step-body" id="load-body">
       <div id="drop-zone">
@@ -823,11 +823,11 @@
           <polyline points="17 8 12 3 7 8" />
           <line x1="12" y1="3" x2="12" y2="15" />
         </svg>
-        <p>Drop images or videos here</p>
+        <p data-i18n="dropzone_text">Drop images or videos here</p>
         <small>MP4 · MOV · WebM · JPEG · PNG · WebP</small>
       </div>
       <div id="load-actions">
-        <button id="pick-btn">Choose files</button>
+        <button id="pick-btn" data-i18n="btn_choose_files">Choose files</button>
         <input id="file-input" type="file" multiple accept="image/*,video/*">
         <span id="loaded-summary"></span>
       </div>
@@ -838,17 +838,17 @@
   <div class="step-card" id="step-preview">
     <div class="step-header">
       <div class="step-number">2</div>
-      <span class="step-title">Preview &amp; trim</span>
+      <span class="step-title" data-i18n="step_preview">Preview &amp; trim</span>
       <span class="step-subtitle" id="step-preview-subtitle"></span>
     </div>
     <div class="step-body">
 
       <!-- File navigator (prev / dropdown / next) — hidden when 1 file -->
       <div id="file-nav">
-        <button class="nav-btn" id="nav-prev" aria-label="Previous file">&#8592;</button>
-        <select id="file-select" aria-label="Selected file"></select>
+        <button class="nav-btn" id="nav-prev" aria-label="Previous file" data-i18n-label="aria_prev">&#8592;</button>
+        <select id="file-select" aria-label="Selected file" data-i18n-label="aria_file_select"></select>
         <span id="file-counter"></span>
-        <button class="nav-btn" id="nav-next" aria-label="Next file">&#8594;</button>
+        <button class="nav-btn" id="nav-next" aria-label="Next file" data-i18n-label="aria_next">&#8594;</button>
       </div>
 
       <!-- Canvas preview -->
@@ -856,23 +856,23 @@
 
       <!-- Detection status row — below the canvas, always reserves height -->
       <div id="detect-status-row">
-        <div id="detect-status-inline">Detecting…</div>
+        <div id="detect-status-inline" data-i18n="detecting">Detecting…</div>
         <span id="detect-result"></span>
-        <span id="libav-warning" hidden>Software decoder active — seeking may be slow</span>
+        <span id="libav-warning" hidden data-i18n="libav_warning">Software decoder active — seeking may be slow</span>
       </div>
 
       <!-- Trim (videos only) — visibility:hidden so it doesn't shift layout -->
       <div id="trim-section">
         <div class="trim-label-row">
-          <span class="trim-section-label">Trim range</span>
+          <span class="trim-section-label" data-i18n="trim_label">Trim range</span>
           <div class="trim-times">
             <div class="trim-time-item start">
-              <span class="trim-time-label">Start</span>
+              <span class="trim-time-label" data-i18n="trim_start">Start</span>
               <span class="trim-time-value" id="trim-start-label">0:00.000</span>
             </div>
             <span class="trim-duration" id="trim-duration-label"></span>
             <div class="trim-time-item">
-              <span class="trim-time-label">End</span>
+              <span class="trim-time-label" data-i18n="trim_end">End</span>
               <span class="trim-time-value" id="trim-end-label">0:00.000</span>
             </div>
           </div>
@@ -892,17 +892,17 @@
   <div class="step-card" id="step-settings">
     <div class="step-header">
       <div class="step-number">3</div>
-      <span class="step-title">Settings</span>
+      <span class="step-title" data-i18n="step_settings">Settings</span>
     </div>
     <div class="step-body">
       <div class="settings-grid">
 
         <!-- Model -->
         <div class="setting-row">
-          <span class="setting-row-label">Detection model</span>
+          <span class="setting-row-label" data-i18n="setting_model">Detection model</span>
           <div class="pill-group" id="model-radio-group">
-            <label><input type="radio" name="model" value="detect_n" checked>Small &mdash; fast (8 MB)</label>
-            <label><input type="radio" name="model" value="detect_x">Large &mdash; accurate (342 MB)</label>
+            <label><input type="radio" name="model" value="detect_n" checked><span data-i18n="model_small">Small &mdash; fast (8 MB)</span></label>
+            <label><input type="radio" name="model" value="detect_x"><span data-i18n="model_large">Large &mdash; accurate (342 MB)</span></label>
           </div>
           <!-- Fixed-height indicator — visibility toggled, no layout shift -->
           <div class="model-load-indicator" id="model-load-progress">
@@ -915,30 +915,30 @@
 
         <!-- Metadata -->
         <div class="setting-row">
-          <span class="setting-row-label">Metadata</span>
+          <span class="setting-row-label" data-i18n="setting_metadata">Metadata</span>
           <div class="pill-group" id="metadata-radio-group">
-            <label><input type="radio" name="keepMetadata" value="keep" checked>Keep</label>
-            <label><input type="radio" name="keepMetadata" value="strip">Strip</label>
+            <label><input type="radio" name="keepMetadata" value="keep" checked><span data-i18n="keep">Keep</span></label>
+            <label><input type="radio" name="keepMetadata" value="strip"><span data-i18n="strip">Strip</span></label>
           </div>
         </div>
 
         <!-- Audio (only shown when at least one video is loaded) -->
         <div class="setting-row" id="audio-setting-row" hidden>
-          <span class="setting-row-label">Audio</span>
+          <span class="setting-row-label" data-i18n="setting_audio">Audio</span>
           <div class="pill-group" id="audio-radio-group">
-            <label><input type="radio" name="keepAudio" value="keep" checked>Keep</label>
-            <label><input type="radio" name="keepAudio" value="strip">Strip</label>
+            <label><input type="radio" name="keepAudio" value="keep" checked><span data-i18n="keep">Keep</span></label>
+            <label><input type="radio" name="keepAudio" value="strip"><span data-i18n="strip">Strip</span></label>
           </div>
         </div>
 
         <!-- Redaction mode + detecting spinner -->
         <div class="setting-row">
-          <span class="setting-row-label">Redaction style</span>
+          <span class="setting-row-label" data-i18n="setting_redaction">Redaction style</span>
           <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
             <div class="pill-group" id="mode-radio-group">
-              <label><input type="radio" name="drawMode" value="blur" checked>Blur</label>
-              <label><input type="radio" name="drawMode" value="blackout">Blackout</label>
-              <label><input type="radio" name="drawMode" value="outline">Outline (debug)</label>
+              <label><input type="radio" name="drawMode" value="blur" checked><span data-i18n="mode_blur">Blur</span></label>
+              <label><input type="radio" name="drawMode" value="blackout"><span data-i18n="mode_blackout">Blackout</span></label>
+              <label><input type="radio" name="drawMode" value="outline"><span data-i18n="mode_outline">Outline (debug)</span></label>
             </div>
             <div id="detect-status-settings"></div>
           </div>
@@ -952,16 +952,16 @@
   <div class="step-card" id="step-export">
     <div class="step-header">
       <div class="step-number">4</div>
-      <span class="step-title">Export</span>
+      <span class="step-title" data-i18n="step_export">Export</span>
     </div>
     <div class="step-body">
       <div class="export-actions">
-        <button id="export-btn" disabled>Export current file</button>
-        <button id="export-all-btn" disabled>Export all files</button>
+        <button id="export-btn" disabled data-i18n="btn_export">Export current file</button>
+        <button id="export-all-btn" disabled data-i18n="btn_export_all">Export all files</button>
       </div>
       <div class="export-progress-rows">
         <div class="export-global-row" id="export-global-row">
-          <span class="export-global-label">Overall</span>
+          <span class="export-global-label" data-i18n="overall">Overall</span>
           <div id="global-progress-track">
             <div id="global-progress-fill"></div>
           </div>
@@ -976,8 +976,8 @@
   <div class="step-card" id="step-debug">
     <div class="step-header">
       <div class="step-number" style="background:var(--muted)">5</div>
-      <span class="step-title">Debug log</span>
-      <span class="step-subtitle">All console output captured here</span>
+      <span class="step-title" data-i18n="step_debug">Debug log</span>
+      <span class="step-subtitle" data-i18n="debug_subtitle">All console output captured here</span>
     </div>
     <div class="step-body">
       <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
@@ -990,7 +990,7 @@
           cursor:pointer;
           font-size:13px;
           font-family:inherit;">
-          Copy to clipboard
+          <span data-i18n="btn_copy">Copy to clipboard</span>
         </button>
         <button id="clear-log-btn" style="
           padding:7px 16px;
@@ -1001,7 +1001,7 @@
           cursor:pointer;
           font-size:13px;
           font-family:inherit;">
-          Clear
+          <span data-i18n="btn_clear">Clear</span>
         </button>
         <span id="copy-log-status" style="font-size:12px;color:var(--muted);align-self:center;"></span>
       </div>
