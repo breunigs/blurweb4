@@ -12,8 +12,9 @@ blurweb4/
 │   ├── imageRenderer.ts  createImageBitmap → canvas (renders bitmap only, no detection)
 │   ├── videoPlayer.ts    mediabunny VideoSampleSink wrapper with play/pause/seek
 │   ├── hevcDecoder.ts    libav.js WASM fallback decoder for HEVC (registered at startup)
-│   ├── softwareDecoder.ts  smart WebCodecs decoder with hw→sw→no-pref fallback chain
-│   ├── libavVideoDecoder.ts  libav.js WASM fallback for AVC/AV1 (last resort)
+│   ├── softwareDecoder.ts  smart WebCodecs decoder with hw→sw→no-pref→libav fallback chain
+│   ├── libavCore.ts        shared libav.js AVC/AV1 core (used by softwareDecoder + libavVideoDecoder)
+│   ├── libavVideoDecoder.ts  libav.js fallback for AVC/AV1 when WebCodecs entirely absent
 │   ├── detector.ts       YOLOv5 ONNX inference, IDB cache, inference queue, drawing
 │   ├── encoderConfig.ts  codec/hardware detection for export
 │   ├── videoEncoder.ts   mediabunny Conversion-based re-encoder (bakes detections in)
@@ -175,19 +176,29 @@ then throws `InvalidStateError` because the decoder is closed.
 
 The fix: buffer every `EncodedVideoChunk` in `pendingPackets` inside `decode()`.  In
 `flush()`, if the flush fails (or `runtimeError` is already set / decoder already
-closed), call `reinitWithNextMode()` then replay all buffered packets through the new
-decoder and flush again.  `pendingPackets` is cleared only on a successful flush.
+closed), loop through ALL remaining WebCodecs modes via `reinitWithNextMode()`,
+replaying buffered packets through each.  If all WebCodecs modes are exhausted,
+activate the libav inline fallback (see below).  `pendingPackets` is cleared only
+on a successful flush.
 
-**libav.js ultimate fallback (src/libavVideoDecoder.ts):**
-`LibavVideoFallbackDecoder` claims AVC and AV1 only when `areAllWebCodecsFailed(codec)`
-returns true (exported from softwareDecoder.ts).  It also HEAD-checks the vendor WASM
-at startup and will not activate if the file is absent.  Vendor files go in
-`vendor/libav-avc-av1/` — see that file's header for build instructions.
+**libav.js inline fallback (src/libavCore.ts + src/softwareDecoder.ts):**
+When all three WebCodecs modes fail at runtime, `SmartWebCodecsDecoder.flush()`
+activates a `LibavAvcAv1Core` instance inline — replaying all buffered packets through
+libav without any mediabunny decoder re-selection.  This handles browsers like iOS
+Safari that report `isConfigSupported = true` but fail at decode time.
+
+The shared logic lives in `src/libavCore.ts` (`LibavAvcAv1Core`, `wasmAvailable`,
+`LIBAV_AVC_AV1_CODECS`).  Both `softwareDecoder.ts` and `libavVideoDecoder.ts` import
+from it.
+
+**libav.js standalone fallback (src/libavVideoDecoder.ts):**
+`LibavVideoFallbackDecoder` activates only when `typeof VideoDecoder === 'undefined'`
+(WebCodecs entirely absent).  It's a thin wrapper around `LibavAvcAv1Core`.
 
 **Registration order in main.ts matters:**
 1. `hevcDecoder` — HEVC → always libav
-2. `softwareDecoder` — AVC/VP9/AV1/VP8 → smart WebCodecs, checked first
-3. `libavVideoDecoder` — AVC/AV1 → libav fallback, checked only if #2 returns false
+2. `softwareDecoder` — AVC/VP9/AV1/VP8 → smart WebCodecs + inline libav fallback
+3. `libavVideoDecoder` — AVC/AV1 → libav only when WebCodecs is entirely absent
 
 ## HEVC / H.265 support
 
