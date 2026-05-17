@@ -775,6 +775,49 @@ test.describe('Per-model inference stats', () => {
   });
 });
 
+// ── Trim persistence (IDB) ───────────────────────────────────────────────────
+
+test.describe('Trim persistence', () => {
+  test('trim values are saved to IDB and restored on reload', async ({ page }) => {
+    const videoPath = path.join(EXAMPLES, 'x264.mp4');
+    const TRIM_START = 0.2;
+    const TRIM_END   = 0.8;
+    const TOL = 0.05; // seconds
+
+    // Load video and set trim.
+    await loadFile(page, videoPath);
+    await waitForCanvas(page);
+    await page.waitForFunction(() =>
+      document.getElementById('trim-section')?.classList.contains('visible'));
+
+    await page.evaluate(({ s, e }) => {
+      (window as any).__setTrimStart(s);
+      (window as any).__setTrimEnd(e);
+    }, { s: TRIM_START, e: TRIM_END });
+
+    // Wait for the IDB write (fire-and-forget, resolves quickly).
+    await page.waitForTimeout(300);
+
+    // Reload and re-open the same file.
+    await page.goto('http://localhost:3100');
+    await page.locator('#file-input').setInputFiles(videoPath);
+    await waitForCanvas(page);
+    await page.waitForFunction(() =>
+      document.getElementById('trim-section')?.classList.contains('visible'));
+    // Give the async IDB read + setupTrimSlider a moment to complete.
+    await page.waitForTimeout(300);
+
+    const vals = await page.evaluate(
+      () => (window as any).__getActiveTrimValues() as { start: number; end: number } | null,
+    );
+    expect(vals).not.toBeNull();
+    expect(Math.abs(vals!.start - TRIM_START),
+      `trimStart: got ${vals!.start}, expected ~${TRIM_START}`).toBeLessThanOrEqual(TOL);
+    expect(Math.abs(vals!.end - TRIM_END),
+      `trimEnd: got ${vals!.end}, expected ~${TRIM_END}`).toBeLessThanOrEqual(TOL);
+  });
+});
+
 // ── Trim cache alignment ──────────────────────────────────────────────────────
 // Verify that trimming from a non-zero start doesn't break the inference cache.
 // Cache keys use the frame's absolute container timestamp (microsecondTimestamp),
