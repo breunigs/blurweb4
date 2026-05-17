@@ -439,6 +439,7 @@ function iou(a: RawBox, b: RawBox): number {
 function postprocess(output: ort.Tensor, scale: number, padX: number, padY: number): Detection[] {
   const data = output.data as Float32Array;
   const [, rows, cols] = output.dims as [number, number, number];
+  console.log(`[detector] starting post-process`);
   if (dbg()) console.log(`[detector][debug] raw output: ${rows} rows × ${cols} cols`);
   let nObjPass = 0,
     nClassPass = 0;
@@ -469,6 +470,8 @@ function postprocess(output: ort.Tensor, scale: number, padX: number, padY: numb
     );
   }
 
+  console.log(`[detector] starting NMS`);
+
   // Per-class greedy NMS (descending confidence).
   const kept: RawBox[] = [];
   for (const classRaw of rawByClass) {
@@ -490,6 +493,8 @@ function postprocess(output: ort.Tensor, scale: number, padX: number, padY: numb
       for (let j = i + 1; j < classRaw.length; j++) if (!sup[j] && iou(classRaw[i], classRaw[j]) > THRESHOLD_IOU) sup[j] = 1;
     }
   }
+
+  console.log(`[detector] post-process complete`);
 
   if (dbg()) console.log(`[detector][debug] after NMS: ${nClassPass} → ${kept.length} detections`);
   if (dbg())

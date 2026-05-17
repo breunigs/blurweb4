@@ -99,13 +99,30 @@
     </div>
     <div class="step-body">
       <div class="settings-grid">
+        <!-- Redaction mode + detecting spinner -->
+        <div class="setting-row">
+          <span class="setting-row-label" data-i18n="setting_redaction">Redaction style</span>
+          <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+            <div class="pill-group" id="mode-radio-group">
+              <label><input type="radio" name="drawMode" value="blur" checked><span
+                  data-i18n="mode_blur">Blur</span></label>
+              <label><input type="radio" name="drawMode" value="blackout"><span
+                  data-i18n="mode_blackout">Blackout</span></label>
+              <label><input type="radio" name="drawMode" value="outline"><span data-i18n="mode_outline">Outline
+                  (debug)</span></label>
+            </div>
+            <div id="detect-status-settings"></div>
+          </div>
+        </div>
 
         <!-- Model -->
         <div class="setting-row">
           <span class="setting-row-label" data-i18n="setting_model">Detection model</span>
           <div class="pill-group" id="model-radio-group">
-            <label><input type="radio" name="model" value="detect_n" checked><span data-i18n="model_small">Small &mdash; fast (8 MB)</span></label>
-            <label><input type="radio" name="model" value="detect_x"><span data-i18n="model_large">Large &mdash; accurate (342 MB)</span></label>
+            <label><input type="radio" name="model" value="detect_n" checked><span data-i18n="model_small">Small &mdash;
+                fast (8 MB)</span></label>
+            <label><input type="radio" name="model" value="detect_x"><span data-i18n="model_large">Large &mdash;
+                accurate (342 MB)</span></label>
           </div>
           <!-- Fixed-height indicator — visibility toggled, no layout shift -->
           <div class="model-load-indicator" id="model-load-progress">
@@ -120,7 +137,8 @@
         <div class="setting-row">
           <span class="setting-row-label" data-i18n="setting_metadata">Metadata</span>
           <div class="pill-group" id="metadata-radio-group">
-            <label><input type="radio" name="keepMetadata" value="keep" checked><span data-i18n="keep">Keep</span></label>
+            <label><input type="radio" name="keepMetadata" value="keep" checked><span
+                data-i18n="keep">Keep</span></label>
             <label><input type="radio" name="keepMetadata" value="strip"><span data-i18n="strip">Strip</span></label>
           </div>
         </div>
@@ -129,7 +147,8 @@
         <div class="setting-row">
           <span class="setting-row-label" data-i18n="setting_confidence">Min. confidence</span>
           <div style="display:flex;align-items:center;gap:10px;">
-            <input type="range" id="conf-slider" min="1" max="99" value="10" step="1" style="flex:1;min-width:120px;max-width:220px;">
+            <input type="range" id="conf-slider" min="1" max="99" value="10" step="1"
+              style="flex:1;min-width:120px;max-width:220px;">
             <span id="conf-value" style="font-variant-numeric:tabular-nums;min-width:2.8em;">0.10</span>
           </div>
         </div>
@@ -140,19 +159,6 @@
           <div class="pill-group" id="audio-radio-group">
             <label><input type="radio" name="keepAudio" value="keep" checked><span data-i18n="keep">Keep</span></label>
             <label><input type="radio" name="keepAudio" value="strip"><span data-i18n="strip">Strip</span></label>
-          </div>
-        </div>
-
-        <!-- Redaction mode + detecting spinner -->
-        <div class="setting-row">
-          <span class="setting-row-label" data-i18n="setting_redaction">Redaction style</span>
-          <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
-            <div class="pill-group" id="mode-radio-group">
-              <label><input type="radio" name="drawMode" value="blur" checked><span data-i18n="mode_blur">Blur</span></label>
-              <label><input type="radio" name="drawMode" value="blackout"><span data-i18n="mode_blackout">Blackout</span></label>
-              <label><input type="radio" name="drawMode" value="outline"><span data-i18n="mode_outline">Outline (debug)</span></label>
-            </div>
-            <div id="detect-status-settings"></div>
           </div>
         </div>
 
