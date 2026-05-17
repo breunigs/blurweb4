@@ -37,8 +37,8 @@ const STRINGS = {
     // Step 3 — Settings
     step_settings: 'Settings',
     setting_model: 'Detection model',
-    model_small: 'Small \u2014 fast (8\u00a0MB)',
-    model_large: 'Large \u2014 accurate (185\u00a0MB)',
+    model_small: 'Fast \u2014 small (8\u00a0MB)',
+    model_large: 'Accurate \u2014 large (178\u00a0MB)',
     setting_metadata: 'Metadata',
     setting_audio: 'Audio',
     keep: 'Keep',
@@ -131,8 +131,8 @@ const STRINGS = {
 
     step_settings: 'Einstellungen',
     setting_model: 'Erkennungsmodell',
-    model_small: 'Klein \u2014 schnell (8\u00a0MB)',
-    model_large: 'Gro\u00df \u2014 genau (185\u00a0MB)',
+    model_small: 'Schnell \u2014 klein (8\u00a0MB)',
+    model_large: 'Genau \u2014 gro\u00df (178\u00a0MB)',
     setting_metadata: 'Metadaten',
     setting_audio: 'Audio',
     keep: 'Behalten',
