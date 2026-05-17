@@ -64,6 +64,10 @@ function copyDist(srcDir, destDir) {
 embedFile(join(ROOT, 'index.html'), join(OUT, 'index.html'));
 console.log('  index.html');
 
+// robots.txt
+embedFile(join(ROOT, 'robots.txt'), join(OUT, 'robots.txt'));
+console.log('  robots.txt');
+
 // src/style.css — referenced directly from index.html as "src/style.css"
 embedFile(join(ROOT, 'src', 'style.css'), join(OUT, 'src', 'style.css'));
 console.log('  src/style.css');
