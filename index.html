@@ -119,20 +119,27 @@
         <!-- Model -->
         <div class="setting-row">
           <span class="setting-row-label" data-i18n="setting_model">Detection model</span>
-          <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
-            <div class="pill-group" id="model-radio-group">
-              <label><input type="radio" name="model" value="detect_n" checked><span data-i18n="model_small">Small &mdash;
-                  fast (8 MB)</span></label>
-              <label><input type="radio" name="model" value="detect_x"><span data-i18n="model_large">Large &mdash;
-                  accurate (342 MB)</span></label>
-            </div>
-            <!-- Sits inline with buttons on desktop; wraps below on narrow screens -->
-            <div class="model-load-indicator" id="model-load-progress">
-              <div id="model-load-bar-track">
-                <div id="model-load-bar-fill"></div>
-              </div>
-              <span id="model-load-text"></span>
-            </div>
+          <div class="pill-group" id="model-radio-group">
+            <label><input type="radio" name="model" value="detect_n" checked><span data-i18n="model_small">Small &mdash;
+                fast (8 MB)</span></label>
+            <label><input type="radio" name="model" value="detect_x"><span data-i18n="model_large">Large &mdash;
+                accurate (342 MB)</span></label>
+          </div>
+        </div>
+        <!-- Loading indicator: spans both columns, only takes space when visible -->
+        <div class="model-load-indicator" id="model-load-progress">
+          <div id="model-load-bar-track">
+            <div id="model-load-bar-fill"></div>
+          </div>
+          <span id="model-load-text"></span>
+        </div>
+
+        <!-- Min. confidence slider -->
+        <div class="setting-row">
+          <span class="setting-row-label" data-i18n="setting_confidence">Min. confidence</span>
+          <div class="conf-row">
+            <input type="range" id="conf-slider" min="1" max="99" value="10" step="1">
+            <span id="conf-value" style="font-variant-numeric:tabular-nums;min-width:2.8em;">5%</span>
           </div>
         </div>
 
@@ -148,16 +155,6 @@
           </div>
         </div>
 
-        <!-- Min. confidence slider -->
-        <div class="setting-row">
-          <span class="setting-row-label" data-i18n="setting_confidence">Min. confidence</span>
-          <div style="display:flex;align-items:center;gap:10px;">
-            <input type="range" id="conf-slider" min="1" max="99" value="10" step="1"
-              style="flex:1;min-width:120px;max-width:300px;">
-            <span id="conf-value" style="font-variant-numeric:tabular-nums;min-width:2.8em;">0.10</span>
-          </div>
-        </div>
-
         <!-- Audio (only shown when at least one video is loaded) -->
         <div class="setting-row" id="audio-setting-row" hidden>
           <span class="setting-row-label" data-i18n="setting_audio">Audio</span>
@@ -170,7 +167,7 @@
         <!-- Filename pattern -->
         <div class="setting-row">
           <span class="setting-row-label" data-i18n="naming_pattern">Filename pattern</span>
-          <div style="display:flex;align-items:center;gap:8px;">
+          <div class="naming-row">
             <input type="text" id="naming-pattern-input"
               style="font-family:var(--mono);padding:6px 10px;border:1px solid var(--border);
                      background:var(--card2);color:var(--text);border-radius:6px;font-size:13px;

@@ -209,7 +209,7 @@ export class App {
     const slider = document.getElementById('conf-slider') as HTMLInputElement | null;
     if (slider) {
       slider.value = String(Math.round(cfg.minConfidence * 100));
-      (document.getElementById('conf-value') as HTMLElement).textContent = cfg.minConfidence.toFixed(2);
+      (document.getElementById('conf-value') as HTMLElement).textContent = `${Math.round(cfg.minConfidence * 100)}%`;
     }
     const ni = document.getElementById('naming-pattern-input') as HTMLInputElement | null;
     if (ni) ni.value = cfg.namingPattern;
@@ -477,10 +477,12 @@ export class App {
       const t = e.target as HTMLInputElement;
       if (t.name === 'keepAudio') setConfig({ keepAudio: t.value === 'keep' });
     });
+    const confValueEl = document.getElementById('conf-value') as HTMLElement;
+    const debouncedConfChange = debounce((val: number) => setConfig({ minConfidence: val }), 150);
     document.getElementById('conf-slider')!.addEventListener('input', (e) => {
       const val = Number((e.target as HTMLInputElement).value) / 100;
-      (document.getElementById('conf-value') as HTMLElement).textContent = val.toFixed(2);
-      setConfig({ minConfidence: val });
+      confValueEl.textContent = `${Math.round(val * 100)}%`;
+      debouncedConfChange(val);
     });
 
     window.addEventListener('configchange', (e) => void this.onConfigChange((e as CustomEvent<AppConfig>).detail));
@@ -563,17 +565,21 @@ export class App {
     const item = this.items[this.activeIndex];
     if (!item) return;
     if (!item.isVideo) {
-      await renderImage(item.file, item.canvas);
-      const ctx = item.canvas.getContext('2d')!;
       const key = makeImageKey(item.file, item.canvas.width, item.canvas.height);
       const cached = await getCachedDetections(key);
       if (cached !== null) {
+        // Fast path: re-decode the image then overlay cached detections.
+        await renderImage(item.file, item.canvas);
+        const ctx = item.canvas.getContext('2d')!;
         this.showDetecting(false);
         const filtered = filterByConf(cached, getConfig().minConfidence);
         applyDetections(ctx, filtered, getConfig().drawMode);
         this.showDetectionResult(filtered);
         (window as unknown as Record<string, unknown>).__lastDetections = filtered;
       } else {
+        // No cache yet — render and schedule inference.
+        await renderImage(item.file, item.canvas);
+        const ctx = item.canvas.getContext('2d')!;
         this.showDetecting(true);
         scheduleInference(
           item.canvas,
@@ -619,7 +625,6 @@ export class App {
       this.addFile(vidFile, false);
     } catch (err) {
       console.error('Failed to load examples:', err);
-    } finally {
       btn.disabled = false;
     }
   }
