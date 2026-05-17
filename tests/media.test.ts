@@ -74,12 +74,12 @@ function withinTolerance(
 }
 
 // ── JPEG image ───────────────────────────────────────────────────────────────
-// Reference pixels extracted with PIL from examples/jpeg.jpg (sRGB)
-//   (0,0)       → rgb(82, 124, 162)
-//   (1352, 760) → rgb(134, 131, 114)
-//   (2703, 1520)→ rgb(133, 141, 164)
-//   (100, 100)  → rgb(159, 145, 145)
-//   (676, 380)  → rgb(94,   60,  50)
+// Reference pixels extracted with PIL from examples/jpeg.jpg (iPhone 12 mini, sRGB)
+//   (0,0)       → rgb(255, 255, 255)
+//   (768, 1024) → rgb(57, 47, 37)
+//   (1535, 2047)→ rgb(134, 130, 119)
+//   (384, 512)  → rgb(72, 72, 74)
+//   (1152, 512) → rgb(37, 34, 27)
 
 test.describe('JPEG image decoding', () => {
   test('canvas dimensions and pixel values match reference', async ({ page }) => {
@@ -87,24 +87,24 @@ test.describe('JPEG image decoding', () => {
     await waitForCanvas(page);
 
     const refPixels: [number, number, number][] = [
-      [82, 124, 162],
-      [134, 131, 114],
-      [133, 141, 164],
-      [159, 145, 145],
-      [94, 60, 50],
+      [255, 255, 255],
+      [57, 47, 37],
+      [134, 130, 119],
+      [72, 72, 74],
+      [37, 34, 27],
     ];
     const sampleCoords: [number, number][] = [
       [0, 0],
-      [1352, 760],
-      [2703, 1520],
-      [100, 100],
-      [676, 380],
+      [768, 1024],
+      [1535, 2047],
+      [384, 512],
+      [1152, 512],
     ];
 
     const result = await sampleCanvas(page, sampleCoords);
 
-    expect(result.width).toBe(2704);
-    expect(result.height).toBe(1521);
+    expect(result.width).toBe(1536);
+    expect(result.height).toBe(2048);
 
     const TOLERANCE = 20; // allow ±20 per channel for colour-space differences
     for (let i = 0; i < refPixels.length; i++) {
@@ -114,6 +114,83 @@ test.describe('JPEG image decoding', () => {
           `got rgb(${result.pixels[i]}) expected rgb(${refPixels[i]}) ±${TOLERANCE}`,
       ).toBe(true);
     }
+  });
+});
+
+// ── JPEG export: EXIF preservation ───────────────────────────────────────────
+// examples/jpeg.jpg is an iPhone photo with GPS EXIF data.
+// Verify that the exported JPEG retains the EXIF APP1 segment (GPS present),
+// and that stripping metadata produces a JPEG without it.
+
+function hasExifGps(bytes: Buffer): boolean {
+  // Walk JPEG segments looking for APP1 (FF E1) with Exif\0\0 marker.
+  let pos = 2; // skip SOI
+  while (pos + 4 <= bytes.length) {
+    if (bytes[pos] !== 0xFF) break;
+    const marker = bytes[pos + 1];
+    if (marker === 0xDA) break; // SOS
+    const segLen = (bytes[pos + 2] << 8) | bytes[pos + 3];
+    if (marker === 0xE1 &&
+        bytes[pos + 4] === 0x45 && bytes[pos + 5] === 0x78 &&
+        bytes[pos + 6] === 0x69 && bytes[pos + 7] === 0x66) {
+      return true; // found Exif APP1
+    }
+    pos += 2 + segLen;
+  }
+  return false;
+}
+
+test.describe('JPEG export — EXIF preservation', () => {
+  test('exported JPEG retains EXIF when keepMetadata=keep', async ({ page }) => {
+    await loadFile(page, path.join(EXAMPLES, 'jpeg.jpg'));
+    await waitForCanvas(page);
+    await waitForDetections(page);
+
+    // Ensure keepMetadata=keep (default)
+    await page.evaluate(() => {
+      (document.querySelector('input[name="keepMetadata"][value="keep"]') as HTMLInputElement).click();
+    });
+
+    const downloadPromise = page.waitForEvent('download', { timeout: 30_000 });
+    await page.locator('#export-btn').click();
+    const download = await downloadPromise;
+
+    const tmpPath = path.join(path.dirname(fileURLToPath(import.meta.url)), '../.tmp-jpeg-keep.jpg');
+    await download.saveAs(tmpPath);
+    let hasExif: boolean;
+    try {
+      const bytes = (await import('fs')).readFileSync(tmpPath);
+      hasExif = hasExifGps(bytes);
+    } finally {
+      import('fs').then(fs => fs.unlinkSync(tmpPath)).catch(() => {});
+    }
+    expect(hasExif, 'Exported JPEG should contain EXIF APP1 segment').toBe(true);
+  });
+
+  test('exported JPEG strips EXIF when keepMetadata=strip', async ({ page }) => {
+    await loadFile(page, path.join(EXAMPLES, 'jpeg.jpg'));
+    await waitForCanvas(page);
+    await waitForDetections(page);
+
+    // Switch to strip
+    await page.evaluate(() => {
+      (document.querySelector('input[name="keepMetadata"][value="strip"]') as HTMLInputElement).click();
+    });
+
+    const downloadPromise = page.waitForEvent('download', { timeout: 30_000 });
+    await page.locator('#export-btn').click();
+    const download = await downloadPromise;
+
+    const tmpPath = path.join(path.dirname(fileURLToPath(import.meta.url)), '../.tmp-jpeg-strip.jpg');
+    await download.saveAs(tmpPath);
+    let hasExif: boolean;
+    try {
+      const bytes = (await import('fs')).readFileSync(tmpPath);
+      hasExif = hasExifGps(bytes);
+    } finally {
+      import('fs').then(fs => fs.unlinkSync(tmpPath)).catch(() => {});
+    }
+    expect(hasExif, 'Exported JPEG should NOT contain EXIF when strip is selected').toBe(false);
   });
 });
 
@@ -370,8 +447,6 @@ for (const { file, codec, wasmFallback } of EXPORT_CASES) {
 }
 
 // ── Object detection ─────────────────────────────────────────────────────────
-// Reference detections captured from detect_n_2024_04.onnx on examples/jpeg.jpg
-// (and verified to match the first frame of each video).
 // Cross-browser: Chromium and Firefox produce identical results (deterministic WASM inference).
 
 interface RefDetection {
@@ -380,7 +455,16 @@ interface RefDetection {
   x: number; y: number; w: number; h: number;
 }
 
-const REF_DETECTIONS: RefDetection[] = [
+// Reference detections for examples/jpeg.jpg (iPhone 12 mini photo, 1536×2048).
+// With letterbox preprocessing the model now finds 3 plates (matches PyTorch output).
+const JPEG_REF_DETECTIONS: RefDetection[] = [
+  { label: 'plate', conf_min: 0.85, x: 479, y: 1588, w: 208, h: 51 },
+  { label: 'plate', conf_min: 0.60, x:  54, y: 1377, w:  35, h: 10 },
+  { label: 'plate', conf_min: 0.35, x: 253, y: 1365, w:  26, h:  8 },
+];
+
+// Reference detections for the three test videos (all same road scene, display 2704×1521).
+const VIDEO_REF_DETECTIONS: RefDetection[] = [
   { label: 'plate', conf_min: 0.87, x: 1715, y: 858, w: 67, h: 18 },
   { label: 'plate', conf_min: 0.76, x: 2618, y: 1096, w: 85, h: 62 },
 ];
@@ -416,7 +500,7 @@ test.describe('Object detection — JPEG first frame', () => {
     await loadFile(page, path.join(EXAMPLES, 'jpeg.jpg'));
     await waitForCanvas(page);
     const detections = await waitForDetections(page);
-    assertDetectionsMatch(detections, REF_DETECTIONS);
+    assertDetectionsMatch(detections, JPEG_REF_DETECTIONS);
   });
 });
 
@@ -427,8 +511,8 @@ const DETECTION_VIDEO_CASES = [
 ];
 
 // ── Draw mode tests ───────────────────────────────────────────────────────────
-// REF_DETECTIONS[0] is a plate at approximately x=1715, y=858, w=67, h=18.
-// Centre of that box is roughly (1748, 867).
+// JPEG_REF_DETECTIONS[1] is a plate at approximately x=54, y=1377, w=35, h=10.
+// Point (74, 1382) lies inside that box and is used as the sample coordinate.
 
 test.describe('Draw modes', () => {
   // Load the JPEG, wait for outline-mode detections (default), then switch modes.
@@ -443,7 +527,7 @@ test.describe('Draw modes', () => {
 
     const pixel = await page.evaluate(() => {
       const canvas = document.querySelector<HTMLCanvasElement>('.canvas-wrapper.active canvas')!;
-      const d = canvas.getContext('2d')!.getImageData(1748, 867, 1, 1).data;
+      const d = canvas.getContext('2d')!.getImageData(74, 1382, 1, 1).data;
       return [d[0], d[1], d[2]];
     });
     expect(pixel[0], `R channel at detection centre: ${pixel}`).toBeLessThan(10);
@@ -465,7 +549,7 @@ test.describe('Draw modes', () => {
     // Capture baseline inside the plate box in outline mode (should show original pixels).
     const baseline = await page.evaluate(() => {
       const canvas = document.querySelector<HTMLCanvasElement>('.canvas-wrapper.active canvas')!;
-      const d = canvas.getContext('2d')!.getImageData(1748, 867, 1, 1).data;
+      const d = canvas.getContext('2d')!.getImageData(74, 1382, 1, 1).data;
       return [d[0], d[1], d[2]];
     });
 
@@ -475,7 +559,7 @@ test.describe('Draw modes', () => {
 
     const blurred = await page.evaluate(() => {
       const canvas = document.querySelector<HTMLCanvasElement>('.canvas-wrapper.active canvas')!;
-      const d = canvas.getContext('2d')!.getImageData(1748, 867, 1, 1).data;
+      const d = canvas.getContext('2d')!.getImageData(74, 1382, 1, 1).data;
       return [d[0], d[1], d[2]];
     });
 
@@ -809,7 +893,7 @@ for (const { file, codec, wasmFallback } of DETECTION_VIDEO_CASES) {
       }
 
       const detections = await waitForDetections(page, waitMs);
-      assertDetectionsMatch(detections, REF_DETECTIONS);
+      assertDetectionsMatch(detections, VIDEO_REF_DETECTIONS);
     });
   });
 }

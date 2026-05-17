@@ -339,6 +339,18 @@ Input: `[1, 3, 736, 1280]` float32 RGB CHW tensor normalized to [0, 1].
 Output: `[1, N, 7]` — rows of `[cx, cy, w, h, obj_conf, plate_conf, person_conf]`
 in model-pixel coordinates (0..1280, 0..736).
 
+**Preprocessing — letterboxing (important):**
+The model was trained on letterboxed inputs. `captureSnapshot` scales the source
+uniformly (`scale = min(MODEL_W/srcW, MODEL_H/srcH)`), draws it centred, and fills
+the remaining area with `rgb(114,114,114)` (YOLOv5 default). The resulting
+`scale`, `padX`, `padY` are stored in `Snapshot` and used in `postprocess` to
+unmap model-pixel coordinates back to original-image coordinates:
+```typescript
+x = (cx - w/2 - padX) / scale
+y = (cy - h/2 - padY) / scale
+```
+Stretching (old behaviour) caused badly missed detections on portrait sources.
+
 **Execution provider priority:** WebGPU → WebGL → WASM (probed at startup,
 falls back to next on failure). All ONNX calls are **serialized** via a
 promise chain (`onnxChain`) — concurrent `session.run()` calls cause issues
@@ -375,13 +387,20 @@ at top with spinner animation while inference is pending, hidden on completion
 or cache hit. Text: `" detecting… (~Xs per frame)"` once stats are available.
 
 **Test reference detections** (from `detect_n_2024_04.onnx` on `jpeg.jpg`
-at display size 2704×1521, same scene as first frame of all three videos):
+at display size 1536×2048, iPhone 12 mini photo):
 ```typescript
-{ label: 'plate', conf_min: 0.87, x: 1715, y: 858, w: 67, h: 18 },
-{ label: 'plate', conf_min: 0.76, x: 2618, y: 1096, w: 85, h: 62 },
+{ label: 'plate', conf_min: 0.85, x: 479, y: 1588, w: 208, h: 51 },
+{ label: 'plate', conf_min: 0.60, x:  54, y: 1377, w:  35, h: 10 },
+{ label: 'plate', conf_min: 0.35, x: 253, y: 1365, w:  26, h:  8 },
 ```
+Note: `jpeg.jpg` is a different scene from the three test videos — video first-frame
+detection tests have separate reference values in `VIDEO_REF_DETECTIONS` in `media.test.ts`.
 Tolerance: ±5 pixels per coordinate. Cross-browser results are identical
 (deterministic WASM inference).
+
+**Debug flag:** Set `window.__detectDebug = true` in the browser console before
+opening a file (with cold IDB cache) to log preprocessing params, per-channel
+tensor stats (BGR/RGB check), pre-NMS candidates, and coordinate unmap details.
 
 ## onnxruntime-web WASM files
 
