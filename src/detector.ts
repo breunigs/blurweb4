@@ -232,6 +232,10 @@ export function getInferenceStats(): Record<ModelChoice, InferenceModelStats> {
 }
 
 // Expose for Playwright tests.
+// __detectionOverride: set via page.addInitScript() in tests that do not focus on
+// inference quality. When non-null, drainQueue() and detectForExport() return this
+// array instead of running ONNX (but still write to memCache + IDB so subsequent
+// cache lookups work normally).
 (window as unknown as Record<string, unknown>).__getInferenceStats = getInferenceStats;
 (window as unknown as Record<string, unknown>).__makeVideoKey = makeVideoKey;
 
@@ -641,6 +645,21 @@ async function drainQueue(): Promise<void> {
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
     if (nextPending !== null) continue;
 
+    // Test escape hatch: skip ONNX and return the override detections directly.
+    // Stats are not updated (override does not count as a real inference).
+    const _g = window as unknown as Record<string, unknown>;
+    const _detOverride = (_g.__detectionOverride as Detection[] | undefined) ?? null;
+    if (_detOverride !== null) {
+      console.log(`[detector] drainQueue: override key="${req.key}" detections=${_detOverride.length}`);
+      memCache.set(req.key, _detOverride);
+      idbPut('frames', { key: req.key, detections: _detOverride, cachedAt: Date.now() }).catch((err) => {
+        console.warn('[detector] idbPut frames failed:', err);
+      });
+      _g.__lastDetections = _detOverride;
+      req.callback(_detOverride);
+      continue;
+    }
+
     console.log(`[detector] drainQueue: starting inference key="${req.key}"`);
     const snap = captureSnapshot(req.source);
     const t0 = performance.now();
@@ -704,6 +723,17 @@ export async function detectForExport(source: HTMLCanvasElement | OffscreenCanva
     }
   } catch {
     /* fall through */
+  }
+  // Test escape hatch.
+  const _g = window as unknown as Record<string, unknown>;
+  const _detOverride = (_g.__detectionOverride as Detection[] | undefined) ?? null;
+  if (_detOverride !== null) {
+    console.log(`[detector] export override key="${key}" detections=${_detOverride.length}`);
+    memCache.set(key, _detOverride);
+    idbPut('frames', { key, detections: _detOverride, cachedAt: Date.now() }).catch((err) => {
+      console.warn('[detector] idbPut frames failed:', err);
+    });
+    return _detOverride;
   }
   const t0 = performance.now();
   const detections = await runOnnx(captureSnapshot(source));
