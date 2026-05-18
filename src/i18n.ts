@@ -81,6 +81,32 @@ const STRINGS = {
     btn_defaults: 'Reset to defaults',
     confirm_delete_detections: 'Delete all cached detections?',
 
+    // Explainer
+    explainer_top:
+      'Automatically blurs faces and license plates in your photos and videos. Everything runs on your device \u2014 nothing is uploaded. Detection is not perfect, so always check the result before you share.',
+    explainer_more: 'Learn more \u2193',
+    explainer_mobile_note:
+      'Works better on a desktop or laptop \u2014 mobile devices are usually too slow.',
+    explainer_h2: 'How it works',
+    explainer_processing_dt: 'Processing happens in the browser',
+    explainer_processing_dd:
+      'Decoding, detection, and export all run as code inside the browser tab. The files are read from disk into browser memory and are not transmitted over the network.',
+    explainer_detects_dt: 'What it detects',
+    explainer_detects_dd:
+      'An AI model looks for faces and license plates in each image or video frame. Most of the training data consists of street photos taken in Hamburg, Germany. Results may be less reliable for footage from other regions or different settings.',
+    explainer_wrong_dt: 'Why detections can be wrong or missing',
+    explainer_wrong_dd:
+      'Before scanning, images and frames are scaled down to 1280 pixels, so small objects may not be detected at all. The model can also miss things at unusual angles or in poor light, and occasionally marks something as a face or plate when it is not. Always review the result before sharing. Detection quality is the same across all browsers.',
+    explainer_video_dt: 'Video not showing up?',
+    explainer_video_dd:
+      'Some video formats are not supported by every browser. If a video does not load, try a different browser.',
+    explainer_speed_dt: 'Processing speed',
+    explainer_speed_dd:
+      'Different browsers use different hardware paths for video decoding and AI inference. If processing is slow, trying a different browser may help.',
+    explainer_terms_dt: 'Terms of use',
+    explainer_terms_dd:
+      'The tool may be used free of charge. Using it does not create any obligations. The source code is available at',
+
     // Dynamic — ETA
     almost_done: 'almost done',
     eta_s: '~{s}s',
@@ -174,6 +200,32 @@ const STRINGS = {
     btn_delete_detections: 'Erkennungen l\u00f6schen',
     btn_defaults: 'Auf Standard zur\u00fccksetzen',
     confirm_delete_detections: 'Alle gespeicherten Erkennungen l\u00f6schen?',
+
+    // Explainer
+    explainer_top:
+      'Gesichter und Kfz-Kennzeichen in Fotos und Videos werden automatisch unkenntlich gemacht. Die Verarbeitung l\u00e4uft vollst\u00e4ndig im Browser \u2014 Dateien werden nicht \u00fcbertragen. Die Erkennung ist nicht perfekt: Das Ergebnis sollte vor dem Teilen immer gepr\u00fcft werden.',
+    explainer_more: 'Mehr erfahren \u2193',
+    explainer_mobile_note:
+      'Auf einem Desktop oder Laptop l\u00e4sst sich das Tool besser bedienen \u2014 mobile Ger\u00e4te sind in der Regel zu langsam.',
+    explainer_h2: 'So funktioniert es',
+    explainer_processing_dt: 'Verarbeitung im Browser',
+    explainer_processing_dd:
+      'Dekodierung, Erkennung und Export laufen als Code im Browser-Tab. Die Dateien werden vom Datentr\u00e4ger in den Arbeitsspeicher des Browsers gelesen und nicht \u00fcber das Netzwerk \u00fcbertragen.',
+    explainer_detects_dt: 'Was erkannt wird',
+    explainer_detects_dd:
+      'Ein KI-Modell durchsucht jedes Bild bzw. jeden Videoframe nach Gesichtern und Kfz-Kennzeichen. Der Gro\u00dfteil der Trainingsdaten besteht aus Stra\u00dfenfotos aus Hamburg. Bei Aufnahmen aus anderen Regionen oder anderen Umgebungen kann die Erkennungsqualit\u00e4t schlechter ausfallen.',
+    explainer_wrong_dt: 'Warum Erkennungen fehlen oder falsch sein k\u00f6nnen',
+    explainer_wrong_dd:
+      'Vor der Analyse werden Bilder und Frames auf 1280 Pixel skaliert, sodass kleine Objekte m\u00f6glicherweise gar nicht erkannt werden. Das Modell kann au\u00dferdem Dinge bei ungew\u00f6hnlichen Blickwinkeln oder schlechtem Licht \u00fcbersehen und gelegentlich etwas als Gesicht oder Kennzeichen markieren, das keines ist. Das Ergebnis sollte immer vor dem Teilen gepr\u00fcft werden. Die Erkennungsqualit\u00e4t ist in allen Browsern gleich.',
+    explainer_video_dt: 'Video wird nicht angezeigt?',
+    explainer_video_dd:
+      'Manche Videoformate werden nicht von jedem Browser unterst\u00fctzt. Wenn ein Video nicht l\u00e4dt, hilft oft ein anderer Browser.',
+    explainer_speed_dt: 'Verarbeitungsgeschwindigkeit',
+    explainer_speed_dd:
+      'Verschiedene Browser nutzen unterschiedliche Hardware-Pfade f\u00fcr Videodekodierung und KI-Inferenz. Bei langsamer Verarbeitung kann ein anderer Browser helfen.',
+    explainer_terms_dt: 'Nutzungsbedingungen',
+    explainer_terms_dd:
+      'Das Tool ist kostenlos nutzbar. Durch die Nutzung entstehen keine Verpflichtungen. Der Quellcode ist verf\u00fcgbar unter',
 
     almost_done: 'fast fertig',
     eta_s: '~{s}s',

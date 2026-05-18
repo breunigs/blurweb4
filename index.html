@@ -16,6 +16,12 @@
 
   <h1 id="app-title">Media<span>·</span>Redactor</h1>
 
+  <!-- ─────────────────────────── EXPLAINER (top) ──────────────────────── -->
+  <div id="explainer-top">
+    <p><span data-i18n="explainer_top"></span> <a href="#explainer-full" data-i18n="explainer_more">Learn more ↓</a></p>
+    <p id="explainer-mobile-note" data-i18n="explainer_mobile_note">Works better on a desktop or laptop — mobile devices are usually too slow.</p>
+  </div>
+
   <!-- ─────────────────────────── STEP 1: LOAD ─────────────────────────── -->
   <div class="step-card" id="step-load">
     <div class="step-header">
@@ -305,6 +311,32 @@
         scrollbar-width:thin;
         scrollbar-color:var(--border) transparent;
       "></div>
+    </div>
+  </div>
+
+  <!-- ─────────────────────────── EXPLAINER (full) ────────────────────── -->
+  <div id="explainer-full" class="step-card">
+    <div class="step-body" style="padding:20px 24px;">
+      <h2 style="font-size:15px;font-weight:600;margin-bottom:14px;" data-i18n="explainer_h2">How it works</h2>
+      <dl id="explainer-dl">
+        <dt data-i18n="explainer_processing_dt">Processing happens in the browser</dt>
+        <dd data-i18n="explainer_processing_dd">Decoding, detection, and export all run as code inside the browser tab. The files are read from disk into browser memory and are not transmitted over the network.</dd>
+
+        <dt data-i18n="explainer_detects_dt">What it detects</dt>
+        <dd data-i18n="explainer_detects_dd">An AI model looks for faces and license plates in each image or video frame. Most of the training data consists of street photos taken in Hamburg, Germany. Results may be less reliable for footage from other regions or different settings.</dd>
+
+        <dt data-i18n="explainer_wrong_dt">Why detections can be wrong or missing</dt>
+        <dd data-i18n="explainer_wrong_dd">Before scanning, images and frames are scaled down to 1280 pixels, so small objects may not be detected at all. The model can also miss things at unusual angles or in poor light, and occasionally marks something as a face or plate when it is not. Always review the result before sharing. Detection quality is the same across all browsers.</dd>
+
+        <dt data-i18n="explainer_video_dt">Video not showing up?</dt>
+        <dd data-i18n="explainer_video_dd">Some video formats are not supported by every browser. If a video does not load, try a different browser.</dd>
+
+        <dt data-i18n="explainer_speed_dt">Processing speed</dt>
+        <dd data-i18n="explainer_speed_dd">Different browsers use different hardware paths for video decoding and AI inference. If processing is slow, trying a different browser may help.</dd>
+
+        <dt data-i18n="explainer_terms_dt">Terms of use</dt>
+        <dd><span data-i18n="explainer_terms_dd"></span> <a href="https://github.com/breunigs/blurweb4" target="_blank" rel="noopener">github.com/breunigs/blurweb4</a>.</dd>
+      </dl>
     </div>
   </div>
 

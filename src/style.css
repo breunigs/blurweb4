@@ -67,6 +67,80 @@ body {
   color: var(--accent);
 }
 
+/* ── Top explainer ─────────────────────────────────────────── */
+#explainer-top {
+  font-size: 13px;
+  color: var(--dim);
+  margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+#explainer-top a {
+  color: var(--accent);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+#explainer-top a:hover {
+  text-decoration: underline;
+}
+
+/* Only show the mobile note on touch/pointer-coarse devices */
+#explainer-mobile-note {
+  display: none;
+}
+
+@media (hover: none) and (pointer: coarse) {
+  #explainer-mobile-note {
+    display: block;
+  }
+}
+
+/* ── Full explainer ─────────────────────────────────────────── */
+#explainer-dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 16px;
+  font-size: 13px;
+}
+
+#explainer-dl dt {
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  padding-top: 1px;
+}
+
+#explainer-dl dd {
+  color: var(--dim);
+}
+
+#explainer-dl a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+#explainer-dl a:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 560px) {
+  #explainer-dl {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+
+  #explainer-dl dt {
+    margin-top: 10px;
+  }
+
+  #explainer-dl dt:first-child {
+    margin-top: 0;
+  }
+}
+
 /* ── Step card ─────────────────────────────────────────────── */
 .step-card {
   background: var(--card);
