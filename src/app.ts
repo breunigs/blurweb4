@@ -752,7 +752,10 @@ export class App {
           if (cached !== null) {
             const filtered = filterByConf(cached, getConfig().minConfidence);
             applyDetections(ctx, filtered, getConfig().drawMode);
-            if (this.activeIndex === index) this.showDetectionResult(filtered);
+            if (this.activeIndex === index) {
+              this.showDetectionResult(filtered);
+              (window as unknown as Record<string, unknown>).__lastDetections = filtered;
+            }
           } else {
             this.showDetecting(true);
             scheduleInference(
