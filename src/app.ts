@@ -689,9 +689,15 @@ export class App {
     };
     // Kick off metadata extraction fire-and-forget; cache result on item.
     if (isVideo) {
-      item.metaPromise = extractVideoMeta(file).then((m) => { item.meta = m; return m; }).catch(() => ({}));
+      item.metaPromise = extractVideoMeta(file).then((m) => { item.meta = m; return m; }).catch((err) => {
+        console.warn(`[app] video meta extraction failed for "${file.name}":`, err);
+        return {};
+      });
     } else {
-      item.metaPromise = extractImageMeta(file).then((m) => { item.meta = m; return m; }).catch(() => ({}));
+      item.metaPromise = extractImageMeta(file).then((m) => { item.meta = m; return m; }).catch((err) => {
+        console.warn(`[app] image meta extraction failed for "${file.name}":`, err);
+        return {};
+      });
     }
     this.items.push(item);
     this.updateAudioSettingVisibility();
@@ -958,7 +964,7 @@ export class App {
         },
       });
     } finally {
-      wakeLock?.release().catch(() => {});
+      wakeLock?.release().catch((err) => console.warn('[wakelock] release failed:', err));
     }
     this.exporting = false;
     this.updateExportBtnState();

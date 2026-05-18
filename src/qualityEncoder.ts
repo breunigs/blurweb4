@@ -71,8 +71,12 @@ async function probeQualityAv1(): Promise<boolean> {
           console.log(`[qualityEncoder] quality-mode AV1 probe: ${ok ? 'ok' : 'no output'}`);
           resolve(ok);
         })
-        .catch(() => resolve(false));
-    } catch {
+        .catch((err) => {
+          console.warn('[qualityEncoder] AV1 probe flush failed:', err);
+          resolve(false);
+        });
+    } catch (err) {
+      console.warn('[qualityEncoder] AV1 probe configure failed:', err);
       enc.close();
       resolve(false);
     }

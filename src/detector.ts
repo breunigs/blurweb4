@@ -203,7 +203,9 @@ const inferenceStats: Record<ModelChoice, ModelStats> = {
 
 function persistStats(model: ModelChoice): void {
   const s = inferenceStats[model];
-  idbPut('stats', { id: `inference-${model}`, count: s.count, totalMs: s.totalMs }).catch(() => {});
+  idbPut('stats', { id: `inference-${model}`, count: s.count, totalMs: s.totalMs }).catch((err) => {
+    console.warn('[detector] idbPut stats failed:', err);
+  });
 }
 
 export function getAverageInferenceMs(model?: ModelChoice): number | null {
@@ -240,7 +242,9 @@ const memCache = new LruMap<string, Detection[]>(500);
 // ── Trim persistence ──────────────────────────────────────────────────────────
 
 export function saveTrim(fileKey: string, start: number, end: number): void {
-  idbPut('trims', { key: fileKey, start, end }).catch(() => {});
+  idbPut('trims', { key: fileKey, start, end }).catch((err) => {
+    console.warn('[detector] idbPut trims failed:', err);
+  });
 }
 
 export async function loadTrim(fileKey: string): Promise<{ start: number; end: number } | null> {
@@ -660,7 +664,7 @@ async function drainQueue(): Promise<void> {
     memCache.set(req.key, detections);
     idbPut('frames', { key: req.key, detections, cachedAt: Date.now() })
       .then(() => console.log(`[detector] idbPut ${(performance.now() - tIdb).toFixed(1)}ms`))
-      .catch(() => {});
+      .catch((err) => console.warn('[detector] idbPut frames failed:', err));
     persistStats(currentModel);
     (window as unknown as Record<string, unknown>).__lastDetections = detections;
     req.callback(detections);
@@ -711,7 +715,9 @@ export async function detectForExport(source: HTMLCanvasElement | OffscreenCanva
     `[detector] export inference model=${currentModel} key="${key}" ${ms.toFixed(0)}ms detections=${detections.length} avg=${avg.toFixed(0)}ms`,
   );
   memCache.set(key, detections);
-  idbPut('frames', { key, detections, cachedAt: Date.now() }).catch(() => {});
+  idbPut('frames', { key, detections, cachedAt: Date.now() }).catch((err) => {
+    console.warn('[detector] idbPut frames failed:', err);
+  });
   persistStats(currentModel);
   return detections;
 }
