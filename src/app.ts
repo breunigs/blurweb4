@@ -830,6 +830,7 @@ export class App {
     this.updateExportBtnState();
     this.updatePreviewAspectRatio();
     void this.updateNamingInfoPanel();
+    if (item.loaded) void this.rerenderActive();
   }
 
   private updatePreviewAspectRatio(): void {

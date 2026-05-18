@@ -559,6 +559,44 @@ test.describe('Draw modes', () => {
     expect(pixel[2], `B channel at detection centre: ${pixel}`).toBeLessThan(10);
   });
 
+  test('settings apply to newly-active file on switch', async ({ page }) => {
+    // Load the JPEG twice as two separate "files".  Both are initially rendered
+    // with the default (blur) draw mode.  Then change to blackout while file 0
+    // is active, switch to file 1 — the fix must re-render file 1 with blackout.
+    await page.goto('http://localhost:3100');
+
+    // Load file 0.
+    await page.locator('#file-input').setInputFiles(path.join(EXAMPLES, 'jpeg.jpg'));
+    await waitForCanvas(page);
+    await waitForDetections(page);
+
+    // Load file 1 (same image content; it becomes the active file).
+    await page.locator('#file-input').setInputFiles(path.join(EXAMPLES, 'jpeg.jpg'));
+    await waitForCanvas(page);
+    await waitForDetections(page);
+
+    // Switch back to file 0 and change mode to blackout while it is active.
+    await page.locator('#nav-prev').click();
+    await waitForDetections(page);
+    await page.evaluate(() => (window as any).__setDrawMode('blackout'));
+    await page.waitForTimeout(200); // let the re-render complete
+
+    // Switch to file 1 — the fix calls rerenderActive() which must apply blackout.
+    await page.locator('#nav-next').click();
+    await page.waitForTimeout(300);
+
+    // Point (74, 1382) is inside the plate detection box.
+    // With blackout it must be near-black; with blur it would be a non-black blurred value.
+    const pixel = await page.evaluate(() => {
+      const canvas = document.querySelector<HTMLCanvasElement>('.canvas-wrapper.active canvas')!;
+      const d = canvas.getContext('2d')!.getImageData(74, 1382, 1, 1).data;
+      return [d[0], d[1], d[2]];
+    });
+    expect(pixel[0], `R channel at detection centre must be near-black in blackout mode: ${pixel}`).toBeLessThan(10);
+    expect(pixel[1], `G channel at detection centre must be near-black in blackout mode: ${pixel}`).toBeLessThan(10);
+    expect(pixel[2], `B channel at detection centre must be near-black in blackout mode: ${pixel}`).toBeLessThan(10);
+  });
+
   test('blur: detection region is visually blurred (not sharp)', async ({ page }) => {
     // Load in outline mode so we can capture the raw pixel under the detection box,
     // then switch to blur and verify the pixel changes.
