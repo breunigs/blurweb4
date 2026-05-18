@@ -605,7 +605,6 @@ export async function getCachedDetections(key: string): Promise<Detection[] | nu
   const mem = memCache.get(key);
   if (mem !== undefined) {
     console.log(`[detector] cache hit (memory) key="${key}" detections=${mem.length}`);
-    (window as unknown as Record<string, unknown>).__lastDetections = mem;
     return mem;
   }
   try {
@@ -613,7 +612,6 @@ export async function getCachedDetections(key: string): Promise<Detection[] | nu
     if (rec) {
       memCache.set(key, rec.detections);
       console.log(`[detector] cache hit (IDB) key="${key}" detections=${rec.detections.length}`);
-      (window as unknown as Record<string, unknown>).__lastDetections = rec.detections;
       return rec.detections;
     }
   } catch {

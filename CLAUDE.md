@@ -403,12 +403,17 @@ or cache hit. Text: `" detecting… (~Xs per frame)"` once stats are available.
 **Test reference detections** (from `detect_n_2024_04.onnx` on `jpeg.jpg`
 at display size 1536×2048, iPhone 12 mini photo):
 ```typescript
-{ label: 'plate', conf_min: 0.85, x: 479, y: 1588, w: 208, h: 51 },
-{ label: 'plate', conf_min: 0.60, x:  54, y: 1377, w:  35, h: 10 },
-{ label: 'plate', conf_min: 0.35, x: 253, y: 1365, w:  26, h:  8 },
+{ label: 'plate', conf_min: 0.80, x:  53, y: 1376, w:  40, h: 11 },
+{ label: 'plate', conf_min: 0.80, x: 478, y: 1589, w: 221, h: 53 },
+{ label: 'plate', conf_min: 0.75, x: 255, y: 1364, w:  27, h:  8 },
+{ label: 'person', conf_min: 0.35, x: 727, y: 1335, w:   9, h: 17 },
+{ label: 'person', conf_min: 0.10, x: 881, y: 1345, w:   7, h: 13 },
 ```
+With `THRESHOLD_CONF=0.01` the model returns 3 plates + 2 low-confidence persons.
 Note: `jpeg.jpg` is a different scene from the three test videos — video first-frame
 detection tests have separate reference values in `VIDEO_REF_DETECTIONS` in `media.test.ts`.
+H.265 uses `H265_VIDEO_REF_DETECTIONS` (adds one marginal person; libav pixel values
+differ slightly from WebCodecs, pushing a box just above the 0.01 threshold).
 Tolerance: ±5 pixels per coordinate. Cross-browser results are identical
 (deterministic WASM inference).
 
