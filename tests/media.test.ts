@@ -138,6 +138,7 @@ function hasExifGps(bytes: Buffer): boolean {
 
 test.describe('JPEG export — EXIF preservation', () => {
   test('exported JPEG retains EXIF when keepMetadata=keep', async ({ page }) => {
+    await injectDetections(page, JPEG_INJECT_DETECTIONS);
     await loadFile(page, path.join(EXAMPLES, 'jpeg.jpg'));
     await waitForCanvas(page);
     await waitForDetections(page);
@@ -164,6 +165,7 @@ test.describe('JPEG export — EXIF preservation', () => {
   });
 
   test('exported JPEG strips EXIF when keepMetadata=strip', async ({ page }) => {
+    await injectDetections(page, JPEG_INJECT_DETECTIONS);
     await loadFile(page, path.join(EXAMPLES, 'jpeg.jpg'));
     await waitForCanvas(page);
     await waitForDetections(page);
@@ -209,6 +211,7 @@ for (const { file, codec, wasmFallback } of VIDEO_CASES) {
     test('first frame decoded onto canvas with correct dimensions', async ({ page }) => {
       // Navigate first — WebCodecs requires a secure context (localhost is fine;
       // about:blank is not, so we must check AFTER page load).
+      await injectDetections(page, VIDEO_INJECT_DETECTIONS);
       await loadFile(page, path.join(EXAMPLES, file));
 
       if (!(await webCodecsSupported(page))) {
@@ -272,14 +275,14 @@ for (const { file, codec, wasmFallback } of VIDEO_CASES) {
 // distinct pixel signatures were observed.
 
 test.describe('H.265 playback — frame-by-frame updates (libav.js fallback)', () => {
-  // Per-frame ONNX inference adds significant time to each decoded frame.
-  test.setTimeout(300_000);
+  test.setTimeout(60_000);
 
   test('canvas changes on each frame throughout playback', async ({ page, browserName }) => {
     if (browserName === 'firefox') {
       test.skip(true, 'WASM HEVC decode + WASM ONNX inference too slow in Firefox for this test');
     }
 
+    await injectDetections(page, H265_VIDEO_INJECT_DETECTIONS);
     await loadFile(page, path.join(EXAMPLES, 'x265.mp4'));
 
     if (!(await webCodecsSupported(page))) {
@@ -325,10 +328,8 @@ test.describe('H.265 playback — frame-by-frame updates (libav.js fallback)', (
       player.play();
     });
 
-    // Per-frame ONNX inference makes each frame slow; 240 s gives headroom for
-    // WASM-only browsers (Firefox) where inference is significantly slower.
     await page.waitForFunction(() => (window as unknown as Record<string, unknown>).__playbackEnded === true, {
-      timeout: 240_000,
+      timeout: 30_000,
     });
 
     // Collect results.
@@ -380,15 +381,13 @@ const EXPORT_CASES = [
 
 for (const { file, codec, wasmFallback } of EXPORT_CASES) {
   test.describe(`${codec} export — output duration matches input (${file})`, () => {
-    // Per-frame ONNX inference during export adds significant time.
-    // Timeouts are large to accommodate cold-cache (first run) inference costs.
-    // On warm cache (subsequent runs) export completes in a fraction of this time.
-    test.setTimeout(wasmFallback ? 1_800_000 : 1_200_000);
+    test.setTimeout(wasmFallback ? 180_000 : 120_000);
 
     test('exported file duration within 0.1 s of source', async ({ page }) => {
       const inputPath = path.join(EXAMPLES, file);
       const inputDuration = ffprobeDuration(inputPath);
 
+      await injectDetections(page, VIDEO_INJECT_DETECTIONS);
       await loadFile(page, inputPath);
 
       if (!(await webCodecsSupported(page))) {
@@ -409,10 +408,10 @@ for (const { file, codec, wasmFallback } of EXPORT_CASES) {
       // cache before export starts.  This avoids running inference twice for
       // frame 0 (once in background, once during export) and ensures the export
       // only needs inference for frames 1..N-1 rather than 0..N-1.
-      await waitForDetections(page, wasmFallback ? 90_000 : 45_000);
+      await waitForDetections(page, 30_000);
 
       // Intercept the download triggered by the Export button.
-      const exportWait = wasmFallback ? 1_700_000 : 1_100_000;
+      const exportWait = wasmFallback ? 150_000 : 90_000;
       const downloadPromise = page.waitForEvent('download', { timeout: exportWait });
       await page.locator('#export-btn').click();
       const download = await downloadPromise;
@@ -473,6 +472,26 @@ const H265_VIDEO_REF_DETECTIONS: RefDetection[] = [
   { label: 'person', conf_min: 0.01, x: 1236, y: 768, w: 6, h: 10 },
 ];
 
+// Properly-shaped Detection[] arrays for injectDetections() — use actual conf
+// values (from the "Actual confidences" comment above) rather than conf_min.
+// These are only used to pre-populate the IDB cache in tests not focused on
+// inference output; they are never passed to assertDetectionsMatch().
+const JPEG_INJECT_DETECTIONS: Detection[] = [
+  { label: 'plate', conf: 0.83, x: 53, y: 1376, w: 40, h: 11 },
+  { label: 'plate', conf: 0.82, x: 478, y: 1589, w: 221, h: 53 },
+  { label: 'plate', conf: 0.79, x: 255, y: 1364, w: 27, h: 8 },
+  { label: 'person', conf: 0.37, x: 727, y: 1335, w: 9, h: 17 },
+  { label: 'person', conf: 0.12, x: 881, y: 1345, w: 7, h: 13 },
+];
+const VIDEO_INJECT_DETECTIONS: Detection[] = [
+  { label: 'plate', conf: 0.87, x: 1715, y: 858, w: 67, h: 18 },
+  { label: 'plate', conf: 0.76, x: 2618, y: 1096, w: 85, h: 62 },
+];
+const H265_VIDEO_INJECT_DETECTIONS: Detection[] = [
+  ...VIDEO_INJECT_DETECTIONS,
+  { label: 'person', conf: 0.01, x: 1236, y: 768, w: 6, h: 10 },
+];
+
 const BOX_TOL = 5; // pixels
 
 function assertDetectionsMatch(actual: Detection[], ref: RefDetection[]): void {
@@ -496,6 +515,23 @@ async function waitForDetections(page: Page, timeoutMs = 60_000): Promise<Detect
     timeout: timeoutMs,
   });
   return page.evaluate(() => (window as unknown as Record<string, unknown>).__lastDetections as Detection[]);
+}
+
+/**
+ * Register a detection override for all navigations in this test.
+ * Must be called BEFORE page.goto() / loadFile() so that addInitScript
+ * fires on the first navigation.
+ *
+ * When set, detector.ts skips ONNX and returns these detections for every
+ * frame that misses the IDB cache.  Results are still written to IDB so
+ * subsequent export cache-hits work correctly.
+ *
+ * Do NOT use this in tests that specifically verify inference output.
+ */
+async function injectDetections(page: Page, detections: Detection[]): Promise<void> {
+  await page.addInitScript((dets) => {
+    (window as any).__detectionOverride = dets;
+  }, detections as unknown as Parameters<typeof page.addInitScript>[1]);
 }
 
 test.describe('Object detection — JPEG first frame', () => {
@@ -541,6 +577,7 @@ const DETECTION_VIDEO_CASES = [
 test.describe('Draw modes', () => {
   // Load the JPEG, wait for outline-mode detections (default), then switch modes.
   test('blackout: detection centre is solid black', async ({ page }) => {
+    await injectDetections(page, JPEG_INJECT_DETECTIONS);
     await loadFile(page, path.join(EXAMPLES, 'jpeg.jpg'));
     await waitForCanvas(page);
     await waitForDetections(page);
@@ -563,6 +600,7 @@ test.describe('Draw modes', () => {
     // Load the JPEG twice as two separate "files".  Both are initially rendered
     // with the default (blur) draw mode.  Then change to blackout while file 0
     // is active, switch to file 1 — the fix must re-render file 1 with blackout.
+    await injectDetections(page, JPEG_INJECT_DETECTIONS);
     await page.goto('http://localhost:3100');
 
     // Load file 0.
@@ -600,6 +638,7 @@ test.describe('Draw modes', () => {
   test('blur: detection region is visually blurred (not sharp)', async ({ page }) => {
     // Load in outline mode so we can capture the raw pixel under the detection box,
     // then switch to blur and verify the pixel changes.
+    await injectDetections(page, JPEG_INJECT_DETECTIONS);
     await page.goto('http://localhost:3100');
     // Force outline mode before loading so the initial render uses outline.
     await page.evaluate(() => (window as any).__setDrawMode?.('outline'));
@@ -834,6 +873,7 @@ test.describe('Trim persistence', () => {
     const TOL = 0.05; // seconds
 
     // Load video and set trim.
+    await injectDetections(page, VIDEO_INJECT_DETECTIONS);
     await loadFile(page, videoPath);
     await waitForCanvas(page);
     await page.waitForFunction(() => document.getElementById('trim-section')?.classList.contains('visible'));
@@ -903,6 +943,7 @@ test.describe('Trim cache alignment', () => {
   });
 
   test('trim-start frame re-uses preview cache during export', async ({ page }) => {
+    await injectDetections(page, VIDEO_INJECT_DETECTIONS);
     if (
       !(await (async () => {
         await page.goto('http://localhost:3100');
@@ -1209,12 +1250,13 @@ test.describe('Error paths', () => {
 // the video output is a valid MP4 with the correct duration.
 
 test.describe('Batch export — Export All button', () => {
-  test.setTimeout(1_500_000);
+  test.setTimeout(300_000);
 
   test('exports all files; video output duration matches input', async ({ page }) => {
     const videoPath = path.join(EXAMPLES, 'x264.mp4');
     const inputDuration = ffprobeDuration(videoPath);
 
+    await injectDetections(page, VIDEO_INJECT_DETECTIONS);
     await page.goto('http://localhost:3100');
 
     if (!(await webCodecsSupported(page))) {
@@ -1237,7 +1279,7 @@ test.describe('Batch export — Export All button', () => {
     );
 
     // Wait for first-frame inference on the active video.
-    await waitForDetections(page, 45_000);
+    await waitForDetections(page, 15_000);
 
     // Collect downloads before clicking so we don't miss the fast JPEG one.
     const downloads: import('@playwright/test').Download[] = [];
