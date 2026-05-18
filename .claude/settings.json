@@ -18,8 +18,13 @@
       "Bash(mkdir:*)",
       "Bash(ffprobe:*)",
       "Bash(python3:*)",
+      "Bash(wc:*)",
+      "Bash(grep:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
       "Read(/tmp/**)",
-      "Read(/usr/local/go/**)"
+      "Read(/usr/local/go/**)",
+      "WebFetch(domain:raw.githubusercontent.com)"
     ],
     "additionalDirectories": [
       "/tmp"
