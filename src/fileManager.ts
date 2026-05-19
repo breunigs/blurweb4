@@ -3,11 +3,11 @@ import { extractImageMeta, extractVideoMeta } from './fileMeta';
 import {
   getCachedDetections,
   scheduleInference,
-  applyDetections,
   makeImageKey,
   filterByConf,
-  loadTrim,
 } from './detector';
+import { loadTrim } from './trimStorage';
+import { applyDetections } from './detectionDrawer';
 import { renderImage } from './imageRenderer';
 import { getConfig } from './config';
 import { t, tpl } from './i18n';
