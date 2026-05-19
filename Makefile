@@ -1,5 +1,5 @@
 GO := $(shell mise which go)
-.PHONY: dev build test vendor-hevc vendor-avc-av1 go-build go-run prepare-go-embed deploy
+.PHONY: dev build test vendor-hevc vendor-avc-av1 go-build go-run prepare-go-embed tauri-dev tauri-build deploy
 
 node_modules/.package-lock.json: package-lock.json
 	npm install
@@ -42,6 +42,17 @@ go-build: prepare-go-embed
 ## Populate server/dist-embedded/ with gzip-compressed assets (runs build first)
 prepare-go-embed: build
 	node scripts/prepare-go-embed.mjs
+
+## Start the Tauri development window (hot-reload via esbuild dev server on port 3000)
+tauri-dev: node_modules/.package-lock.json
+	npx tauri dev
+
+## Build Tauri release bundles → src-tauri/target/release/bundle/
+tauri-build: node_modules/.package-lock.json
+	npm run build
+	npm run prepare-tauri-dist
+	npx tauri icon icon.svg
+	npx tauri build
 
 ## Deploy dist to remote server: set BLURWEB_RSYNC_TARGET=user@host:/path/to/webroot
 ## server/dist-embedded/ contains both plain and .gz variants; nginx gzip_static can

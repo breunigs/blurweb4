@@ -1,0 +1,122 @@
+name: Build
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  # ── Build WASM artifacts on Linux (requires Docker) ──────────────────────────
+  # These are gitignored and not available in the checkout. We build once here
+  # and share to all platform jobs via artifact.
+  build-wasm:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Cache vendor WASM
+        id: cache-wasm
+        uses: actions/cache@v4
+        with:
+          path: |
+            vendor/libav-hevc
+            vendor/libav-avc-av1
+          key: vendor-wasm-${{ hashFiles('package-lock.json') }}
+
+      - name: Build HEVC WASM
+        if: steps.cache-wasm.outputs.cache-hit != 'true'
+        run: npm run build:hevc
+
+      - name: Build AVC/AV1 WASM
+        if: steps.cache-wasm.outputs.cache-hit != 'true'
+        run: npm run build:avc-av1
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vendor-wasm
+          path: vendor/
+          retention-days: 7
+
+  # ── Build Tauri app on all platforms ─────────────────────────────────────────
+  build-tauri:
+    needs: build-wasm
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: ubuntu-22.04
+            rust-target: ''
+            tauri-args: ''
+          - platform: windows-latest
+            rust-target: ''
+            tauri-args: ''
+          - platform: macos-latest
+            rust-target: aarch64-apple-darwin
+            tauri-args: --target aarch64-apple-darwin
+          - platform: macos-latest
+            rust-target: x86_64-apple-darwin
+            tauri-args: --target x86_64-apple-darwin
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux system dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - run: npm ci
+
+      - name: Download vendor WASM
+        uses: actions/download-artifact@v4
+        with:
+          name: vendor-wasm
+          path: vendor/
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Prepare Tauri distribution
+        run: npm run prepare-tauri-dist
+
+      - name: Generate icons
+        run: npx tauri icon icon.svg
+
+      - name: Build Tauri app
+        run: npx tauri build ${{ matrix.tauri-args }}
+
+      - name: Upload bundle artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: bundle-${{ matrix.platform }}-${{ matrix.rust-target || 'default' }}
+          path: |
+            src-tauri/target/release/bundle/
+            src-tauri/target/*/release/bundle/
+          if-no-files-found: ignore
