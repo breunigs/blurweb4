@@ -10,7 +10,8 @@ import {
 } from 'mediabunny';
 import type { VideoSample } from 'mediabunny';
 import { detectEncoder } from './encoderConfig';
-import { detectForExport, makeVideoKey, applyDetections, filterByConf } from './detector';
+import { detectForExport, makeVideoKey, filterByConf } from './detector';
+import { applyDetections } from './detectionDrawer';
 import { getConfig } from './config';
 
 export interface EncodeResult {

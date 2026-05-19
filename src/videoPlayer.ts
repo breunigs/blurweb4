@@ -2,12 +2,12 @@ import { Input, ALL_FORMATS, BlobSource, VideoSampleSink } from 'mediabunny';
 import {
   getCachedDetections,
   scheduleInference,
-  applyDetections,
   makeVideoKey,
   getAverageInferenceMs,
   filterByConf,
   type Detection,
 } from './detector';
+import { applyDetections } from './detectionDrawer';
 import { getConfig } from './config';
 
 function detStatusText(): string {

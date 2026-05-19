@@ -1,4 +1,4 @@
-import { saveTrim } from './detector';
+import { saveTrim } from './trimStorage';
 import { tpl } from './i18n';
 import { type MediaItem, type ItemStore, formatTime, debounce } from './types';
 

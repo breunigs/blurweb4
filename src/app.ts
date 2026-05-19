@@ -1,13 +1,13 @@
 import {
   getCachedDetections,
   scheduleInference,
-  applyDetections,
   makeImageKey,
   getAverageInferenceMs,
   setModel,
   clearDetectionCache,
   filterByConf,
 } from './detector';
+import { applyDetections } from './detectionDrawer';
 import { getConfig, setConfig, DEFAULTS, type AppConfig, type ModelChoice } from './config';
 import { t, tpl, translateLabel, applyTranslations } from './i18n';
 import { getEntries, clearEntries, setOnUpdate, copyToClipboard } from './debugLog';
