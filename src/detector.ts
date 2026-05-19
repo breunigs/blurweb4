@@ -628,6 +628,43 @@ export async function getCachedDetections(key: string): Promise<Detection[] | nu
   return null;
 }
 
+// ── Unified detection resolver ────────────────────────────────────────────────
+// memCache → IDB → __detectionOverride → ONNX inference
+
+async function resolveDetections(
+  source: HTMLCanvasElement | OffscreenCanvas,
+  key: string,
+): Promise<Detection[]> {
+  const cached = await getCachedDetections(key);
+  if (cached !== null) return cached;
+
+  const _g = window as unknown as Record<string, unknown>;
+  const _detOverride = (_g.__detectionOverride as Detection[] | undefined) ?? null;
+  if (_detOverride !== null) {
+    console.log(`[detector] override key="${key}" detections=${_detOverride.length}`);
+    memCache.set(key, _detOverride);
+    idbPut('frames', { key, detections: _detOverride, cachedAt: Date.now() }).catch((err) => {
+      console.warn('[detector] idbPut frames failed:', err);
+    });
+    return _detOverride;
+  }
+
+  const t0 = performance.now();
+  const detections = await runOnnx(captureSnapshot(source));
+  const ms = performance.now() - t0;
+  inferenceStats[currentModel].count++;
+  inferenceStats[currentModel].totalMs += ms;
+  const avg = inferenceStats[currentModel].totalMs / inferenceStats[currentModel].count;
+  console.log(
+    `[detector] inference model=${currentModel} key="${key}" ${ms.toFixed(0)}ms detections=${detections.length} avg=${avg.toFixed(0)}ms`,
+  );
+  memCache.set(key, detections);
+  idbPut('frames', { key, detections, cachedAt: Date.now() })
+    .catch((err) => console.warn('[detector] idbPut frames failed:', err));
+  persistStats(currentModel);
+  return detections;
+}
+
 // ── Inference queue ───────────────────────────────────────────────────────────
 
 let queueRunning = false;
@@ -645,46 +682,16 @@ async function drainQueue(): Promise<void> {
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
     if (nextPending !== null) continue;
 
-    // Test escape hatch: skip ONNX and return the override detections directly.
-    // Stats are not updated (override does not count as a real inference).
-    const _g = window as unknown as Record<string, unknown>;
-    const _detOverride = (_g.__detectionOverride as Detection[] | undefined) ?? null;
-    if (_detOverride !== null) {
-      console.log(`[detector] drainQueue: override key="${req.key}" detections=${_detOverride.length}`);
-      memCache.set(req.key, _detOverride);
-      idbPut('frames', { key: req.key, detections: _detOverride, cachedAt: Date.now() }).catch((err) => {
-        console.warn('[detector] idbPut frames failed:', err);
-      });
-      _g.__lastDetections = _detOverride;
-      req.callback(_detOverride);
-      continue;
-    }
-
-    console.log(`[detector] drainQueue: starting inference key="${req.key}"`);
-    const snap = captureSnapshot(req.source);
-    const t0 = performance.now();
+    console.log(`[detector] drainQueue: resolving key="${req.key}"`);
     let detections: Detection[];
     try {
-      detections = await runOnnx(snap);
+      detections = await resolveDetections(req.source, req.key);
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
       console.error(`[detector] inference failed key="${req.key}":`, error);
       req.onError?.(error);
       continue;
     }
-    const ms = performance.now() - t0;
-    inferenceStats[currentModel].count++;
-    inferenceStats[currentModel].totalMs += ms;
-    const avg = inferenceStats[currentModel].totalMs / inferenceStats[currentModel].count;
-    console.log(
-      `[detector] inference model=${currentModel} key="${req.key}" ${ms.toFixed(0)}ms detections=${detections.length} avg=${avg.toFixed(0)}ms`,
-    );
-    const tIdb = performance.now();
-    memCache.set(req.key, detections);
-    idbPut('frames', { key: req.key, detections, cachedAt: Date.now() })
-      .then(() => console.log(`[detector] idbPut ${(performance.now() - tIdb).toFixed(1)}ms`))
-      .catch((err) => console.warn('[detector] idbPut frames failed:', err));
-    persistStats(currentModel);
     (window as unknown as Record<string, unknown>).__lastDetections = detections;
     req.callback(detections);
   }
@@ -708,48 +715,11 @@ export function scheduleInference(
 
 // ── Export path ───────────────────────────────────────────────────────────────
 
-export async function detectForExport(source: HTMLCanvasElement | OffscreenCanvas, key: string): Promise<Detection[]> {
-  const mem = memCache.get(key);
-  if (mem !== undefined) {
-    console.log(`[detector] export cache hit (memory) key="${key}" detections=${mem.length}`);
-    return mem;
-  }
-  try {
-    const rec = await idbGet<{ key: string; detections: Detection[] }>('frames', key);
-    if (rec) {
-      memCache.set(key, rec.detections);
-      console.log(`[detector] export cache hit (IDB) key="${key}" detections=${rec.detections.length}`);
-      return rec.detections;
-    }
-  } catch {
-    /* fall through */
-  }
-  // Test escape hatch.
-  const _g = window as unknown as Record<string, unknown>;
-  const _detOverride = (_g.__detectionOverride as Detection[] | undefined) ?? null;
-  if (_detOverride !== null) {
-    console.log(`[detector] export override key="${key}" detections=${_detOverride.length}`);
-    memCache.set(key, _detOverride);
-    idbPut('frames', { key, detections: _detOverride, cachedAt: Date.now() }).catch((err) => {
-      console.warn('[detector] idbPut frames failed:', err);
-    });
-    return _detOverride;
-  }
-  const t0 = performance.now();
-  const detections = await runOnnx(captureSnapshot(source));
-  const ms = performance.now() - t0;
-  inferenceStats[currentModel].count++;
-  inferenceStats[currentModel].totalMs += ms;
-  const avg = inferenceStats[currentModel].totalMs / inferenceStats[currentModel].count;
-  console.log(
-    `[detector] export inference model=${currentModel} key="${key}" ${ms.toFixed(0)}ms detections=${detections.length} avg=${avg.toFixed(0)}ms`,
-  );
-  memCache.set(key, detections);
-  idbPut('frames', { key, detections, cachedAt: Date.now() }).catch((err) => {
-    console.warn('[detector] idbPut frames failed:', err);
-  });
-  persistStats(currentModel);
-  return detections;
+export function detectForExport(
+  source: HTMLCanvasElement | OffscreenCanvas,
+  key: string,
+): Promise<Detection[]> {
+  return resolveDetections(source, key);
 }
 
 // ── Drawing ───────────────────────────────────────────────────────────────────
