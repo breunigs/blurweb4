@@ -73,12 +73,15 @@ try {
   console.log('\n[1/5] Extracting libav.js source…');
   run('tar', ['xf', join(SOURCES, 'libav.js.tar.xz'), '-C', tmpDir]);
 
-  // 2. Copy all library source tarballs into the same directory so the
-  //    Makefile can find them (ffmpeg, opus, libvpx, …)
+  // 2. Copy all library source tarballs into build/ so the Makefile finds them
+  //    and skips its curl downloads. The Makefile writes downloads to build/<file>;
+  //    if that file already exists, make skips the download rule entirely.
   console.log('[2/5] Copying library sources…');
+  const buildDir = join(tmpDir, 'build');
+  mkdirSync(buildDir, { recursive: true });
   for (const file of readdirSync(SOURCES)) {
     if (file === 'libav.js.tar.xz') continue;
-    run('cp', [join(SOURCES, file), join(tmpDir, file)]);
+    run('cp', [join(SOURCES, file), join(buildDir, file)]);
   }
 
   // 3. Build Docker image (uses emscripten/emsdk as base)
