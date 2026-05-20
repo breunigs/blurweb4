@@ -7,14 +7,8 @@
  *
  * Requires: vendor/libav-avc-av1/libav-6.8.8.0-avc-av1.wasm.mjs
  *
- * Build instructions (similar to the hevc-aac variant):
- *   mkdir /tmp/libavjs && tar xf node_modules/libav.js/sources/libav.js.tar.xz -C /tmp/libavjs
- *   cp node_modules/libav.js/sources/*.tar.* /tmp/libavjs/
- *   docker build -f /tmp/libavjs/Dockerfile.development -t libavjs-builder /tmp/libavjs
- *   # Inside the container, run config/mkconfig.js:
- *   docker run --rm -v /tmp/libavjs:/work -w /work libavjs-builder bash -c \
- *     "cd configs && node mkconfig.js avc-av1 '[\"format-mp4\",\"parser-h264\",\"decoder-h264\",\"parser-av1\",\"decoder-libaom_av1\",\"swscale\"]' && cd .. && MAKEFLAGS=-j\$(nproc) make dist/libav-6.8.8.0-avc-av1.wasm.mjs"
- *   cp /tmp/libavjs/dist/libav-6.8.8.0-avc-av1.wasm.{mjs,wasm} vendor/libav-avc-av1/
+ * Build instructions: see "Building both libav.js variants" in CLAUDE.md.
+ * Both this variant and hevc-aac are built in parallel in a single Docker run.
  *
  * Note: H.264 and AV1 (libaom) are patent/licensing-sensitive — build and
  * distribute only for internal/local use, consistent with existing hevc-aac usage.

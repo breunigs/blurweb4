@@ -27,7 +27,7 @@ This directory contains pre-built WebAssembly binaries of the libav.js
 The LGPL-2.1 requires that source code be made available to recipients of the
 binary. Sources for all LGPL-licensed components are included in the libav.js
 npm package at `node_modules/libav.js/sources/`. Build instructions are in
-`scripts/build-hevc.mjs`.
+`scripts/build-wasm.mjs`.
 
 The full text of the LGPL-2.1 is available at:
 https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html
