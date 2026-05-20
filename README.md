@@ -21,8 +21,7 @@ uploads.
 
 ```sh
 mise exec -- npm install
-make vendor-hevc    # build HEVC WASM decoder (requires Docker, run once)
-make vendor-avc-av1 # build AVC/AV1 WASM decoder (requires Docker, run once)
+make vendor-wasm    # build both WASM decoders in parallel (requires Docker, run once)
 make dev            # dev server on http://localhost:3000
 ```
 

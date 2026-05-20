@@ -286,17 +286,26 @@ with BT.709 to appear overly bright or washed out compared to Firefox (which def
 to BT.709). The maps live in `hevcDecoder.ts` as `AV_COL_PRI`, `AV_COL_TRC`,
 `AV_COL_SPC`; `AV_COL_RANGE_FULL = 2` (JPEG/PC range).
 
-**Building the hevc-aac libav.js variant:**
-The hevc-aac variant is NOT published to npm (MPEG patent reasons). Build it
-from the source tarball inside the npm package:
+**Building both libav.js variants:**
+Neither variant is published to npm (MPEG/patent reasons). Build both from the
+source tarball inside the npm package. Both targets run in parallel inside one
+Docker container — ffmpeg source is extracted and patched once, libaom is built
+once, and the two ffmpeg compiles run concurrently:
 ```sh
 mkdir /tmp/libavjs && tar xf node_modules/libav.js/sources/libav.js.tar.xz -C /tmp/libavjs
 cp node_modules/libav.js/sources/*.tar.* /tmp/libavjs/
 docker build -f /tmp/libavjs/Dockerfile.development -t libavjs-builder /tmp/libavjs
+# Generate the avc-av1 config (hevc-aac config is pre-generated in the source):
 docker run --rm -v /tmp/libavjs:/work -w /work libavjs-builder bash -c \
-  "MAKEFLAGS=-j\$(nproc) make dist/libav-6.8.8.0-hevc-aac.wasm.mjs"
-# Copy output:
+  "cd configs && node mkconfig.js avc-av1 '[\"format-mp4\",\"parser-h264\",\"decoder-h264\",\"parser-av1\",\"decoder-libaom_av1\",\"swscale\"]'"
+# Build both variants in parallel:
+docker run --rm -v /tmp/libavjs:/work -w /work libavjs-builder bash -c \
+  "MAKEFLAGS=-j\$(nproc) make \
+    dist/libav-6.8.8.0-hevc-aac.wasm.mjs \
+    dist/libav-6.8.8.0-avc-av1.wasm.mjs"
+# Copy outputs:
 cp /tmp/libavjs/dist/libav-6.8.8.0-hevc-aac.wasm.{mjs,wasm} vendor/libav-hevc/
+cp /tmp/libavjs/dist/libav-6.8.8.0-avc-av1.wasm.{mjs,wasm} vendor/libav-avc-av1/
 ```
 
 ## WebCodecs requires a secure context

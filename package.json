@@ -6,8 +6,7 @@
   "scripts": {
     "dev": "node build.mjs --dev",
     "build": "node build.mjs",
-    "build:hevc": "node scripts/build-hevc.mjs",
-    "build:avc-av1": "node scripts/build-avc-av1.mjs",
+    "build:wasm": "node scripts/build-wasm.mjs",
     "prepare-tauri-dist": "node scripts/prepare-tauri-dist.mjs",
     "tauri": "tauri",
     "test": "playwright test"
