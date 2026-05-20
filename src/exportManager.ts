@@ -4,6 +4,17 @@ import { getConfig } from './config';
 import { t } from './i18n';
 import { type ItemStore, formatEta } from './types';
 
+// In Tauri, window.alert() is silently suppressed. Use the dialog plugin instead;
+// fall back to window.alert in the plain browser.
+async function tauriAlert(message: string): Promise<void> {
+  if ('__TAURI_INTERNALS__' in window) {
+    const { message: tauriMessage } = await import('@tauri-apps/plugin-dialog');
+    await tauriMessage(message);
+  } else {
+    alert(message);
+  }
+}
+
 export class ExportManager {
   private exporting = false;
 
@@ -98,7 +109,7 @@ export class ExportManager {
       }
     }
     if (wakeLock === null && navigator.maxTouchPoints > 0 && exportItems.some((it) => it.isVideo)) {
-      alert(t('wakelock_warning'));
+      tauriAlert(t('wakelock_warning'));
     }
     try {
       await runBatch(exportItems, namingPattern, {

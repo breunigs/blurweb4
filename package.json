@@ -12,6 +12,7 @@
     "test": "playwright test"
   },
   "dependencies": {
+    "@tauri-apps/plugin-dialog": "^2.7.1",
     "libav.js": "^6.8.8",
     "mediabunny": "^1.45.2",
     "onnxruntime-web": "^1.26.0",

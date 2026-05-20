@@ -13,6 +13,16 @@ import { t, tpl, translateLabel, applyTranslations } from './i18n';
 import { getEntries, clearEntries, setOnUpdate, copyToClipboard } from './debugLog';
 import { renderImage } from './imageRenderer';
 import { type ItemStore, debounce } from './types';
+
+// In Tauri, window.confirm() is silently suppressed. Use the dialog plugin instead;
+// fall back to window.confirm in the plain browser.
+async function tauriConfirm(message: string): Promise<boolean> {
+  if ('__TAURI_INTERNALS__' in window) {
+    const { ask } = await import('@tauri-apps/plugin-dialog');
+    return ask(message);
+  }
+  return confirm(message);
+}
 import { ExportManager } from './exportManager';
 import { PlaybackController } from './playbackController';
 import { FileManager } from './fileManager';
@@ -266,10 +276,12 @@ export class App {
       setConfig({ ...DEFAULTS });
     });
     document.getElementById('delete-detections-btn')?.addEventListener('click', () => {
-      if (!confirm(t('confirm_delete_detections'))) return;
-      clearDetectionCache()
-        .then(() => this.rerenderActive())
-        .catch(console.error);
+      tauriConfirm(t('confirm_delete_detections')).then((ok) => {
+        if (!ok) return;
+        clearDetectionCache()
+          .then(() => this.rerenderActive())
+          .catch(console.error);
+      });
     });
   }
 
