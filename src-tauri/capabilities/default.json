@@ -3,5 +3,8 @@
   "identifier": "default",
   "description": "Default capability for BlurWeb",
   "windows": ["main"],
-  "permissions": []
+  "permissions": [
+    "dialog:allow-ask",
+    "dialog:allow-message"
+  ]
 }
