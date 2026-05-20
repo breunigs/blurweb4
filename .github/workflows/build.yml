@@ -31,13 +31,9 @@ jobs:
             vendor/libav-avc-av1
           key: vendor-wasm-${{ hashFiles('package-lock.json') }}
 
-      - name: Build HEVC WASM
+      - name: Build WASM variants
         if: steps.cache-wasm.outputs.cache-hit != 'true'
-        run: npm run build:hevc
-
-      - name: Build AVC/AV1 WASM
-        if: steps.cache-wasm.outputs.cache-hit != 'true'
-        run: npm run build:avc-av1
+        run: npm run build:wasm
 
       - uses: actions/upload-artifact@v4
         with:

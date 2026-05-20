@@ -5,15 +5,16 @@ import { spawnSync } from 'child_process';
 const dev = process.argv.includes('--dev');
 const port = Number(process.env.PORT ?? 3000);
 
-// ── HEVC WASM artifacts ───────────────────────────────────────────────────
-// Build the libav.js hevc-aac variant on first use if it isn't present.
+// ── libav.js WASM artifacts ───────────────────────────────────────────────
+// Build both libav.js WASM variants on first use if either is missing.
 // The vendor/ directory is gitignored; this runs automatically after clone.
 const HEVC_WASM = 'vendor/libav-hevc/libav-6.8.8.0-hevc-aac.wasm.wasm';
-if (!existsSync(HEVC_WASM)) {
-  console.log('HEVC WASM not found — running build:hevc (requires Docker)…');
-  const result = spawnSync(process.execPath, ['scripts/build-hevc.mjs'], { stdio: 'inherit' });
+const AVC_WASM  = 'vendor/libav-avc-av1/libav-6.8.8.0-avc-av1.wasm.wasm';
+if (!existsSync(HEVC_WASM) || !existsSync(AVC_WASM)) {
+  console.log('WASM artifacts missing — running build:wasm (requires Docker)…');
+  const result = spawnSync(process.execPath, ['scripts/build-wasm.mjs'], { stdio: 'inherit' });
   if (result.status !== 0) {
-    console.error('build:hevc failed. Build aborted.');
+    console.error('build:wasm failed. Build aborted.');
     process.exit(result.status ?? 1);
   }
 }

@@ -1,5 +1,5 @@
 GO := $(shell mise which go)
-.PHONY: dev build test vendor-hevc vendor-avc-av1 go-build go-run prepare-go-embed tauri-dev tauri-build deploy
+.PHONY: dev build test vendor-wasm go-build go-run prepare-go-embed tauri-dev tauri-build deploy
 
 node_modules/.package-lock.json: package-lock.json
 	npm install
@@ -9,8 +9,8 @@ node_modules/.package-lock.json: package-lock.json
 dev: node_modules/.package-lock.json
 	node build.mjs --dev
 
-## Production build → dist/bundle.js (requires vendor-hevc + vendor-avc-av1 first)
-build: node_modules/.package-lock.json vendor-hevc vendor-avc-av1
+## Production build → dist/bundle.js (requires vendor-wasm first)
+build: node_modules/.package-lock.json vendor-wasm
 	node build.mjs
 
 ## Run unit tests + Playwright tests (Chromium + Firefox, port 3100)
@@ -18,13 +18,9 @@ test: build
 	node --experimental-strip-types --test tests/unit/*.test.ts
 	npx playwright test
 
-## Build the libav.js HEVC/AAC WASM variant → vendor/libav-hevc/
-vendor-hevc:
-	node scripts/build-hevc.mjs
-
-## Build the libav.js AVC/AV1 WASM variant → vendor/libav-avc-av1/
-vendor-avc-av1:
-	node scripts/build-avc-av1.mjs
+## Build both libav.js WASM variants in parallel → vendor/libav-hevc/ + vendor/libav-avc-av1/
+vendor-wasm:
+	node scripts/build-wasm.mjs
 
 ## Run the server directly via go run (no binary written)
 go-run: prepare-go-embed
