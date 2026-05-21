@@ -618,13 +618,13 @@ test.describe('Draw modes', () => {
     await waitForDetections(page);
 
     // Switch back to file 0 and change mode to blackout while it is active.
-    await page.locator('#nav-prev').click();
+    await page.locator('.file-list-row').nth(0).click();
     await waitForDetections(page);
     await page.evaluate(() => (window as any).__setDrawMode('blackout'));
     await page.waitForTimeout(200); // let the re-render complete
 
     // Switch to file 1 — the fix calls rerenderActive() which must apply blackout.
-    await page.locator('#nav-next').click();
+    await page.locator('.file-list-row').nth(1).click();
     await page.waitForTimeout(300);
 
     // Point (74, 1382) is inside the plate detection box.

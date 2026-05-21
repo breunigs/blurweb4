@@ -16,6 +16,8 @@ export interface MediaItem {
   exportRow: HTMLElement;
   exportBarFill: HTMLElement;
   exportEtaEl: HTMLElement;
+  fileListRow: HTMLElement;
+  fileListMetaEl: HTMLElement;
   usesLibav: boolean;
   metaPromise: Promise<FileMeta>;
   meta?: FileMeta;

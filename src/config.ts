@@ -5,6 +5,7 @@ export type MetadataMode = 'keep' | 'gps' | 'strip';
 export interface AppConfig {
   model: ModelChoice;
   drawMode: DrawMode;
+  blackoutColor: string;
   keepMetadata: MetadataMode;
   keepAudio: boolean;
   minConfidence: number;
@@ -15,6 +16,7 @@ const STORAGE_KEY = 'blurweb4-config';
 export const DEFAULTS: AppConfig = {
   model: 'detect_n',
   drawMode: 'blur',
+  blackoutColor: '#000000',
   keepMetadata: 'keep',
   keepAudio: true,
   minConfidence: 0.05,

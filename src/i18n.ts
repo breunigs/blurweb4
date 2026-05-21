@@ -53,8 +53,9 @@ const STRINGS = {
     btn_choose_files: 'Choose files',
     btn_load_examples: 'Load examples',
 
-    // Step 2 — Preview & trim
+    // Step 2 — Redaction
     step_preview: 'Preview & trim',
+    step_redaction: 'Redaction',
     aria_prev: 'Previous file',
     aria_file_select: 'Selected file',
     aria_next: 'Next file',
@@ -92,23 +93,23 @@ const STRINGS = {
     var_desc_lon: 'GPS longitude',
     var_desc_duration: 'Video duration (hh:mm:ss)',
     mode_blur: 'Blur',
-    mode_blackout: 'Blackout',
+    mode_blackout: 'Solid color',
     mode_pixelate: 'Pixelate',
     mode_outline: 'Outline (debug)',
 
     // Step 4 — Export
     step_export: 'Export',
-    btn_export: 'Export current file',
-    btn_export_all: 'Export all files',
+    btn_export: 'Export {name}',
+    btn_export_all: 'Export all ({n})',
     overall: 'Overall',
 
     // Step 5 — Debug
-    step_debug: 'Debug log',
+    step_debug: 'Debug',
     debug_subtitle: 'All console output captured here',
     btn_copy: 'Copy to clipboard',
     btn_clear: 'Clear',
     btn_delete_detections: 'Delete detections',
-    btn_defaults: 'Reset to defaults',
+    btn_defaults: 'Restore default settings',
     confirm_delete_detections: 'Delete all cached detections?',
 
     // Explainer
@@ -142,25 +143,15 @@ const STRINGS = {
     eta_s: '~{s}s',
     eta_ms: '~{m}m {r}s',
 
-    // Dynamic — detection status
+    // Dynamic — detection / copy status
     copied: 'Copied!',
     detecting_plain: 'Detecting\u2026',
     detecting_timed: 'Detecting\u2026 (~{t}s)',
-    computing: 'computing\u2026',
-    downloading_model: 'downloading model\u2026',
-    no_detections: '0 detections',
-    detection_failed: 'Detection failed',
-    model_load_failed: 'Model failed to load',
 
     // Dynamic — file nav / summary
     files_loaded_one: '1 file loaded',
     files_loaded_n: '{n} files loaded',
     selected: '{s} selected',
-
-    // Dynamic — model loading
-    loading_model: 'Loading model\u2026',
-    loading_chunks_start: 'Loading chunks (0/{total})\u2026',
-    loading_chunks: 'Loading chunks ({done}/{total})\u2026',
 
     // Dynamic — export progress
     wakelock_warning:
@@ -179,6 +170,7 @@ const STRINGS = {
     btn_load_examples: 'Beispiele laden',
 
     step_preview: 'Vorschau & Schnitt',
+    step_redaction: 'Redaktion',
     aria_prev: 'Vorherige Datei',
     aria_file_select: 'Ausgew\u00e4hlte Datei',
     aria_next: 'N\u00e4chste Datei',
@@ -215,21 +207,21 @@ const STRINGS = {
     var_desc_lon: 'GPS-L\u00e4ngengrad',
     var_desc_duration: 'Videodauer (hh:mm:ss)',
     mode_blur: 'Unsch\u00e4rfe',
-    mode_blackout: 'Schw\u00e4rzen',
+    mode_blackout: 'Volltonfarbe',
     mode_pixelate: 'Verpixeln',
     mode_outline: 'Umriss (Debug)',
 
     step_export: 'Exportieren',
-    btn_export: 'Aktuelle Datei exportieren',
-    btn_export_all: 'Alle Dateien exportieren',
+    btn_export: '{name} exportieren',
+    btn_export_all: 'Alle exportieren ({n})',
     overall: 'Gesamt',
 
-    step_debug: 'Debug-Protokoll',
+    step_debug: 'Debug',
     debug_subtitle: 'Alle Konsolenausgaben hier',
     btn_copy: 'In Zwischenablage kopieren',
     btn_clear: 'Leeren',
     btn_delete_detections: 'Erkennungen l\u00f6schen',
-    btn_defaults: 'Auf Standard zur\u00fccksetzen',
+    btn_defaults: 'Standardeinstellungen wiederherstellen',
     confirm_delete_detections: 'Alle gespeicherten Erkennungen l\u00f6schen?',
 
     // Explainer
@@ -265,19 +257,10 @@ const STRINGS = {
     copied: 'Kopiert!',
     detecting_plain: 'Erkennung\u2026',
     detecting_timed: 'Erkennung\u2026 (~{t}s)',
-    computing: 'Berechnung\u2026',
-    downloading_model: 'Modell wird geladen\u2026',
-    no_detections: '0 Erkennungen',
-    detection_failed: 'Erkennung fehlgeschlagen',
-    model_load_failed: 'Modell konnte nicht geladen werden',
 
     files_loaded_one: '1 Datei geladen',
     files_loaded_n: '{n} Dateien geladen',
     selected: '{s} ausgew\u00e4hlt',
-
-    loading_model: 'Modell laden\u2026',
-    loading_chunks_start: 'Segmente laden (0/{total})\u2026',
-    loading_chunks: 'Segmente laden ({done}/{total})\u2026',
 
     wakelock_warning:
       'Bildschirm kann nicht aktiv gehalten werden. Wenn der Bildschirm w\u00e4hrend des Exports ausgeht, bricht der Export ab. Bitte den Bildschirm bis zum Abschluss aktiv lassen.',

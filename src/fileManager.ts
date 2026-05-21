@@ -18,6 +18,31 @@ import type { ExportManager } from './exportManager';
 
 export class FileManager {
   private examplesBtn: HTMLButtonElement | null = null;
+  private fileListEl: HTMLElement = document.getElementById('file-list')!
+
+  private formatDuration(seconds: number): string {
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  }
+
+  private formatFileSize(bytes: number): string {
+    if (bytes < 1_000_000) return `${(bytes / 1000).toFixed(0)} KB`;
+    if (bytes < 1_000_000_000) return `${(bytes / 1_000_000).toFixed(1)} MB`;
+    return `${(bytes / 1_000_000_000).toFixed(2)} GB`;
+  }
+
+  private updateFileListMeta(item: MediaItem): void {
+    const parts: string[] = [];
+    if (item.isVideo && item.player && item.player.duration > 0) {
+      parts.push(this.formatDuration(item.player.duration));
+    }
+    if (item.canvas.width > 0 && item.canvas.height > 0) {
+      parts.push(`${item.canvas.width}×${item.canvas.height}`);
+    }
+    parts.push(this.formatFileSize(item.file.size));
+    item.fileListMetaEl.textContent = parts.join(' · ');
+  }
 
   clearExamplesLoading(): void {
     if (!this.examplesBtn) return;
@@ -28,12 +53,6 @@ export class FileManager {
   constructor(
     private readonly store: ItemStore,
     private readonly previewArea: HTMLElement,
-    private readonly fileSelect: HTMLSelectElement,
-    private readonly fileNav: HTMLElement,
-    private readonly fileCounter: HTMLElement,
-    private readonly navPrev: HTMLButtonElement,
-    private readonly navNext: HTMLButtonElement,
-    private readonly exportFileRows: HTMLElement,
     private readonly loadedSummary: HTMLElement,
     private readonly stepPreviewSubtitle: HTMLElement,
     private readonly audioSettingRow: HTMLElement,
@@ -49,15 +68,7 @@ export class FileManager {
     private readonly onRerenderActive: () => Promise<void>,
     // Called after store.activeIndex is updated, for App to coordinate
     private readonly onAfterSwitchTo: (index: number) => void,
-  ) {
-    fileSelect.addEventListener('change', () => this.switchTo(fileSelect.selectedIndex));
-    navPrev.addEventListener('click', () => {
-      if (store.activeIndex > 0) this.switchTo(store.activeIndex - 1);
-    });
-    navNext.addEventListener('click', () => {
-      if (store.activeIndex < store.items.length - 1) this.switchTo(store.activeIndex + 1);
-    });
-  }
+  ) {}
 
   addFiles(files: FileList): void {
     for (const file of files) {
@@ -93,7 +104,6 @@ export class FileManager {
 
   addFile(file: File, switchToFile = true): void {
     const isVideo = file.type.startsWith('video/');
-    const index = this.store.items.length;
 
     // Canvas wrapper
     const wrapper = document.createElement('div');
@@ -102,27 +112,54 @@ export class FileManager {
     wrapper.appendChild(canvas);
     this.previewArea.appendChild(wrapper);
 
-    // File select option
-    const opt = document.createElement('option');
-    opt.textContent = file.name;
-    this.fileSelect.appendChild(opt);
+    // File list row
+    const fileListRow = document.createElement('div');
+    fileListRow.className = 'file-list-row';
 
-    // Export row
+    const fileListIcon = document.createElement('span');
+    fileListIcon.className = 'file-list-icon';
+    fileListIcon.innerHTML = isVideo
+      ? '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="10" height="10" rx="1.5"/><polyline points="11,6 15,4 15,12 11,10"/></svg>'
+      : '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="1" width="14" height="14" rx="2"/><polyline points="1,11 5,7 8,10 11,7 15,12"/><circle cx="5.5" cy="4.5" r="1.5"/></svg>';
+
+    const fileListBody = document.createElement('div');
+    fileListBody.className = 'file-list-body';
+
+    const fileListTop = document.createElement('div');
+    fileListTop.className = 'file-list-top';
+
+    const fileListName = document.createElement('span');
+    fileListName.className = 'file-list-name';
+    fileListName.textContent = file.name;
+    fileListName.title = file.name;
+
+    const fileListMeta = document.createElement('span');
+    fileListMeta.className = 'file-list-meta';
+    fileListMeta.textContent = this.formatFileSize(file.size);
+
+    fileListTop.append(fileListName, fileListMeta);
+
+    // Progress section (used by ExportManager as item.exportRow)
     const exportRow = document.createElement('div');
-    exportRow.className = 'export-file-row';
-    const rowName = document.createElement('span');
-    rowName.className = 'export-file-name';
-    rowName.textContent = file.name;
-    rowName.title = file.name;
+    exportRow.className = 'file-list-progress';
     const rowBarTrack = document.createElement('div');
-    rowBarTrack.className = 'export-file-bar-track';
+    rowBarTrack.className = 'file-list-bar-track';
     const rowBarFill = document.createElement('div');
-    rowBarFill.className = 'export-file-bar-fill';
+    rowBarFill.className = 'file-list-bar-fill';
     rowBarTrack.appendChild(rowBarFill);
     const rowEta = document.createElement('span');
-    rowEta.className = 'export-file-eta';
-    exportRow.append(rowName, rowBarTrack, rowEta);
-    this.exportFileRows.appendChild(exportRow);
+    rowEta.className = 'file-list-eta';
+    exportRow.append(rowBarTrack, rowEta);
+
+    fileListBody.append(fileListTop, exportRow);
+
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'file-list-remove';
+    removeBtn.innerHTML = '&times;';
+    removeBtn.setAttribute('aria-label', 'Remove file');
+
+    fileListRow.append(fileListIcon, fileListBody, removeBtn);
+    this.fileListEl.appendChild(fileListRow);
 
     const item: MediaItem = {
       name: file.name,
@@ -133,11 +170,23 @@ export class FileManager {
       exportRow,
       exportBarFill: rowBarFill,
       exportEtaEl: rowEta,
+      fileListRow,
+      fileListMetaEl: fileListMeta,
       loaded: false,
       exported: false,
       usesLibav: false,
       metaPromise: Promise.resolve({}),
     };
+
+    removeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.removeFile(item);
+    });
+    fileListRow.addEventListener('click', () => {
+      const idx = this.store.items.indexOf(item);
+      if (idx !== -1) this.switchTo(idx);
+    });
+
     // Kick off metadata extraction fire-and-forget; cache result on item.
     if (isVideo) {
       item.metaPromise = extractVideoMeta(file).then((m) => { item.meta = m; return m; }).catch((err) => {
@@ -156,9 +205,11 @@ export class FileManager {
     // Reveal step cards on first file
     if (this.store.items.length === 1) {
       document.getElementById('step-preview')!.classList.add('active');
-      document.getElementById('step-settings')!.classList.add('active');
       document.getElementById('step-export')!.classList.add('active');
     }
+
+    // Show compact drop zone when files are loaded
+    document.getElementById('step-load')!.classList.add('has-files');
 
     this.updateLoadedSummary();
     this.updateFileNav();
@@ -170,13 +221,13 @@ export class FileManager {
 
       player.onLibavFallback = () => {
         item.usesLibav = true;
-        if (this.store.activeIndex === index) this.libavWarningEl.hidden = false;
+        if (this.store.items[this.store.activeIndex] === item) this.libavWarningEl.hidden = false;
       };
 
       // Show detection result summary when this player's frame is detected.
       // Only update UI if this item is the active one.
       player.onDetection = (dets) => {
-        if (this.store.activeIndex === index) this.onShowDetectionResult(dets);
+        if (this.store.items[this.store.activeIndex] === item) this.onShowDetectionResult(dets);
       };
 
       player
@@ -184,14 +235,15 @@ export class FileManager {
         .then(async () => {
           item.loaded = true;
           canvas.dataset.loaded = 'true';
-          if (this.store.activeIndex === index) this.updatePreviewAspectRatio();
+          if (this.store.items[this.store.activeIndex] === item) this.updatePreviewAspectRatio();
+          this.updateFileListMeta(item);
           const saved = await loadTrim(`${file.name}|${file.size}`);
           if (saved && item.player) {
             const dur = item.player.duration;
             item.trimStart = Math.max(0, Math.min(saved.start, dur));
             item.trimEnd = Math.max(item.trimStart, Math.min(saved.end, dur));
           }
-          if (this.store.activeIndex === index) this.playback.setupTrimSlider(item);
+          if (this.store.items[this.store.activeIndex] === item) this.playback.setupTrimSlider(item);
         })
         .catch((err) => {
           console.error(`Failed to load video "${file.name}":`, err);
@@ -202,14 +254,15 @@ export class FileManager {
         .then(async () => {
           item.loaded = true;
           canvas.dataset.loaded = 'true';
-          if (this.store.activeIndex === index) this.updatePreviewAspectRatio();
+          if (this.store.items[this.store.activeIndex] === item) this.updatePreviewAspectRatio();
+          this.updateFileListMeta(item);
           const ctx = canvas.getContext('2d')!;
           const key = await makeImageKey(file, canvas.width, canvas.height);
           const cached = await getCachedDetections(key);
           if (cached !== null) {
             const filtered = filterByConf(cached, getConfig().minConfidence);
-            applyDetections(ctx, filtered, getConfig().drawMode);
-            if (this.store.activeIndex === index) {
+            applyDetections(ctx, filtered, getConfig().drawMode, getConfig().blackoutColor);
+            if (this.store.items[this.store.activeIndex] === item) {
               this.onShowDetectionResult(filtered);
               (window as unknown as Record<string, unknown>).__lastDetections = filtered;
             } else {
@@ -223,15 +276,15 @@ export class FileManager {
               (dets) => {
                 this.onShowDetecting(false);
                 const filtered = filterByConf(dets, getConfig().minConfidence);
-                applyDetections(ctx, filtered, getConfig().drawMode);
-                if (this.store.activeIndex === index) {
+                applyDetections(ctx, filtered, getConfig().drawMode, getConfig().blackoutColor);
+                if (this.store.items[this.store.activeIndex] === item) {
                   this.onShowDetectionResult(filtered);
                 } else {
                   this.clearExamplesLoading();
                 }
               },
               (err) => {
-                if (this.store.activeIndex === index) {
+                if (this.store.items[this.store.activeIndex] === item) {
                   this.onShowInferenceError(err);
                 } else {
                   this.clearExamplesLoading();
@@ -247,18 +300,67 @@ export class FileManager {
         });
     }
 
-    if (switchToFile) this.switchTo(index);
+    if (switchToFile) {
+      this.switchTo(this.store.items.length - 1);
+    } else {
+      // switchTo calls updateBtnState; call it here when not switching so labels stay current.
+      this.exportManager.updateBtnState();
+    }
+  }
+
+  removeFile(item: MediaItem): void {
+    const index = this.store.items.indexOf(item);
+    if (index === -1) return;
+
+    // Dispose video resources
+    item.player?.dispose();
+
+    // Remove DOM elements
+    item.wrapper.remove();
+    item.fileListRow.remove();
+
+    // Remove from store
+    this.store.items.splice(index, 1);
+
+    const remaining = this.store.items.length;
+
+    if (remaining === 0) {
+      document.getElementById('step-preview')!.classList.remove('active');
+      document.getElementById('step-export')!.classList.remove('active');
+      document.getElementById('step-load')!.classList.remove('has-files');
+      this.store.activeIndex = -1;
+      this.previewArea.style.aspectRatio = '';
+      this.updateAudioSettingVisibility();
+      this.updateLoadedSummary();
+      this.updateFileNav();
+      this.exportManager.updateBtnState();
+      return;
+    }
+
+    // Determine new active index
+    let newActive = this.store.activeIndex;
+    if (index < newActive) {
+      newActive--;
+    } else if (index === newActive) {
+      newActive = Math.min(index, remaining - 1);
+    }
+
+    this.store.activeIndex = -1; // reset so switchTo works cleanly
+    this.switchTo(newActive);
+    this.updateAudioSettingVisibility();
+    this.updateLoadedSummary();
   }
 
   switchTo(index: number): void {
     if (this.store.activeIndex >= 0) {
       this.store.items[this.store.activeIndex].wrapper.classList.remove('active');
+      this.store.items[this.store.activeIndex].fileListRow.classList.remove('active-file');
     }
     this.store.activeIndex = index;
-    this.fileSelect.selectedIndex = index;
 
     const item = this.store.items[index];
     item.wrapper.classList.add('active');
+    item.fileListRow.classList.add('active-file');
 
     if (item.player) {
       (window as unknown as Record<string, unknown>).__activePlayer = item.player;
@@ -277,14 +379,6 @@ export class FileManager {
   updateFileNav(): void {
     const n = this.store.items.length;
     const i = this.store.activeIndex;
-    if (n > 1) {
-      this.fileNav.classList.add('visible');
-      this.fileCounter.textContent = `${i + 1} / ${n}`;
-      this.navPrev.disabled = i <= 0;
-      this.navNext.disabled = i >= n - 1;
-    } else {
-      this.fileNav.classList.remove('visible');
-    }
     this.stepPreviewSubtitle.textContent = n > 0 ? (this.store.items[i]?.name ?? '') : '';
   }
 
