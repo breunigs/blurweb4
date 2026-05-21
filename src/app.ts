@@ -90,6 +90,11 @@ export class App {
       document.getElementById('trim-start-label')!,
       document.getElementById('trim-end-label')!,
       document.getElementById('trim-duration-label')!,
+      document.getElementById('trim-slider')!,
+      document.getElementById('trim-preview-handle')!,
+      document.getElementById('trim-preview-label')!,
+      document.getElementById('trim-handle-start')!,
+      document.getElementById('trim-handle-end')!,
       (_item) => {
         // Trim changed: refresh export button state.
         this.exportManager.updateBtnState();
@@ -301,6 +306,7 @@ export class App {
   }
 
   private showDetectionResult(dets: import('./detector').Detection[]): void {
+    this.files.clearExamplesLoading();
     this.detectStatusInline.classList.remove('visible');
     const counts: Record<string, number> = {};
     for (const d of dets) counts[d.label] = (counts[d.label] ?? 0) + 1;
@@ -311,6 +317,7 @@ export class App {
   }
 
   private showInferenceError(err: Error): void {
+    this.files.clearExamplesLoading();
     this.detectStatusInline.classList.remove('visible');
     this.detectResultEl.textContent = t('detection_failed');
     this.detectResultEl.classList.add('visible', 'error');
