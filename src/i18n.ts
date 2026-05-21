@@ -8,10 +8,39 @@
 
 export type Lang = 'en' | 'de';
 
+const LANG_KEY = 'blurweb4-lang';
+
 export const lang: Lang = (() => {
+  const stored = localStorage.getItem(LANG_KEY);
+  if (stored === 'en' || stored === 'de') return stored;
   const first = (navigator.languages?.[0] ?? navigator.language ?? '').toLowerCase();
   return first.startsWith('de') ? 'de' : 'en';
 })();
+
+export function getLangPref(): Lang | 'auto' {
+  const stored = localStorage.getItem(LANG_KEY);
+  return stored === 'en' || stored === 'de' ? stored : 'auto';
+}
+
+export function setLang(l: Lang | 'auto'): void {
+  if (l === 'auto') {
+    localStorage.removeItem(LANG_KEY);
+  } else {
+    localStorage.setItem(LANG_KEY, l);
+  }
+  location.reload();
+}
+
+export function initLangControls(): void {
+  const inputs = document.querySelectorAll<HTMLInputElement>('input[name="lang"]');
+  const current = getLangPref();
+  inputs.forEach(input => {
+    if (input.value === current) input.checked = true;
+    input.addEventListener('change', () => {
+      if (input.checked) setLang(input.value as Lang | 'auto');
+    });
+  });
+}
 
 const STRINGS = {
   en: {

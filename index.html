@@ -284,37 +284,13 @@
     </div>
     <div class="step-body">
       <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
-        <button id="copy-log-btn" style="
-          padding:7px 16px;
-          background:var(--card2);
-          color:var(--dim);
-          border:1px solid var(--border);
-          border-radius:6px;
-          cursor:pointer;
-          font-size:13px;
-          font-family:inherit;">
+        <button id="copy-log-btn" class="debug-btn">
           <span data-i18n="btn_copy">Copy to clipboard</span>
         </button>
-        <button id="clear-log-btn" style="
-          padding:7px 16px;
-          background:var(--card2);
-          color:var(--dim);
-          border:1px solid var(--border);
-          border-radius:6px;
-          cursor:pointer;
-          font-size:13px;
-          font-family:inherit;">
+        <button id="clear-log-btn" class="debug-btn">
           <span data-i18n="btn_clear">Clear</span>
         </button>
-        <button id="delete-detections-btn" style="
-          padding:7px 16px;
-          background:var(--card2);
-          color:var(--dim);
-          border:1px solid var(--border);
-          border-radius:6px;
-          cursor:pointer;
-          font-size:13px;
-          font-family:inherit;">
+        <button id="delete-detections-btn" class="debug-btn">
           <span data-i18n="btn_delete_detections">Delete detections</span>
         </button>
         <span id="copy-log-status" style="font-size:12px;color:var(--muted);align-self:center;"></span>
@@ -335,23 +311,35 @@
         scrollbar-width:thin;
         scrollbar-color:var(--border) transparent;
       "></div>
-      <!-- Theme controls -->
-      <div id="theme-controls" style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-top:12px;">
-        <span style="font-size:11px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:var(--muted);">Design theme</span>
-        <div style="display:flex;align-items:center;gap:8px;">
-          <span style="font-size:12px;color:var(--dim);white-space:nowrap;">Platform</span>
-          <div class="pill-group pill-group-sm">
-            <label><input type="radio" name="theme-platform" value="auto">Auto</label>
-            <label><input type="radio" name="theme-platform" value="macos">macOS</label>
-            <label><input type="radio" name="theme-platform" value="windows">Windows</label>
+      <!-- Debug controls: theme + language -->
+      <div style="display:flex;flex-direction:column;gap:8px;margin-top:12px;">
+        <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;">
+          <span style="font-size:11px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:var(--muted);">Design theme</span>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-size:12px;color:var(--dim);white-space:nowrap;">Platform</span>
+            <div class="pill-group pill-group-sm">
+              <label><input type="radio" name="theme-platform" value="auto">Auto</label>
+              <label><input type="radio" name="theme-platform" value="macos">macOS</label>
+              <label><input type="radio" name="theme-platform" value="windows">Windows</label>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-size:12px;color:var(--dim);white-space:nowrap;">Color</span>
+            <div class="pill-group pill-group-sm">
+              <label><input type="radio" name="theme-color" value="auto">Auto</label>
+              <label><input type="radio" name="theme-color" value="light">Light</label>
+              <label><input type="radio" name="theme-color" value="dark">Dark</label>
+            </div>
           </div>
         </div>
-        <div style="display:flex;align-items:center;gap:8px;">
-          <span style="font-size:12px;color:var(--dim);white-space:nowrap;">Color</span>
-          <div class="pill-group pill-group-sm">
-            <label><input type="radio" name="theme-color" value="auto">Auto</label>
-            <label><input type="radio" name="theme-color" value="light">Light</label>
-            <label><input type="radio" name="theme-color" value="dark">Dark</label>
+        <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;">
+          <span style="font-size:11px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:var(--muted);">Language</span>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <div class="pill-group pill-group-sm">
+              <label><input type="radio" name="lang" value="auto">Auto</label>
+              <label><input type="radio" name="lang" value="en">EN</label>
+              <label><input type="radio" name="lang" value="de">DE</label>
+            </div>
           </div>
         </div>
       </div>
