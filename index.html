@@ -5,6 +5,20 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Media Redactor</title>
+  <!-- Apply theme before CSS renders to prevent flash of unstyled content -->
+  <script>
+    (function () {
+      var p = localStorage.getItem('blurweb4-theme-platform') || 'auto';
+      var c = localStorage.getItem('blurweb4-theme-color') || 'auto';
+      var ua = navigator.userAgent;
+      var ep = (p === 'macos' || p === 'windows') ? p
+        : (/Windows/i.test(ua) ? 'windows' : 'macos');
+      var ec = c === 'auto'
+        ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+        : c;
+      document.documentElement.dataset.theme = ep + '-' + ec;
+    })();
+  </script>
   <link rel="stylesheet" href="src/style.css">
   <link rel="manifest" href="/manifest.json">
   <link rel="apple-touch-icon" href="/icon.svg">
@@ -321,6 +335,26 @@
         scrollbar-width:thin;
         scrollbar-color:var(--border) transparent;
       "></div>
+      <!-- Theme controls -->
+      <div id="theme-controls" style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-top:12px;">
+        <span style="font-size:11px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:var(--muted);">Design theme</span>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:12px;color:var(--dim);white-space:nowrap;">Platform</span>
+          <div class="pill-group pill-group-sm">
+            <label><input type="radio" name="theme-platform" value="auto">Auto</label>
+            <label><input type="radio" name="theme-platform" value="macos">macOS</label>
+            <label><input type="radio" name="theme-platform" value="windows">Windows</label>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:12px;color:var(--dim);white-space:nowrap;">Color</span>
+          <div class="pill-group pill-group-sm">
+            <label><input type="radio" name="theme-color" value="auto">Auto</label>
+            <label><input type="radio" name="theme-color" value="light">Light</label>
+            <label><input type="radio" name="theme-color" value="dark">Dark</label>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
