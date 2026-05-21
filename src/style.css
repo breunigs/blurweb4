@@ -1101,6 +1101,25 @@ body {
   font-size: 12px;
 }
 
+/* ── Debug section buttons ───────────────────────────────────── */
+.debug-btn {
+  padding: 7px 16px;
+  background: var(--card2);
+  color: var(--dim);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  font-family: inherit;
+  transition: color 0.1s, background 0.1s;
+}
+
+.debug-btn:hover {
+  color: var(--text);
+  background: var(--card2);
+  border-color: var(--muted);
+}
+
 /* ══════════════════════════════════════════════════════════════
    PLATFORM-SPECIFIC OVERRIDES
    ══════════════════════════════════════════════════════════════ */
