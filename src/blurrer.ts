@@ -129,24 +129,24 @@ export class Blurrer {
     this.#maxSize = maxSize;
   }
 
-  apply(ctx: AnyCtx, detections: Detection[], mode: 'blur' | 'blackout' | 'pixelate'): void {
+  apply(ctx: AnyCtx, detections: Detection[], mode: 'blur' | 'blackout' | 'pixelate', color = '#000000'): void {
     const cw = (ctx as CanvasRenderingContext2D).canvas.width;
     const ch = (ctx as CanvasRenderingContext2D).canvas.height;
     for (const d of detections) {
       const r = Math.round((Math.min(d.w, d.h) / 2) * CORNER_RATIOS[d.label]);
       const box = clipToEdges(d.x, d.y, d.w, d.h, r, cw, ch);
-      if (mode === 'blackout') this.#blackArea(ctx, box);
+      if (mode === 'blackout') this.#solidArea(ctx, box, color);
       else if (mode === 'pixelate') this.#pixelateArea(ctx, box, cw);
       else this.#blurArea(ctx, box, cw, ch);
     }
   }
 
-  // ── Blackout ────────────────────────────────────────────────────────────────
+  // ── Solid color ─────────────────────────────────────────────────────────────
 
-  #blackArea(ctx: AnyCtx, box: ClippedBox): void {
+  #solidArea(ctx: AnyCtx, box: ClippedBox, color: string): void {
     ctx.save();
     roundedRectPath(ctx, box.x, box.y, box.w, box.h, box.corners);
-    ctx.fillStyle = 'black';
+    ctx.fillStyle = color;
     ctx.fill();
     ctx.restore();
   }

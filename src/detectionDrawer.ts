@@ -45,11 +45,11 @@ function drawOutline(ctx: AnyCtx, detections: Detection[]): void {
 }
 
 /** Apply detections to the canvas using the current draw mode. */
-export function applyDetections(ctx: AnyCtx, detections: Detection[], mode: DrawMode): void {
+export function applyDetections(ctx: AnyCtx, detections: Detection[], mode: DrawMode, color = '#000000'): void {
   if (detections.length === 0) return;
   if (mode === 'outline') {
     drawOutline(ctx, detections);
   } else {
-    blurrer.apply(ctx, detections, mode);
+    blurrer.apply(ctx, detections, mode, color);
   }
 }

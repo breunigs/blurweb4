@@ -52,7 +52,7 @@ export class VideoPlayer {
 
   private applyAndNotify(dets: Detection[]): void {
     const filtered = filterByConf(dets, getConfig().minConfidence);
-    applyDetections(this.ctx, filtered, getConfig().drawMode);
+    applyDetections(this.ctx, filtered, getConfig().drawMode, getConfig().blackoutColor);
     this.onDetection?.(filtered);
   }
 

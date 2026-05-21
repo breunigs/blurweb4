@@ -67,6 +67,7 @@ export async function encodeVideo(
     let offscreen: OffscreenCanvas | null = null;
     let offCtx: OffscreenCanvasRenderingContext2D | null = null;
     const drawMode = getConfig().drawMode;
+    const blackoutColor = getConfig().blackoutColor;
 
     // Build trim option only when values are defined and non-trivial.
     const trim: { start?: number; end?: number } | undefined =
@@ -120,7 +121,7 @@ export async function encodeVideo(
           // Frames previewed at the trim-start position hit the cache here.
           const key = await makeVideoKey(file, offscreen.width, offscreen.height, sample.microsecondTimestamp);
           const detections = filterByConf(await detectForExport(offscreen, key), getConfig().minConfidence);
-          applyDetections(offCtx!, detections, drawMode);
+          applyDetections(offCtx!, detections, drawMode, blackoutColor);
           return offscreen;
         },
       },

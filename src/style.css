@@ -5,8 +5,8 @@
   --card2: #3a3a3c;
   --border: rgba(255, 255, 255, 0.12);
   --text: #ffffff;
-  --dim: rgba(235, 235, 245, 0.6);
-  --muted: rgba(235, 235, 245, 0.3);
+  --dim: rgba(235, 235, 245, 0.72);
+  --muted: rgba(235, 235, 245, 0.65);
   --accent: #0a84ff;
   --accent-h: #0071e3;
   --green: #30d158;
@@ -25,8 +25,8 @@
     --card2: #f0f0f5;
     --border: rgba(60, 60, 67, 0.13);
     --text: #000000;
-    --dim: rgba(60, 60, 67, 0.6);
-    --muted: rgba(60, 60, 67, 0.3);
+    --dim: rgba(60, 60, 67, 0.88);
+    --muted: rgba(60, 60, 67, 0.78);
     --accent: #007aff;
     --accent-h: #0062cc;
     --green: #34c759;
@@ -43,8 +43,8 @@ html[data-theme='macos-dark'] {
   --card2: #3a3a3c;
   --border: rgba(255, 255, 255, 0.12);
   --text: #ffffff;
-  --dim: rgba(235, 235, 245, 0.6);
-  --muted: rgba(235, 235, 245, 0.3);
+  --dim: rgba(235, 235, 245, 0.72);
+  --muted: rgba(235, 235, 245, 0.65);
   --accent: #0a84ff;
   --accent-h: #0071e3;
   --green: #30d158;
@@ -60,8 +60,8 @@ html[data-theme='macos-light'] {
   --card2: #f0f0f5;
   --border: rgba(60, 60, 67, 0.13);
   --text: #000000;
-  --dim: rgba(60, 60, 67, 0.6);
-  --muted: rgba(60, 60, 67, 0.3);
+  --dim: rgba(60, 60, 67, 0.88);
+  --muted: rgba(60, 60, 67, 0.78);
   --accent: #007aff;
   --accent-h: #0062cc;
   --green: #34c759;
@@ -77,8 +77,8 @@ html[data-theme='windows-dark'] {
   --card2: #333333;
   --border: rgba(255, 255, 255, 0.093);
   --text: rgba(255, 255, 255, 0.9);
-  --dim: rgba(255, 255, 255, 0.6);
-  --muted: rgba(255, 255, 255, 0.36);
+  --dim: rgba(255, 255, 255, 0.80);
+  --muted: rgba(255, 255, 255, 0.65);
   --accent: #0078d4;
   --accent-h: #006cbd;
   --green: #6ccb5f;
@@ -94,8 +94,8 @@ html[data-theme='windows-light'] {
   --card2: #f9f9f9;
   --border: rgba(0, 0, 0, 0.073);
   --text: rgba(0, 0, 0, 0.9);
-  --dim: rgba(0, 0, 0, 0.6);
-  --muted: rgba(0, 0, 0, 0.36);
+  --dim: rgba(0, 0, 0, 0.75);
+  --muted: rgba(0, 0, 0, 0.62);
   --accent: #0078d4;
   --accent-h: #006cbd;
   --green: #107c10;
@@ -278,10 +278,13 @@ body {
   color: var(--muted);
   text-align: center;
   cursor: pointer;
+  overflow: hidden;
   transition:
     border-color 0.15s,
     background 0.15s,
-    color 0.15s;
+    color 0.15s,
+    padding 0.35s ease,
+    gap 0.35s ease;
 }
 
 #drop-zone:hover,
@@ -295,10 +298,12 @@ body {
   width: 36px;
   height: 36px;
   opacity: 0.4;
+  transition: width 0.35s ease, height 0.35s ease, opacity 0.35s ease;
 }
 
 #drop-zone p {
   font-size: 14px;
+  transition: font-size 0.35s ease;
 }
 
 #drop-zone small {
@@ -373,78 +378,209 @@ body {
   color: var(--dim);
 }
 
-/* ── 2. Preview ────────────────────────────────────────────── */
+/* Compact drop zone when files are loaded */
+#step-load.has-files #drop-zone {
+  padding: 10px 16px;
+  flex-direction: row;
+  gap: 10px;
+  justify-content: center;
+}
+
+#step-load.has-files #drop-zone svg {
+  width: 18px;
+  height: 18px;
+  opacity: 0.5;
+}
+
+#step-load.has-files #drop-zone p {
+  font-size: 13px;
+}
+
+#step-load.has-files #drop-zone small {
+  display: none;
+}
+
+/* ── File list ─────────────────────────────────────────────── */
+#file-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 155px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+#file-list-header {
+  display: none;
+  align-items: center;
+  padding: 0 10px 2px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--card);
+}
+
+#step-load.has-files #file-list-header {
+  display: flex;
+}
+
+#file-list-header span:first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+#file-list-header span:last-child {
+  flex-shrink: 0;
+  padding-right: 32px; /* align with remove button */
+}
+
+.file-list-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--card2);
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s;
+  min-width: 0;
+}
+
+.file-list-row:hover {
+  border-color: var(--muted);
+}
+
+.file-list-row.active-file {
+  border-color: var(--accent);
+  background: rgba(10, 132, 255, 0.06);
+}
+
+html[data-theme^='macos'] .file-list-row {
+  border-radius: 10px;
+}
+
+html[data-theme^='windows'] .file-list-row {
+  border-radius: 4px;
+}
+
+.file-list-icon {
+  flex-shrink: 0;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+}
+
+.file-list-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.file-list-top {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.file-list-name {
+  font-size: 13px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex: 1;
+}
+
+.file-list-meta {
+  font-size: 11px;
+  color: var(--dim);
+  white-space: nowrap;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Progress section: hidden by default, flexed when export is active */
+.file-list-progress {
+  display: none;
+  align-items: center;
+  gap: 8px;
+}
+
+.file-list-progress.active {
+  display: flex;
+}
+
+.file-list-bar-track {
+  flex: 1;
+  height: 3px;
+  background: var(--card);
+  border-radius: 2px;
+  border: 1px solid var(--border);
+  min-width: 60px;
+}
+
+.file-list-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+  width: 0%;
+  transition: width 0.15s ease;
+}
+
+.file-list-eta {
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  min-width: 60px;
+  text-align: right;
+}
+
+.file-list-remove {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 17px;
+  border-radius: 4px;
+  line-height: 1;
+  padding: 0;
+  transition: background 0.1s, color 0.1s;
+}
+
+.file-list-remove:hover {
+  background: rgba(248, 113, 113, 0.15);
+  color: #f87171;
+}
+
+/* ── 2. Redaction ──────────────────────────────────────────── */
 #step-preview,
-#step-settings,
 #step-export {
   display: none;
 }
 
 #step-preview.active,
-#step-settings.active,
 #step-export.active {
   display: block;
 }
 
-/* File nav row */
-#file-nav {
-  display: none;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 14px;
-}
-
-#file-nav.visible {
-  display: flex;
-}
-
-.nav-btn {
-  width: 32px;
-  height: 32px;
-  background: var(--card2);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  color: var(--dim);
-  font-size: 16px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  transition:
-    color 0.1s,
-    background 0.1s;
-}
-
-.nav-btn:hover:not(:disabled) {
-  background: var(--card2);
-  color: var(--text);
-}
-
-.nav-btn:disabled {
-  opacity: 0.35;
-  cursor: default;
-}
-
-#file-select {
-  flex: 1;
-  max-width: 340px;
-  padding: 6px 10px;
-  background: var(--card2);
-  color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  font-size: 13px;
-  font-family: inherit;
-  cursor: pointer;
-}
-
-#file-counter {
-  font-size: 12px;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
 
 /* Canvas area */
 #preview-area {
@@ -501,31 +637,30 @@ body {
 
 /* Detection status row — below the canvas */
 #detect-status-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 28px;
+  min-height: 20px;
   padding: 4px 2px;
   font-size: 12px;
   font-family: var(--mono);
 }
 
+/* Detecting spinner — lives in the step header */
 #detect-status-inline {
-  display: flex;
+  display: none;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
+  font-size: 12px;
+  font-family: var(--mono);
   color: var(--dim);
-  visibility: hidden;
 }
 
 #detect-status-inline.visible {
-  visibility: visible;
+  display: flex;
 }
 
 #detect-status-inline::before {
   content: '';
-  width: 11px;
-  height: 11px;
+  width: 10px;
+  height: 10px;
   border: 2px solid var(--border);
   border-top-color: var(--accent);
   border-radius: 50%;
@@ -539,17 +674,40 @@ body {
   }
 }
 
-#detect-result {
-  color: var(--dim);
-  visibility: hidden;
+/* Solid-color label: swatch dot + invisible overlay color picker */
+#blackout-label {
+  position: relative;
 }
 
-#detect-result.visible {
-  visibility: visible;
+#blackout-label::after {
+  content: '';
+  display: inline-block;
+  width: 18px;
+  height: 14px;
+  border-radius: 4px;
+  background: var(--blackout-swatch, #000);
+  border: 1px solid rgba(128, 128, 128, 0.4);
+  margin-left: 4px;
+  vertical-align: middle;
+  flex-shrink: 0;
+  pointer-events: none;
 }
 
-#detect-result.error {
-  color: #f87171;
+#blackout-color-picker {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  pointer-events: none;
+  cursor: pointer;
+  border: none;
+  padding: 0;
+}
+
+/* Enable picker clicks only when blackout mode is already selected */
+input[name="drawMode"][value="blackout"]:checked ~ #blackout-color-picker {
+  pointer-events: auto;
 }
 
 /* Trim controls */
@@ -766,6 +924,7 @@ body {
   grid-template-columns: max-content 1fr;
   align-items: center;
   row-gap: 8px;
+  margin-bottom: 18px;
 }
 
 .setting-row {
@@ -835,26 +994,24 @@ body {
 }
 
 /* Model load indicator — spans both columns, always reserves space to avoid CLS */
-.model-load-indicator {
-  grid-column: 2;
+#model-group-wrap {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  visibility: hidden;
-  height: 20px;
-  margin-top: -4px;
+  flex-direction: column;
+  gap: 5px;
+  justify-self: start;
 }
 
-.model-load-indicator.visible {
-  visibility: visible;
-}
-
-#model-load-bar-track {
-  width: 140px;
-  height: 4px;
-  background: var(--card2);
+#model-load-progress {
+  height: 3px;
+  background: var(--border);
   border-radius: 2px;
-  border: 1px solid var(--border);
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+#model-load-progress.visible {
+  opacity: 1;
 }
 
 #model-load-bar-fill {
@@ -863,12 +1020,6 @@ body {
   border-radius: 2px;
   width: 0%;
   transition: width 0.2s ease;
-}
-
-#model-load-text {
-  font-size: 12px;
-  color: var(--dim);
-  white-space: nowrap;
 }
 
 .conf-row,
@@ -887,11 +1038,15 @@ body {
 
 /* ── 4. Export ─────────────────────────────────────────────── */
 .export-actions {
-  display: flex;
+  display: none;
   gap: 10px;
   flex-wrap: wrap;
   align-items: center;
-  margin-bottom: 16px;
+  margin-top: 12px;
+}
+
+#step-load.has-files .export-actions {
+  display: flex;
 }
 
 #export-btn {
@@ -938,54 +1093,31 @@ body {
   cursor: default;
 }
 
-/* Progress — fixed height rows to prevent layout shift */
-.export-progress-rows {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  /* Reserve vertical space equal to global row even when empty */
-  min-height: 28px;
+/* Export overall progress — bottom edge of the load card */
+#export-global-row {
+  height: 3px;
+  background: var(--border);
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 0.2s ease;
 }
 
-.export-global-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  height: 28px;
-  visibility: hidden;
-}
-
-.export-global-row.visible {
-  visibility: visible;
-}
-
-.export-global-label {
-  font-size: 12px;
-  color: var(--dim);
-  white-space: nowrap;
-}
-
-#global-progress-track {
-  flex: 1;
-  max-width: 200px;
-  height: 4px;
-  background: var(--card2);
-  border-radius: 2px;
-  border: 1px solid var(--border);
+#export-global-row.visible {
+  opacity: 1;
 }
 
 #global-progress-fill {
   height: 100%;
   background: var(--green);
-  border-radius: 2px;
   width: 0%;
-  transition: width 0.2s ease;
+  transition: width 0.3s ease;
 }
 
 #global-eta {
   font-size: 12px;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
+  align-self: center;
   white-space: nowrap;
   min-width: 80px;
 }

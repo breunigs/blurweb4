@@ -1,7 +1,7 @@
 import { runBatch } from './batchExporter';
 import type { ExportItem } from './batchExporter';
 import { getConfig } from './config';
-import { t } from './i18n';
+import { t, tpl } from './i18n';
 import { type ItemStore, formatEta } from './types';
 
 // In Tauri, window.alert() is silently suppressed. Use the dialog plugin instead;
@@ -44,6 +44,13 @@ export class ExportManager {
     const active = this.store.items[this.store.activeIndex];
     this.exportBtn.disabled = !active || active.exported;
     this.exportAllBtn.disabled = this.store.items.length === 0 || this.store.items.every((it) => it.exported);
+    this.updateBtnLabels();
+  }
+
+  updateBtnLabels(): void {
+    const active = this.store.items[this.store.activeIndex];
+    this.exportBtn.textContent = tpl('btn_export', { name: active?.name ?? '' });
+    this.exportAllBtn.textContent = tpl('btn_export_all', { n: this.store.items.length });
   }
 
   async startExport(forceAll: boolean): Promise<void> {

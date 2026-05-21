@@ -9,7 +9,7 @@ import {
 } from './detector';
 import { applyDetections } from './detectionDrawer';
 import { getConfig, setConfig, DEFAULTS, type AppConfig, type ModelChoice } from './config';
-import { t, tpl, translateLabel, applyTranslations } from './i18n';
+import { t, tpl, applyTranslations } from './i18n';
 import { getEntries, clearEntries, setOnUpdate, copyToClipboard } from './debugLog';
 import { renderImage } from './imageRenderer';
 import { type ItemStore, debounce } from './types';
@@ -41,12 +41,9 @@ export class App {
   private globalProgressFill!: HTMLElement;
   private globalEta!: HTMLElement;
   private exportGlobalRow!: HTMLElement;
-  private exportFileRows!: HTMLElement;
   private modelLoadProgress!: HTMLElement;
   private modelLoadBarFill!: HTMLElement;
-  private modelLoadText!: HTMLElement;
   private detectStatusInline!: HTMLElement;
-  private detectResultEl!: HTMLElement;
   private libavWarningEl!: HTMLElement;
   private loadedSummary!: HTMLElement;
   private stepPreviewSubtitle!: HTMLElement;
@@ -59,12 +56,9 @@ export class App {
     this.globalProgressFill = document.getElementById('global-progress-fill')!;
     this.globalEta = document.getElementById('global-eta')!;
     this.exportGlobalRow = document.getElementById('export-global-row')!;
-    this.exportFileRows = document.getElementById('export-file-rows')!;
     this.modelLoadProgress = document.getElementById('model-load-progress')!;
     this.modelLoadBarFill = document.getElementById('model-load-bar-fill')!;
-    this.modelLoadText = document.getElementById('model-load-text')!;
     this.detectStatusInline = document.getElementById('detect-status-inline')!;
-    this.detectResultEl = document.getElementById('detect-result')!;
     this.libavWarningEl = document.getElementById('libav-warning')!;
     this.loadedSummary = document.getElementById('loaded-summary')!;
     this.stepPreviewSubtitle = document.getElementById('step-preview-subtitle')!;
@@ -79,6 +73,7 @@ export class App {
       this.exportGlobalRow,
       (_exporting) => { /* exporting state owned by ExportManager */ },
     );
+    this.exportManager.updateBtnLabels();
 
     this.playback = new PlaybackController(
       this.store,
@@ -104,12 +99,6 @@ export class App {
     this.files = new FileManager(
       this.store,
       this.previewArea,
-      document.getElementById('file-select') as HTMLSelectElement,
-      document.getElementById('file-nav')!,
-      document.getElementById('file-counter')!,
-      document.getElementById('nav-prev') as HTMLButtonElement,
-      document.getElementById('nav-next') as HTMLButtonElement,
-      this.exportFileRows,
       this.loadedSummary,
       this.stepPreviewSubtitle,
       this.audioSettingRow,
@@ -123,8 +112,6 @@ export class App {
       (err) => this.showInferenceError(err),
       () => this.rerenderActive(),
       (index) => {
-        // After switchTo: clear detection result UI (owned by App).
-        this.detectResultEl.classList.remove('visible', 'error');
         this.detectStatusInline.classList.remove('visible');
         void this.updateNamingInfoPanel();
         void index;
@@ -204,6 +191,10 @@ export class App {
     }
     const ni = document.getElementById('naming-pattern-input') as HTMLInputElement | null;
     if (ni) ni.value = cfg.namingPattern;
+    const cp = document.getElementById('blackout-color-picker') as HTMLInputElement | null;
+    if (cp) cp.value = cfg.blackoutColor;
+    const bl = document.getElementById('blackout-label') as HTMLElement | null;
+    if (bl) bl.style.setProperty('--blackout-swatch', cfg.blackoutColor);
   }
 
   private async updateNamingInfoPanel(): Promise<void> {
@@ -298,8 +289,6 @@ export class App {
       this.detectStatusInline.textContent =
         avg === null ? t('detecting_plain') : tpl('detecting_timed', { t: (avg / 1000).toFixed(1) });
       this.detectStatusInline.classList.add('visible');
-      this.detectResultEl.textContent = t('computing');
-      this.detectResultEl.classList.add('visible');
     } else {
       this.detectStatusInline.classList.remove('visible');
     }
@@ -308,19 +297,12 @@ export class App {
   private showDetectionResult(dets: import('./detector').Detection[]): void {
     this.files.clearExamplesLoading();
     this.detectStatusInline.classList.remove('visible');
-    const counts: Record<string, number> = {};
-    for (const d of dets) counts[d.label] = (counts[d.label] ?? 0) + 1;
-    const parts = Object.entries(counts).map(([label, n]) => `${n} ${translateLabel(label)}`);
-    this.detectResultEl.textContent = dets.length === 0 ? t('no_detections') : parts.join(', ');
-    this.detectResultEl.classList.remove('error');
-    this.detectResultEl.classList.add('visible');
+    void dets;
   }
 
   private showInferenceError(err: Error): void {
     this.files.clearExamplesLoading();
     this.detectStatusInline.classList.remove('visible');
-    this.detectResultEl.textContent = t('detection_failed');
-    this.detectResultEl.classList.add('visible', 'error');
     console.error('[app] inference error shown in UI:', err.message);
   }
 
@@ -363,6 +345,9 @@ export class App {
       const t = e.target as HTMLInputElement;
       if (t.name === 'drawMode') setConfig({ drawMode: t.value as AppConfig['drawMode'] });
     });
+    document.getElementById('blackout-color-picker')?.addEventListener('input', (e) => {
+      setConfig({ blackoutColor: (e.target as HTMLInputElement).value });
+    });
     document.getElementById('metadata-radio-group')!.addEventListener('change', (e) => {
       const t = e.target as HTMLInputElement;
       if (t.name === 'keepMetadata') setConfig({ keepMetadata: t.value as AppConfig['keepMetadata'] });
@@ -399,19 +384,12 @@ export class App {
     if (cfg.model !== this.prevModel) {
       this.prevModel = cfg.model;
       this.showDetecting(true);
-      this.detectResultEl.textContent = t('downloading_model');
       this.modelLoadProgress.classList.add('visible');
       this.modelLoadBarFill.style.width = '0%';
-      this.modelLoadText.textContent =
-        cfg.model === 'detect_n'
-          ? t('loading_model')
-          : tpl('loading_chunks_start', { total: cfg.model === 'detect_x' ? 9 : '?' });
       // setModel() clears memCache synchronously before downloading. Start the
       // clear-render immediately so detections disappear while the model loads.
       const modelPromise = setModel(cfg.model, (done, total) => {
         this.modelLoadBarFill.style.width = `${Math.round((done / total) * 100)}%`;
-        this.modelLoadText.textContent =
-          cfg.model === 'detect_n' ? t('loading_model') : tpl('loading_chunks', { done, total });
       });
       void this.rerenderActive();
       try {
@@ -420,8 +398,6 @@ export class App {
         const error = err instanceof Error ? err : new Error(String(err));
         console.error('[app] model load failed:', error);
         this.detectStatusInline.classList.remove('visible');
-        this.detectResultEl.textContent = t('model_load_failed');
-        this.detectResultEl.classList.add('visible', 'error');
         return;
       } finally {
         this.modelLoadProgress.classList.remove('visible');
@@ -442,7 +418,7 @@ export class App {
         const ctx = item.canvas.getContext('2d')!;
         this.showDetecting(false);
         const filtered = filterByConf(cached, getConfig().minConfidence);
-        applyDetections(ctx, filtered, getConfig().drawMode);
+        applyDetections(ctx, filtered, getConfig().drawMode, getConfig().blackoutColor);
         this.showDetectionResult(filtered);
         (window as unknown as Record<string, unknown>).__lastDetections = filtered;
       } else {
@@ -456,7 +432,7 @@ export class App {
           (dets) => {
             this.showDetecting(false);
             const filtered = filterByConf(dets, getConfig().minConfidence);
-            applyDetections(ctx, filtered, getConfig().drawMode);
+            applyDetections(ctx, filtered, getConfig().drawMode, getConfig().blackoutColor);
             this.showDetectionResult(filtered);
           },
           (err) => this.showInferenceError(err),
