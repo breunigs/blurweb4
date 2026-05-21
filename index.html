@@ -59,6 +59,7 @@
         <input id="file-input" type="file" multiple accept="image/*,video/*">
         <span id="loaded-summary"></span>
       </div>
+      <div id="file-list"></div>
     </div>
   </div>
 
@@ -143,6 +144,8 @@
                   data-i18n="mode_blur">Blur</span></label>
               <label><input type="radio" name="drawMode" value="blackout"><span
                   data-i18n="mode_blackout">Blackout</span></label>
+              <label><input type="radio" name="drawMode" value="pixelate"><span
+                  data-i18n="mode_pixelate">Pixelate</span></label>
               <label><input type="radio" name="drawMode" value="outline"><span data-i18n="mode_outline">Outline
                   (debug)</span></label>
             </div>
@@ -270,7 +273,6 @@
           </div>
           <span id="global-eta"></span>
         </div>
-        <div id="export-file-rows"></div>
       </div>
     </div>
   </div>

@@ -129,13 +129,14 @@ export class Blurrer {
     this.#maxSize = maxSize;
   }
 
-  apply(ctx: AnyCtx, detections: Detection[], mode: 'blur' | 'blackout'): void {
+  apply(ctx: AnyCtx, detections: Detection[], mode: 'blur' | 'blackout' | 'pixelate'): void {
     const cw = (ctx as CanvasRenderingContext2D).canvas.width;
     const ch = (ctx as CanvasRenderingContext2D).canvas.height;
     for (const d of detections) {
       const r = Math.round((Math.min(d.w, d.h) / 2) * CORNER_RATIOS[d.label]);
       const box = clipToEdges(d.x, d.y, d.w, d.h, r, cw, ch);
       if (mode === 'blackout') this.#blackArea(ctx, box);
+      else if (mode === 'pixelate') this.#pixelateArea(ctx, box, cw);
       else this.#blurArea(ctx, box, cw, ch);
     }
   }
@@ -147,6 +148,50 @@ export class Blurrer {
     roundedRectPath(ctx, box.x, box.y, box.w, box.h, box.corners);
     ctx.fillStyle = 'black';
     ctx.fill();
+    ctx.restore();
+  }
+
+  // ── Pixelate ────────────────────────────────────────────────────────────────
+
+  #pixelateArea(ctx: AnyCtx, box: ClippedBox, cw: number): void {
+    const { x, y, w, h, corners } = box;
+    // Block size scales with detection size and image resolution so pixelation
+    // looks visually similar regardless of canvas resolution.
+    const resFactor = Math.max(1, cw / 1280);
+    const pixelSize = Math.max(8, Math.min(60, Math.round((Math.min(w, h) / 8) * resFactor)));
+
+    const imgData = ctx.getImageData(x, y, w, h);
+    const { data } = imgData;
+
+    ctx.save();
+    roundedRectPath(ctx, x, y, w, h, corners);
+    ctx.clip();
+
+    const cols = Math.ceil(w / pixelSize);
+    const rows = Math.ceil(h / pixelSize);
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) {
+        const bx = col * pixelSize;
+        const by = row * pixelSize;
+        const bw = Math.min(pixelSize, w - bx);
+        const bh = Math.min(pixelSize, h - by);
+        let r = 0, g = 0, b = 0, count = 0;
+        for (let py = by; py < by + bh; py++) {
+          for (let px = bx; px < bx + bw; px++) {
+            const idx = (py * w + px) * 4;
+            r += data[idx];
+            g += data[idx + 1];
+            b += data[idx + 2];
+            count++;
+          }
+        }
+        if (count > 0) {
+          ctx.fillStyle = `rgb(${Math.round(r / count)},${Math.round(g / count)},${Math.round(b / count)})`;
+          ctx.fillRect(x + bx, y + by, bw, bh);
+        }
+      }
+    }
+
     ctx.restore();
   }
 
