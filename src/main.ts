@@ -2,6 +2,10 @@
 import './debugLog';
 import './hangDetector';
 
+import { initTheme, initThemeControls } from './themeManager';
+initTheme();
+initThemeControls();
+
 // Register custom decoders before anything else so mediabunny sees them.
 // Registration order matters: mediabunny checks decoders in order and uses
 // the first one whose supports() returns true.
