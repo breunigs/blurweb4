@@ -41,6 +41,7 @@ worker.onmessage = ({ data }: MessageEvent<HangMessage>) => {
     hangStart = new Date(data.startTime);
     maxHang = Math.max(maxHang, data.lag);
   } else {
+    if (hangStart === null) hangStart = new Date(); // continuing hang, no startTime from worker
     maxHang = Math.max(maxHang, data);
   }
   if (pendingLogTimer === null) {

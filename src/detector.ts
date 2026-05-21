@@ -1,7 +1,9 @@
 /**
  * YOLOv5 object detection using onnxruntime-web.
  *
- * - ONNX session created once per model choice, reused (WebGPU → WebGL → WASM).
+ * - ONNX session runs in a dedicated Web Worker (detector.worker.ts) to avoid
+ *   blocking the main thread during inference. Pixel data is transferred
+ *   zero-copy to the worker; detections are posted back.
  * - Results cached in IndexedDB (persists browser restarts) + in-memory Map.
  * - Only one inference runs at a time; a queue of size 1 holds the next request.
  *   In-flight inference always runs to completion (ensures cache is populated).
@@ -9,7 +11,6 @@
  * - Model selection (detect_n = single file, detect_x = 9 chunks) via setModel().
  */
 
-import * as ort from 'onnxruntime-web';
 import { getConfig, type ModelChoice } from './config';
 import { LruMap } from './lruMap';
 
@@ -17,24 +18,11 @@ import { LruMap } from './lruMap';
 
 const MODEL_W = 1280;
 const MODEL_H = 1280;
-const LABELS = ['plate', 'person'] as const;
-const THRESHOLD_IOU = 0.45;
-// also update confidence slider's minimum value if you changes this
-const THRESHOLD_CONF = 0.01;
-// Cap candidates per class fed into NMS to bound O(n²) cost.
-// With THRESHOLD_CONF=0.01 tens of thousands of boxes can pass the filter;
-// NMS on 10 k boxes is ~100 M iterations and will freeze the main thread.
-// After sorting by confidence (descending), we keep only the top K — the
-// highest-confidence detections are always preferred by greedy NMS anyway.
-const MAX_NMS_CANDIDATES_PER_CLASS = 1500;
-
 const MODEL_NAMES: Record<ModelChoice, string> = {
   detect_n: 'detect_n_2024_04',
   detect_x: 'detect_x_2024_04',
 };
 const DETECT_X_CHUNKS = 9;
-
-ort.env.wasm.wasmPaths = new URL('./ort/', import.meta.url).href;
 
 // ── Debug flag ────────────────────────────────────────────────────────────────
 // Enable from the browser console:  window.__detectDebug = true
@@ -253,39 +241,7 @@ export function clearDetectionCache(): Promise<void> {
   return idbClear('frames');
 }
 
-// ── Session singleton ─────────────────────────────────────────────────────────
-
-let sessionPromise: Promise<ort.InferenceSession> | null = null;
-
-// Resolved once at first session creation and reused for all subsequent sessions.
-// Re-requesting the adapter/device on each model switch causes the second call to
-// silently fail (the adapter becomes lost after the first session is destroyed),
-// which drops WebGPU and falls back to WASM even when it was working before.
-let resolvedEps: string[] | null = null;
-
-async function resolveEps(): Promise<string[]> {
-  if (resolvedEps !== null) return resolvedEps;
-  const eps: string[] = [];
-  if (typeof navigator !== 'undefined' && 'gpu' in navigator) {
-    try {
-      const gpu = (
-        navigator as unknown as {
-          gpu: { requestAdapter(opts: object): Promise<{ requestDevice(): Promise<GPUDevice> } | null> };
-        }
-      ).gpu;
-      const adapter = await gpu.requestAdapter({ powerPreference: 'high-performance' });
-      if (adapter) {
-        ort.env.webgpu.device = (await adapter.requestDevice()) as unknown as GPUDevice;
-        eps.push('webgpu');
-      }
-    } catch {
-      /* skip */
-    }
-  }
-  eps.push('wasm');
-  resolvedEps = eps;
-  return eps;
-}
+// ── Model loading ─────────────────────────────────────────────────────────────
 
 async function loadModelBuffer(
   model: ModelChoice,
@@ -330,57 +286,117 @@ async function loadModelBuffer(
   return buf;
 }
 
-export function getSession(onProgress?: (done: number, total: number) => void): Promise<ort.InferenceSession> {
-  if (!sessionPromise) {
-    sessionPromise = (async () => {
-      const eps = await resolveEps();
-      console.log('[detector] execution providers:', eps);
-      const modelSrc = await loadModelBuffer(currentModel, onProgress);
-      for (let i = 0; i < eps.length; i++) {
-        const subset = eps.slice(i);
-        try {
-          const session = await ort.InferenceSession.create(modelSrc as string, { executionProviders: subset });
-          currentEP = subset[0];
-          console.log(`[detector] session created (${getModelName()}) EPs: ${subset.join(', ')}`);
-          return session;
-        } catch (err) {
-          if (i < eps.length - 1) console.warn(`[detector] EP "${eps[i]}" failed:`, err);
-          else throw err;
-        }
-      }
-      throw new Error('No working execution provider');
-    })().catch((err) => {
-      sessionPromise = null; // allow retry on next call
-      throw err;
-    });
+// ── Web Worker lifecycle ───────────────────────────────────────────────────────
+//
+// All heavy ONNX work (session creation, tensor building, session.run, NMS)
+// runs in detector.worker.ts to avoid blocking the main thread.
+//
+// The protocol is strictly sequential — onnxChain ensures only one infer message
+// is in-flight at a time, so a single resolve/reject pair suffices (same pattern
+// as hevcDecoder.ts).
+
+let worker: Worker | null = null;
+
+// Resolve/reject for the in-flight worker-ready handshake (init / changeModel).
+let workerReadyResolve: (() => void) | null = null;
+let workerReadyReject: ((e: Error) => void) | null = null;
+
+// Resolve/reject for the single in-flight inference request.
+let workerInferResolve: ((d: Detection[]) => void) | null = null;
+let workerInferReject: ((e: Error) => void) | null = null;
+
+function handleWorkerMessage(e: MessageEvent): void {
+  const msg = e.data as { type: string; ep?: string; detections?: Detection[]; message?: string };
+  if (msg.type === 'ready') {
+    currentEP = msg.ep ?? null;
+    workerReadyResolve?.();
+    workerReadyResolve = workerReadyReject = null;
+  } else if (msg.type === 'result') {
+    workerInferResolve?.(msg.detections!);
+    workerInferResolve = workerInferReject = null;
+  } else if (msg.type === 'error') {
+    console.error(`[detector] worker error: ${msg.message ?? 'unknown'}`);
+    const err = new Error(msg.message ?? 'detector worker error');
+    if (workerReadyReject) {
+      workerReadyReject(err);
+      workerReadyResolve = workerReadyReject = null;
+    } else {
+      workerInferReject?.(err);
+      workerInferResolve = workerInferReject = null;
+    }
   }
-  return sessionPromise;
+}
+
+function sendToWorker(msgType: 'init' | 'changeModel', modelSrc: string | ArrayBuffer): Promise<void> {
+  if (!worker) {
+    worker = new Worker(new URL('./detectorWorker.js', import.meta.url), { type: 'module' });
+    worker.onmessage = handleWorkerMessage;
+    worker.onerror = (e) => {
+      // e.message is often empty/undefined for module-level worker failures
+      // (script load error, bad import, ORT init crash). Include filename and
+      // line so the debug log gives actionable info.
+      const detail = e.message || `${e.filename}:${e.lineno}` || 'unknown';
+      console.error(`[detector] worker crashed: ${detail}`);
+      const err = new Error(`detector worker: ${detail}`);
+      (workerReadyReject ?? workerInferReject)?.(err);
+      workerReadyResolve = workerReadyReject = workerInferResolve = workerInferReject = null;
+    };
+  }
+  return new Promise<void>((resolve, reject) => {
+    workerReadyResolve = resolve;
+    workerReadyReject = reject;
+    const transfers = modelSrc instanceof ArrayBuffer ? [modelSrc] : [];
+    worker!.postMessage({ type: msgType, modelSrc }, { transfer: transfers });
+  });
+}
+
+// Resolved once the worker is ready for inference. Set to null to force re-init.
+let workerReady: Promise<void> | null = null;
+
+function ensureWorkerReady(): Promise<void> {
+  if (workerReady) return workerReady;
+  workerReady = (async () => {
+    const modelSrc = await loadModelBuffer(currentModel);
+    await sendToWorker('init', modelSrc);
+  })().catch((err) => {
+    workerReady = null;
+    throw err;
+  });
+  return workerReady;
 }
 
 // Serialises concurrent setModel() calls so rapid model switches don't race.
 // Each call is chained onto the previous one; only the last model wins because
-// getSession() short-circuits when the model/session are already current.
+// the guard `model === currentModel && workerReady !== null` short-circuits.
 let setModelChain: Promise<void> = Promise.resolve();
 
 /**
- * Switch to a different model. Clears the current session; the next inference
+ * Switch to a different model. Resets the worker; the next inference
  * will load the new model. In-memory cache is cleared (IDB entries for the old
  * model stay, keyed by model name, and won't be hit for the new model).
  * Concurrent calls are serialised — the last caller's model always wins.
  */
 export function setModel(model: ModelChoice, onProgress?: (done: number, total: number) => void): Promise<void> {
-  setModelChain = setModelChain.then(() => {
-    if (model === currentModel && sessionPromise !== null) return;
+  setModelChain = setModelChain.then(async () => {
+    if (model === currentModel && workerReady !== null) return;
+    const wasInitialized = worker !== null;
     currentModel = model;
-    sessionPromise = null;
+    workerReady = null;
     memCache.clear();
-    // Pre-warm the session so the UI can show progress before the first inference
-    return getSession(onProgress).then(() => {});
+    // Pre-warm the worker so the UI can show progress before the first inference.
+    workerReady = (async () => {
+      const modelSrc = await loadModelBuffer(model, onProgress);
+      await sendToWorker(wasInitialized ? 'changeModel' : 'init', modelSrc);
+    })().catch((err) => {
+      workerReady = null;
+      throw err;
+    });
+    await workerReady;
   });
   return setModelChain;
 }
 
-// ── Preprocessing ─────────────────────────────────────────────────────────────
+// ── Preprocessing (main thread — needs canvas access) ─────────────────────────
 
 // YOLOv5 letterbox fill colour (matches PyTorch default: 114/255 ≈ 0.447).
 const LETTERBOX_FILL = 'rgb(114,114,114)';
@@ -412,178 +428,25 @@ function captureSnapshot(source: HTMLCanvasElement | OffscreenCanvas): Snapshot 
   return { data, origW: srcW, origH: srcH, scale, padX, padY };
 }
 
-function buildTensor(snap: Snapshot): ort.Tensor {
-  const t0 = performance.now();
-  const { data } = snap;
-  const pixels = MODEL_W * MODEL_H;
-  const tensor = new Float32Array(3 * pixels);
-  for (let i = 0; i < pixels; i++) {
-    tensor[i] = data[i * 4] / 255;
-    tensor[pixels + i] = data[i * 4 + 1] / 255;
-    tensor[pixels * 2 + i] = data[i * 4 + 2] / 255;
-  }
-  console.log(`[detector] buildTensor ${(performance.now() - t0).toFixed(1)}ms`);
-  if (dbg()) {
-    // Per-channel stats to check for BGR vs RGB issues.
-    // If model expects BGR and we feed RGB, channel 0 will have blue-biased stats for a scene
-    // that should be red-heavy (and vice versa). Compare against known PyTorch preprocessing.
-    let rSum = 0,
-      gSum = 0,
-      bSum = 0,
-      rMin = 1,
-      gMin = 1,
-      bMin = 1,
-      rMax = 0,
-      gMax = 0,
-      bMax = 0;
-    for (let i = 0; i < pixels; i++) {
-      const r = tensor[i],
-        g = tensor[pixels + i],
-        b = tensor[pixels * 2 + i];
-      rSum += r;
-      gSum += g;
-      bSum += b;
-      if (r < rMin) rMin = r;
-      if (r > rMax) rMax = r;
-      if (g < gMin) gMin = g;
-      if (g > gMax) gMax = g;
-      if (b < bMin) bMin = b;
-      if (b > bMax) bMax = b;
-    }
-    console.log(
-      `[detector][debug] tensor channel stats (channel order sent to model: R G B)`,
-      `\n  R: mean=${(rSum / pixels).toFixed(3)} min=${rMin.toFixed(3)} max=${rMax.toFixed(3)}`,
-      `\n  G: mean=${(gSum / pixels).toFixed(3)} min=${gMin.toFixed(3)} max=${gMax.toFixed(3)}`,
-      `\n  B: mean=${(bSum / pixels).toFixed(3)} min=${bMin.toFixed(3)} max=${bMax.toFixed(3)}`,
-      `\n  (if model expects BGR, swap R↔B in buildTensor)`,
-    );
-  }
-  return new ort.Tensor('float32', tensor, [1, 3, MODEL_H, MODEL_W]);
-}
-
-// ── Postprocessing & NMS ──────────────────────────────────────────────────────
-
-interface RawBox {
-  label: 'plate' | 'person';
-  conf: number;
-  cx: number;
-  cy: number;
-  w: number;
-  h: number;
-}
-
-function iou(a: RawBox, b: RawBox): number {
-  const ax1 = a.cx - a.w / 2,
-    ay1 = a.cy - a.h / 2,
-    ax2 = a.cx + a.w / 2,
-    ay2 = a.cy + a.h / 2;
-  const bx1 = b.cx - b.w / 2,
-    by1 = b.cy - b.h / 2,
-    bx2 = b.cx + b.w / 2,
-    by2 = b.cy + b.h / 2;
-  const ix = Math.max(0, Math.min(ax2, bx2) - Math.max(ax1, bx1));
-  const iy = Math.max(0, Math.min(ay2, by2) - Math.max(ay1, by1));
-  const inter = ix * iy,
-    union = a.w * a.h + b.w * b.h - inter;
-  return union > 0 ? inter / union : 0;
-}
-
-function postprocess(output: ort.Tensor, scale: number, padX: number, padY: number): Detection[] {
-  const data = output.data as Float32Array;
-  const [, rows, cols] = output.dims as [number, number, number];
-  console.log(`[detector] starting post-process`);
-  if (dbg()) console.log(`[detector][debug] raw output: ${rows} rows × ${cols} cols`);
-  let nObjPass = 0,
-    nClassPass = 0;
-
-  // Per-class candidate lists (matches PyTorch multi_label=True for nc>1).
-  // Each (box, class) pair is emitted independently; NMS is then run per class
-  // so a plate and a person can occupy the same region without suppressing each other.
-  const rawByClass: RawBox[][] = LABELS.map(() => []);
-
-  for (let r = 0; r < rows; r++) {
-    const base = r * cols;
-    const objConf = data[base + 4];
-    if (objConf < THRESHOLD_CONF) continue;
-    nObjPass++;
-    const cx = data[base], cy = data[base + 1], w = data[base + 2], h = data[base + 3];
-    for (let c = 0; c < LABELS.length; c++) {
-      const conf = objConf * data[base + 5 + c];
-      if (conf < THRESHOLD_CONF) continue;
-      nClassPass++;
-      rawByClass[c].push({ label: LABELS[c], conf, cx, cy, w, h });
-    }
-  }
-
-  if (dbg()) {
-    console.log(
-      `[detector][debug] filtering: total=${rows} objConf≥${THRESHOLD_CONF}→${nObjPass} candidates→${nClassPass}`,
-      `\n  THRESHOLD_CONF=${THRESHOLD_CONF} THRESHOLD_IOU=${THRESHOLD_IOU}`,
-    );
-  }
-
-  const candidateCounts = rawByClass.map((r, i) => `${LABELS[i]}=${r.length}`).join(' ');
-  console.log(`[detector] pre-NMS candidates: ${candidateCounts} (total=${nClassPass})`);
-
-  // Per-class greedy NMS (descending confidence).
-  const kept: RawBox[] = [];
-  for (const classRaw of rawByClass) {
-    classRaw.sort((a, b) => b.conf - a.conf);
-    // Cap to bound O(n²) NMS cost. With THRESHOLD_CONF=0.01 tens of thousands
-    // of boxes can pass the filter; 10 k boxes ≈ 100 M iterations and will
-    // freeze the main thread. Top-K by confidence is the standard mitigation.
-    if (classRaw.length > MAX_NMS_CANDIDATES_PER_CLASS) {
-      console.log(`[detector] capping ${classRaw[0].label} candidates ${classRaw.length} → ${MAX_NMS_CANDIDATES_PER_CLASS}`);
-      classRaw.splice(MAX_NMS_CANDIDATES_PER_CLASS);
-    }
-    if (dbg() && classRaw.length > 0) {
-      const label = classRaw[0].label;
-      console.log(`[detector][debug] top-${Math.min(classRaw.length, 10)} ${label} candidates before NMS (model-pixel coords):`);
-      for (const b of classRaw.slice(0, 10)) {
-        const x1 = (b.cx - b.w / 2).toFixed(1), y1 = (b.cy - b.h / 2).toFixed(1);
-        console.log(
-          `  ${b.label} conf=${b.conf.toFixed(3)} cx=${b.cx.toFixed(1)} cy=${b.cy.toFixed(1)} w=${b.w.toFixed(1)} h=${b.h.toFixed(1)}  →  x1=${x1} y1=${y1}`,
-        );
-      }
-    }
-    const sup = new Uint8Array(classRaw.length);
-    for (let i = 0; i < classRaw.length; i++) {
-      if (sup[i]) continue;
-      kept.push(classRaw[i]);
-      for (let j = i + 1; j < classRaw.length; j++) if (!sup[j] && iou(classRaw[i], classRaw[j]) > THRESHOLD_IOU) sup[j] = 1;
-    }
-  }
-
-  console.log(`[detector] post-process complete (kept=${kept.length})`);
-
-  if (dbg()) console.log(`[detector][debug] after NMS: ${nClassPass} → ${kept.length} detections`);
-  if (dbg())
-    console.log(`[detector][debug] unmap: scale=${scale.toFixed(4)} padX=${padX} padY=${padY}`);
-  return kept.map((b) => ({
-    label: b.label,
-    conf: b.conf,
-    x: Math.round((b.cx - b.w / 2 - padX) / scale),
-    y: Math.round((b.cy - b.h / 2 - padY) / scale),
-    w: Math.round(b.w / scale),
-    h: Math.round(b.h / scale),
-  }));
-}
-
-// ── Serialised ONNX execution ─────────────────────────────────────────────────
+// ── Serialised ONNX execution (offloaded to worker) ──────────────────────────
 
 let onnxChain: Promise<unknown> = Promise.resolve();
 
 async function runOnnx(snap: Snapshot): Promise<Detection[]> {
   const result = onnxChain.then(async () => {
-    const t0 = performance.now();
-    const session = await getSession();
-    const tensor = buildTensor(snap);
-    const tRun = performance.now();
-    const results = await session.run({ [session.inputNames[0]]: tensor });
-    console.log(`[detector] session.run ${(performance.now() - tRun).toFixed(1)}ms (ep=${currentEP})`);
-    const detections = postprocess(results[session.outputNames[0]], snap.scale, snap.padX, snap.padY);
-    console.log(`[detector] runOnnx total ${(performance.now() - t0).toFixed(1)}ms`);
-    return detections;
+    await ensureWorkerReady();
+    return new Promise<Detection[]>((resolve, reject) => {
+      workerInferResolve = resolve;
+      workerInferReject = reject;
+      // Transfer pixel buffer zero-copy to the worker. After transfer, snap.data
+      // is detached — this is safe because buildTensor (now in the worker) is
+      // the only consumer.
+      const pixelBuffer = snap.data.buffer;
+      worker!.postMessage(
+        { type: 'infer', pixels: pixelBuffer, scale: snap.scale, padX: snap.padX, padY: snap.padY },
+        { transfer: [pixelBuffer] },
+      );
+    });
   });
   onnxChain = result.catch(() => {});
   return result;
@@ -703,4 +566,3 @@ export function detectForExport(
 ): Promise<Detection[]> {
   return resolveDetections(source, key);
 }
-

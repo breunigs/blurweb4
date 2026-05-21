@@ -43,7 +43,7 @@ function generateServiceWorker() {
 const CACHE = 'blurweb-${version}';
 
 // Precache the core app shell so the UI loads offline.
-const PRECACHE = ['/', '/src/style.css', '/dist/bundle.js', '/dist/hevcWorker.js'];
+const PRECACHE = ['/', '/src/style.css', '/dist/bundle.js', '/dist/hevcWorker.js', '/dist/detectorWorker.js'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(PRECACHE)));
@@ -83,6 +83,7 @@ const buildConfig = {
   entryPoints: {
     bundle: 'src/main.ts',
     hevcWorker: 'src/hevcWorker.ts',
+    detectorWorker: 'src/detector.worker.ts',
   },
   bundle: true,
   outdir: 'dist',
@@ -103,5 +104,5 @@ if (dev) {
   console.log('Press Ctrl+C to stop.');
 } else {
   await esbuild.build(buildConfig);
-  console.log('Build complete → dist/bundle.js + dist/hevcWorker.js');
+  console.log('Build complete → dist/bundle.js + dist/hevcWorker.js + dist/detectorWorker.js');
 }
