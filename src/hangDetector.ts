@@ -34,14 +34,30 @@ let maxHang = 0;
 let hangStart: Date | null = null;
 let pendingLogTimer: ReturnType<typeof setTimeout> | null = null;
 
+// When the window loses focus, browsers (especially on battery) may throttle
+// rAF without blocking the Worker, causing false hang reports. Track focus
+// state and reset the Worker's baseline on transitions so inactive gaps are
+// never counted as hangs.
+let windowActive = document.hasFocus();
+
+function onActiveChange(active: boolean): void {
+  windowActive = active;
+  worker.postMessage(null); // reset Worker's lag baseline
+}
+
+window.addEventListener('blur', () => onActiveChange(false));
+window.addEventListener('focus', () => onActiveChange(true));
+document.addEventListener('visibilitychange', () =>
+  onActiveChange(document.visibilityState === 'visible' && document.hasFocus()));
+
 worker.onmessage = ({ data }: MessageEvent<HangMessage>) => {
+  if (!windowActive) return;
   if (typeof data === 'object') {
     // First detection: Worker sends { lag, startTime } where startTime is the
     // wall-clock time of the last successful ping — i.e. when the hang began.
     hangStart = new Date(data.startTime);
     maxHang = Math.max(maxHang, data.lag);
   } else {
-    if (hangStart === null) hangStart = new Date(); // continuing hang, no startTime from worker
     maxHang = Math.max(maxHang, data);
   }
   if (pendingLogTimer === null) {
