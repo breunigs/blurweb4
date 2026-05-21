@@ -39,7 +39,7 @@ jobs:
         with:
           name: vendor-wasm
           path: vendor/
-          retention-days: 7
+          retention-days: 1
 
   # ── Build Tauri app on all platforms ─────────────────────────────────────────
   build-tauri:
@@ -116,3 +116,4 @@ jobs:
             src-tauri/target/release/bundle/
             src-tauri/target/*/release/bundle/
           if-no-files-found: ignore
+          retention-days: 1
