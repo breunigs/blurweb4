@@ -77,8 +77,24 @@
 
       <!-- Trim (videos only) — visibility:hidden so it doesn't shift layout -->
       <div id="trim-section">
+        <div class="trim-slider" id="trim-slider">
+          <div class="trim-preview-handle" id="trim-preview-handle">
+            <span class="preview-time" id="trim-preview-label">0:00.000</span>
+            <div class="preview-pill">
+              <svg viewBox="0 0 16 10" width="14" height="9" aria-hidden="true">
+                <path d="M1,5 Q8,0.5 15,5 Q8,9.5 1,5" fill="none" stroke="currentColor" stroke-width="1.5"/>
+                <circle cx="8" cy="5" r="2.2" fill="currentColor"/>
+              </svg>
+            </div>
+          </div>
+          <div class="trim-track-bg"></div>
+          <div class="trim-track-fill" id="trim-track-fill"></div>
+          <input type="range" id="trim-start" min="0" max="1000" value="0" step="1">
+          <input type="range" id="trim-end" min="0" max="1000" value="1000" step="1">
+          <div class="trim-handle trim-handle-start" id="trim-handle-start" data-label="start"></div>
+          <div class="trim-handle trim-handle-end" id="trim-handle-end" data-label="end"></div>
+        </div>
         <div class="trim-label-row">
-          <span class="trim-section-label" data-i18n="trim_label">Trim range</span>
           <div class="trim-times">
             <div class="trim-time-item start">
               <span class="trim-time-label" data-i18n="trim_start">Start</span>
@@ -90,12 +106,6 @@
               <span class="trim-time-value" id="trim-end-label">0:00.000</span>
             </div>
           </div>
-        </div>
-        <div class="trim-slider">
-          <div class="trim-track-bg"></div>
-          <div class="trim-track-fill" id="trim-track-fill"></div>
-          <input type="range" id="trim-start" min="0" max="1000" value="0" step="1">
-          <input type="range" id="trim-end" min="0" max="1000" value="1000" step="1">
         </div>
       </div>
 

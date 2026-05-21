@@ -277,6 +277,23 @@ body {
   cursor: default;
 }
 
+#examples-btn.loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#examples-btn.loading::after {
+  content: '';
+  width: 11px;
+  height: 11px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.75s linear infinite;
+  flex-shrink: 0;
+}
+
 #file-input {
   display: none;
 }
@@ -478,8 +495,8 @@ body {
 .trim-label-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  margin-bottom: 8px;
+  justify-content: center;
+  margin-top: 8px;
 }
 
 .trim-section-label {
@@ -532,18 +549,69 @@ body {
   flex: 1;
 }
 
-/* Dual-range track */
+/* Dual-range track with preview handle above and house handles below */
 .trim-slider {
   position: relative;
-  height: 36px;
+  height: 89px;
+}
+
+/* Preview handle — sits above the track */
+.trim-preview-handle {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: ew-resize;
+  z-index: 3;
+  user-select: none;
+}
+
+.preview-time {
+  font-size: 10px;
+  font-family: var(--mono);
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-align: center;
+  line-height: 14px;
+  height: 14px;
+}
+
+.preview-pill {
   display: flex;
   align-items: center;
+  justify-content: center;
+  padding: 2px 5px;
+  height: 17px;
+  box-sizing: border-box;
+  background: var(--bg);
+  border: 1.5px solid var(--accent);
+  border-radius: 4px;
+  color: var(--accent);
+}
+
+/* Stem: from pill bottom through the track */
+.trim-preview-handle::after {
+  content: '';
+  position: absolute;
+  top: 31px; /* 14px timestamp + 17px pill = pill bottom */
+  left: 50%;
+  transform: translateX(-50%);
+  width: 2px;
+  height: 16px; /* 9px gap + 5px track + 2px into house zone */
+  background: #000;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.55);
+  border-radius: 1px;
 }
 
 .trim-track-bg {
   position: absolute;
   left: 0;
   right: 0;
+  top: 40px;
   height: 5px;
   background: var(--card2);
   border-radius: 3px;
@@ -552,63 +620,74 @@ body {
 
 .trim-track-fill {
   position: absolute;
+  top: 40px;
   height: 5px;
   background: var(--accent);
   border-radius: 3px;
   pointer-events: none;
+  z-index: 1;
 }
 
+/* Range inputs: hidden, used only for value storage */
 .trim-slider input[type='range'] {
   position: absolute;
+  top: 40px;
   width: 100%;
   height: 5px;
   margin: 0;
-  background: transparent;
+  opacity: 0;
+  pointer-events: none;
   -webkit-appearance: none;
   appearance: none;
-  pointer-events: none;
-  outline: none;
 }
 
-.trim-slider input[type='range']::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: var(--accent);
-  border: 2px solid #fff;
+/* House-shaped trim handles — sit below the track, triangle tip touching track bottom */
+.trim-handle {
+  position: absolute;
+  top: 45px;
+  width: 36px;
+  height: 44px; /* 30px house + 14px label */
+  transform: translateX(-50%);
   cursor: ew-resize;
-  pointer-events: all;
-  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.6);
-  outline: 2px solid transparent;
-  outline-offset: 2px;
+  z-index: 2;
+  user-select: none;
 }
 
-.trim-slider input[type='range']::-moz-range-thumb {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
+/* The ⌂ house shape */
+.trim-handle::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 0;
+  transform: translateX(-50%);
+  width: 14px;
+  height: 30px;
+  clip-path: polygon(50% 0%, 100% 35%, 100% 100%, 0% 100%, 0% 35%);
   background: var(--accent);
-  border: 2px solid #fff;
-  cursor: ew-resize;
-  pointer-events: all;
-  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.6);
 }
 
-/* Active (currently being dragged or last used) slider thumb */
-.trim-slider input[type='range'].active-thumb::-webkit-slider-thumb {
-  outline: 3px solid var(--bg);
-  outline-offset: 2px;
-  box-shadow:
-    0 0 0 5px var(--accent),
-    0 1px 5px rgba(0, 0, 0, 0.4);
+/* "start" / "end" label below the house */
+.trim-handle::after {
+  content: attr(data-label);
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+  line-height: 14px;
 }
 
-.trim-slider input[type='range'].active-thumb::-moz-range-thumb {
-  box-shadow:
-    0 0 0 4px var(--accent),
-    0 1px 5px rgba(0, 0, 0, 0.4);
-  border: 3px solid var(--bg);
+.trim-handle.active::before {
+  filter: brightness(1.2) drop-shadow(0 0 4px var(--accent));
+}
+
+.trim-handle.active::after {
+  color: var(--accent);
 }
 
 /* ── 3. Settings ───────────────────────────────────────────── */

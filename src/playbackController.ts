@@ -11,6 +11,8 @@ export class PlaybackController {
     void this.seekAndUpdate(item, sec);
   }, 120);
 
+  private previewFraction = 0;
+
   constructor(
     private readonly store: ItemStore,
     private readonly previewArea: HTMLElement,
@@ -21,12 +23,20 @@ export class PlaybackController {
     private readonly trimStartLabel: HTMLElement,
     private readonly trimEndLabel: HTMLElement,
     private readonly trimDurationLabel: HTMLElement,
+    private readonly sliderEl: HTMLElement,
+    private readonly previewHandleEl: HTMLElement,
+    private readonly previewLabelEl: HTMLElement,
+    private readonly trimHandleStartEl: HTMLElement,
+    private readonly trimHandleEndEl: HTMLElement,
     private readonly onTrimChanged: (item: MediaItem) => void,
   ) {
     trimStartInput.addEventListener('pointerdown', () => this.setActiveThumb('start'));
     trimEndInput.addEventListener('pointerdown', () => this.setActiveThumb('end'));
     trimStartInput.addEventListener('input', () => this.onTrimStartInput());
     trimEndInput.addEventListener('input', () => this.onTrimEndInput());
+    this.setupHouseDrag(trimHandleStartEl, trimStartInput, 'start');
+    this.setupHouseDrag(trimHandleEndEl, trimEndInput, 'end');
+    this.setupPreviewDrag(previewHandleEl);
   }
 
   /** Called when the active item changes (file switch or first load). */
@@ -49,6 +59,9 @@ export class PlaybackController {
     // Default: start thumb is active (highlighted).
     this.setActiveThumb('start');
     this.setCanvasStale(false);
+    // Preview defaults to trim start position.
+    this.previewFraction = Number(this.trimStartInput.value) / Number(this.trimStartInput.max);
+    this.updatePreviewHandle();
   }
 
   updateTrimFill(): void {
@@ -57,6 +70,64 @@ export class PlaybackController {
     const max = Number(this.trimStartInput.max);
     this.trimTrackFill.style.left = `${(s / max) * 100}%`;
     this.trimTrackFill.style.width = `${((e - s) / max) * 100}%`;
+    this.updateHandlePositions();
+  }
+
+  private updateHandlePositions(): void {
+    const s = Number(this.trimStartInput.value);
+    const e = Number(this.trimEndInput.value);
+    const max = Number(this.trimStartInput.max);
+    this.trimHandleStartEl.style.left = `${(s / max) * 100}%`;
+    this.trimHandleEndEl.style.left = `${(e / max) * 100}%`;
+  }
+
+  private updatePreviewHandle(): void {
+    this.previewHandleEl.style.left = `${this.previewFraction * 100}%`;
+    const item = this.store.items[this.store.activeIndex];
+    if (item?.player) {
+      this.previewLabelEl.textContent = formatTime(this.previewFraction * item.player.duration);
+    }
+  }
+
+  private setupHouseDrag(handle: HTMLElement, input: HTMLInputElement, which: 'start' | 'end'): void {
+    let dragging = false;
+    handle.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      handle.setPointerCapture(e.pointerId);
+      dragging = true;
+      this.setActiveThumb(which);
+    });
+    handle.addEventListener('pointermove', (e) => {
+      if (!dragging) return;
+      const rect = this.sliderEl.getBoundingClientRect();
+      const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      input.value = String(Math.round(pct * Number(input.max)));
+      input.dispatchEvent(new Event('input', { bubbles: false }));
+    });
+    const stop = () => { dragging = false; };
+    handle.addEventListener('pointerup', stop);
+    handle.addEventListener('pointercancel', stop);
+  }
+
+  private setupPreviewDrag(handle: HTMLElement): void {
+    let dragging = false;
+    handle.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      handle.setPointerCapture(e.pointerId);
+      dragging = true;
+    });
+    handle.addEventListener('pointermove', (e) => {
+      if (!dragging) return;
+      const rect = this.sliderEl.getBoundingClientRect();
+      const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      this.previewFraction = pct;
+      this.updatePreviewHandle();
+      const item = this.store.items[this.store.activeIndex];
+      if (item?.player) void this.seekAndUpdate(item, pct * item.player.duration);
+    });
+    const stop = () => { dragging = false; };
+    handle.addEventListener('pointerup', stop);
+    handle.addEventListener('pointercancel', stop);
   }
 
   updateTrimLabels(item: MediaItem): void {
@@ -71,6 +142,8 @@ export class PlaybackController {
   setActiveThumb(which: 'start' | 'end'): void {
     this.trimStartInput.classList.toggle('active-thumb', which === 'start');
     this.trimEndInput.classList.toggle('active-thumb', which === 'end');
+    this.trimHandleStartEl.classList.toggle('active', which === 'start');
+    this.trimHandleEndEl.classList.toggle('active', which === 'end');
   }
 
   setCanvasStale(stale: boolean): void {
@@ -93,6 +166,8 @@ export class PlaybackController {
     this.updateTrimFill();
     this.updateTrimLabels(item);
     this.setActiveThumb('start');
+    this.previewFraction = sec / dur;
+    this.updatePreviewHandle();
     this.debouncedSeekStart(item, sec);
   }
 
@@ -105,6 +180,8 @@ export class PlaybackController {
     this.updateTrimFill();
     this.updateTrimLabels(item);
     this.setActiveThumb('end');
+    this.previewFraction = sec / dur;
+    this.updatePreviewHandle();
     this.debouncedSeekEnd(item, sec);
   }
 
@@ -120,6 +197,8 @@ export class PlaybackController {
     this.onTrimChanged(item);
     this.updateTrimFill();
     this.updateTrimLabels(item);
+    this.previewFraction = Number(this.trimStartInput.value) / max;
+    this.updatePreviewHandle();
     // Mark stale immediately; debounced seek fires after 120 ms of silence.
     this.setCanvasStale(true);
     this.debouncedSeekStart(item, item.trimStart);
@@ -137,6 +216,8 @@ export class PlaybackController {
     this.onTrimChanged(item);
     this.updateTrimFill();
     this.updateTrimLabels(item);
+    this.previewFraction = Number(this.trimEndInput.value) / max;
+    this.updatePreviewHandle();
     this.setCanvasStale(true);
     this.debouncedSeekEnd(item, item.trimEnd);
   }

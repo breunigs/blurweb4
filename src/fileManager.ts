@@ -17,6 +17,14 @@ import type { PlaybackController } from './playbackController';
 import type { ExportManager } from './exportManager';
 
 export class FileManager {
+  private examplesBtn: HTMLButtonElement | null = null;
+
+  clearExamplesLoading(): void {
+    if (!this.examplesBtn) return;
+    this.examplesBtn.classList.remove('loading');
+    this.examplesBtn = null;
+  }
+
   constructor(
     private readonly store: ItemStore,
     private readonly previewArea: HTMLElement,
@@ -62,6 +70,8 @@ export class FileManager {
   async loadExamples(): Promise<void> {
     const btn = document.getElementById('examples-btn') as HTMLButtonElement;
     btn.disabled = true;
+    btn.classList.add('loading');
+    this.examplesBtn = btn;
     try {
       const [imgResp, vidResp] = await Promise.all([
         fetch('examples/jpeg.jpg'),
@@ -77,6 +87,7 @@ export class FileManager {
     } catch (err) {
       console.error('Failed to load examples:', err);
       btn.disabled = false;
+      this.clearExamplesLoading();
     }
   }
 
@@ -201,6 +212,8 @@ export class FileManager {
             if (this.store.activeIndex === index) {
               this.onShowDetectionResult(filtered);
               (window as unknown as Record<string, unknown>).__lastDetections = filtered;
+            } else {
+              this.clearExamplesLoading();
             }
           } else {
             this.onShowDetecting(true);
@@ -211,14 +224,25 @@ export class FileManager {
                 this.onShowDetecting(false);
                 const filtered = filterByConf(dets, getConfig().minConfidence);
                 applyDetections(ctx, filtered, getConfig().drawMode);
-                if (this.store.activeIndex === index) this.onShowDetectionResult(filtered);
+                if (this.store.activeIndex === index) {
+                  this.onShowDetectionResult(filtered);
+                } else {
+                  this.clearExamplesLoading();
+                }
               },
-              (err) => { if (this.store.activeIndex === index) this.onShowInferenceError(err); },
+              (err) => {
+                if (this.store.activeIndex === index) {
+                  this.onShowInferenceError(err);
+                } else {
+                  this.clearExamplesLoading();
+                }
+              },
             );
           }
         })
         .catch((err) => {
           console.error(`Failed to render image "${file.name}":`, err);
+          this.clearExamplesLoading();
           this.showError(wrapper, canvas, err.message);
         });
     }

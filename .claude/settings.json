@@ -24,7 +24,9 @@
       "Bash(tail:*)",
       "Read(/tmp/**)",
       "Read(/usr/local/go/**)",
-      "WebFetch(domain:raw.githubusercontent.com)"
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(gh run:*)",
+      "Bash(gh api:*)"
     ],
     "additionalDirectories": [
       "/tmp"
