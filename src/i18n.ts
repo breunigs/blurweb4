@@ -93,6 +93,7 @@ const STRINGS = {
     var_desc_duration: 'Video duration (hh:mm:ss)',
     mode_blur: 'Blur',
     mode_blackout: 'Blackout',
+    mode_pixelate: 'Pixelate',
     mode_outline: 'Outline (debug)',
 
     // Step 4 — Export
@@ -215,6 +216,7 @@ const STRINGS = {
     var_desc_duration: 'Videodauer (hh:mm:ss)',
     mode_blur: 'Unsch\u00e4rfe',
     mode_blackout: 'Schw\u00e4rzen',
+    mode_pixelate: 'Verpixeln',
     mode_outline: 'Umriss (Debug)',
 
     step_export: 'Exportieren',

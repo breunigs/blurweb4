@@ -1,4 +1,4 @@
-export type DrawMode = 'outline' | 'blackout' | 'blur';
+export type DrawMode = 'outline' | 'blackout' | 'blur' | 'pixelate';
 export type ModelChoice = 'detect_n' | 'detect_x';
 export type MetadataMode = 'keep' | 'gps' | 'strip';
 
