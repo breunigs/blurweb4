@@ -1,5 +1,6 @@
 // Patch console first so all subsequent logs are captured in the debug buffer.
 import './debugLog';
+import './hangDetector';
 
 // Register custom decoders before anything else so mediabunny sees them.
 // Registration order matters: mediabunny checks decoders in order and uses
