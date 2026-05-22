@@ -1,5 +1,6 @@
 /* ── Default theme vars (macOS dark, also the no-JS fallback) ── */
-:root {
+:root,
+html[data-theme='macos-dark'] {
   --bg: #1c1c1e;
   --card: #2c2c2e;
   --card2: #3a3a3c;
@@ -34,23 +35,6 @@
     --step-num: #007aff;
     color-scheme: light;
   }
-}
-
-/* ── Theme: macOS dark ────────────────────────────────────────── */
-html[data-theme='macos-dark'] {
-  --bg: #1c1c1e;
-  --card: #2c2c2e;
-  --card2: #3a3a3c;
-  --border: rgba(255, 255, 255, 0.12);
-  --text: #ffffff;
-  --dim: rgba(235, 235, 245, 0.72);
-  --muted: rgba(235, 235, 245, 0.65);
-  --accent: #0a84ff;
-  --accent-h: #0071e3;
-  --green: #30d158;
-  --green-dk: rgba(48, 209, 88, 0.18);
-  --step-num: #0a84ff;
-  color-scheme: dark;
 }
 
 /* ── Theme: macOS light ───────────────────────────────────────── */
@@ -194,6 +178,16 @@ body {
 
 #explainer-dl a:hover {
   text-decoration: underline;
+}
+
+#explainer-full .step-body {
+  padding: 20px 24px;
+}
+
+#explainer-full h2 {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 14px;
 }
 
 @media (max-width: 560px) {
@@ -993,6 +987,16 @@ input[name="drawMode"][value="solidcolor"]:checked~#solidcolor-color-picker {
   max-width: 300px;
 }
 
+#conf-value,
+#expansion-value {
+  font-variant-numeric: tabular-nums;
+  min-width: 2.8em;
+}
+
+.naming-row {
+  margin-bottom: 12px;
+}
+
 /* ── 4. Export ─────────────────────────────────────────────── */
 .export-actions {
   display: none;
@@ -1114,6 +1118,75 @@ input[name="drawMode"][value="solidcolor"]:checked~#solidcolor-color-picker {
   align-self: center;
   white-space: nowrap;
   min-width: 80px;
+}
+
+#step-export .settings-grid {
+  margin-bottom: 16px;
+}
+
+#naming-pattern-input {
+  font-family: var(--mono);
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  background: var(--card2);
+  color: var(--text);
+  border-radius: 6px;
+  font-size: 13px;
+  min-width: 160px;
+  flex: 1;
+  max-width: 320px;
+  outline: none;
+}
+
+#naming-info-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--card2);
+  color: var(--dim);
+  cursor: pointer;
+  font-size: 13px;
+  font-style: italic;
+  font-family: Georgia, serif;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+#naming-info-panel {
+  margin-top: -8px;
+  margin-bottom: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  background: var(--card2);
+  overflow-x: auto;
+}
+
+#naming-vars-table {
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 300px;
+  font-size: 12px;
+}
+
+#naming-vars-table th {
+  text-align: left;
+  padding: 2px 10px 6px 0;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+#naming-vars-table th:last-child {
+  padding-right: 0;
+  white-space: nowrap;
+}
+
+#naming-vars-table th:first-child {
+  white-space: nowrap;
 }
 
 /* Per-file rows */
@@ -1245,6 +1318,74 @@ input[name="drawMode"][value="solidcolor"]:checked~#solidcolor-color-picker {
   color: var(--text);
   background: var(--card2);
   border-color: var(--muted);
+}
+
+#step-debug .step-number {
+  background: var(--muted);
+}
+
+#debug-log-area {
+  background: var(--card2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  height: 220px;
+  overflow-y: auto;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--dim);
+  white-space: pre-wrap;
+  word-break: break-all;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.debug-btn-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+#copy-log-status {
+  font-size: 12px;
+  color: var(--muted);
+  align-self: center;
+}
+
+.debug-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.debug-controls-row {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.debug-section-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.debug-control-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.debug-group-label {
+  font-size: 12px;
+  color: var(--dim);
+  white-space: nowrap;
 }
 
 /* ══════════════════════════════════════════════════════════════

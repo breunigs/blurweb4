@@ -77,5 +77,5 @@ export function setConfig(patch: Partial<AppConfig>): void {
   } catch {
     /* ok */
   }
-  window.dispatchEvent(new CustomEvent('configchange', { detail: current }));
+  window.dispatchEvent(new CustomEvent('configchange', { detail: { config: current, changedKeys: Object.keys(patch) as (keyof AppConfig)[] } }));
 }

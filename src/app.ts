@@ -407,7 +407,10 @@ export class App {
       setConfig({ enabledLabels: labels });
     });
 
-    window.addEventListener('configchange', (e) => void this.onConfigChange((e as CustomEvent<AppConfig>).detail));
+    window.addEventListener('configchange', (e) => {
+      const { config, changedKeys } = (e as CustomEvent<{ config: AppConfig; changedKeys: (keyof AppConfig)[] }>).detail;
+      void this.onConfigChange(config, changedKeys);
+    });
 
     const namingInput = document.getElementById('naming-pattern-input') as HTMLInputElement | null;
     const debouncedNamingChange = debounce((value: string) => setConfig({ namingPattern: value }), 300);
@@ -421,9 +424,12 @@ export class App {
     });
   }
 
-  private async onConfigChange(cfg: AppConfig): Promise<void> {
+  private static readonly EXPORT_ONLY_KEYS: ReadonlySet<keyof AppConfig> = new Set(['keepMetadata', 'keepAudio', 'namingPattern']);
+
+  private async onConfigChange(cfg: AppConfig, changedKeys: (keyof AppConfig)[]): Promise<void> {
     this.exportManager.markAllDirty();
     this.syncConfigUI();
+    if (changedKeys.every((k) => App.EXPORT_ONLY_KEYS.has(k))) return;
     if (cfg.model !== this.prevModel) {
       this.prevModel = cfg.model;
       this.showDetecting(true, 'loading-model');

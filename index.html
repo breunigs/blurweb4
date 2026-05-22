@@ -94,18 +94,16 @@
         <!-- Redaction mode -->
         <div class="setting-row">
           <span class="setting-row-label" data-i18n="setting_redaction">Redaction style</span>
-          <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
-            <div class="pill-group" id="mode-radio-group">
-              <label><input type="radio" name="drawMode" value="blur" checked><span
-                  data-i18n="mode_blur">Blur</span></label>
-              <label id="solidcolor-label"><input type="radio" name="drawMode" value="solidcolor"><span
-                  data-i18n="mode_solidcolor">Solid color</span><input type="color" id="solidcolor-color-picker"
-                  tabindex="-1"></label>
-              <label><input type="radio" name="drawMode" value="pixelate"><span
-                  data-i18n="mode_pixelate">Pixelate</span></label>
-              <label><input type="radio" name="drawMode" value="outline"><span data-i18n="mode_outline">Outline
-                  (debug)</span></label>
-            </div>
+          <div class="pill-group" id="mode-radio-group">
+            <label><input type="radio" name="drawMode" value="blur" checked><span
+                data-i18n="mode_blur">Blur</span></label>
+            <label id="solidcolor-label"><input type="radio" name="drawMode" value="solidcolor"><span
+                data-i18n="mode_solidcolor">Solid color</span><input type="color" id="solidcolor-color-picker"
+                tabindex="-1"></label>
+            <label><input type="radio" name="drawMode" value="pixelate"><span
+                data-i18n="mode_pixelate">Pixelate</span></label>
+            <label><input type="radio" name="drawMode" value="outline"><span data-i18n="mode_outline">Outline
+                (debug)</span></label>
           </div>
         </div>
 
@@ -144,7 +142,7 @@
           <span class="setting-row-label" data-i18n="setting_confidence">Min. confidence</span>
           <div class="conf-row">
             <input type="range" id="conf-slider" min="1" max="99" value="10" step="1">
-            <span id="conf-value" style="font-variant-numeric:tabular-nums;min-width:2.8em;">5%</span>
+            <span id="conf-value">5%</span>
           </div>
         </div>
 
@@ -153,7 +151,7 @@
           <span class="setting-row-label" data-i18n="setting_expansion">Area expansion</span>
           <div class="conf-row">
             <input type="range" id="expansion-slider" min="0" max="100" value="0" step="1">
-            <span id="expansion-value" style="font-variant-numeric:tabular-nums;min-width:2.8em;">0%</span>
+            <span id="expansion-value">0%</span>
           </div>
         </div>
       </div>
@@ -219,7 +217,7 @@
     </summary>
     <div class="step-body">
       <!-- Metadata + Audio settings -->
-      <div class="settings-grid" style="margin-bottom:16px;">
+      <div class="settings-grid">
         <div class="setting-row">
           <span class="setting-row-label" data-i18n="setting_metadata">Metadata</span>
           <div class="pill-group" id="metadata-radio-group">
@@ -239,27 +237,18 @@
         </div>
       </div>
       <!-- Filename pattern -->
-      <div class="naming-row" style="margin-bottom:12px;">
-        <span class="setting-row-label" data-i18n="naming_pattern" style="white-space:nowrap;">Filename pattern</span>
-        <input type="text" id="naming-pattern-input" style="font-family:var(--mono);padding:6px 10px;border:1px solid var(--border);
-                 background:var(--card2);color:var(--text);border-radius:6px;font-size:13px;
-                 min-width:160px;flex:1;max-width:320px;outline:none;">
-        <button id="naming-info-btn" style="width:24px;height:24px;border-radius:50%;border:1px solid var(--border);
-                 background:var(--card2);color:var(--dim);cursor:pointer;font-size:13px;
-                 font-style:italic;font-family:Georgia,serif;flex-shrink:0;
-                 display:flex;align-items:center;justify-content:center;padding:0;" title="Show variables">i</button>
+      <div class="naming-row">
+        <span class="setting-row-label" data-i18n="naming_pattern">Filename pattern</span>
+        <input type="text" id="naming-pattern-input">
+        <button id="naming-info-btn" title="Show variables">i</button>
       </div>
-      <div id="naming-info-panel" hidden style="margin-top:-8px;margin-bottom:12px;border:1px solid var(--border);border-radius:6px;
-               padding:10px 12px;background:var(--card2);overflow-x:auto;">
-        <table id="naming-vars-table" style="border-collapse:collapse;width:100%;min-width:300px;font-size:12px;">
+      <div id="naming-info-panel" hidden>
+        <table id="naming-vars-table">
           <thead>
             <tr>
-              <th style="text-align:left;padding:2px 10px 6px 0;color:var(--muted);font-weight:600;white-space:nowrap;"
-                data-i18n="naming_col_variable">Variable</th>
-              <th style="text-align:left;padding:2px 10px 6px 0;color:var(--muted);font-weight:600;"
-                data-i18n="naming_col_desc">Description</th>
-              <th style="text-align:left;padding:2px 0 6px 0;color:var(--muted);font-weight:600;white-space:nowrap;"
-                data-i18n="naming_col_value">Value</th>
+              <th data-i18n="naming_col_variable">Variable</th>
+              <th data-i18n="naming_col_desc">Description</th>
+              <th data-i18n="naming_col_value">Value</th>
             </tr>
           </thead>
           <tbody id="naming-vars-body"></tbody>
@@ -271,12 +260,12 @@
   <!-- ──────────────────────────── STEP 5: DEBUG LOG ─────────────────── -->
   <details class="step-card" id="step-debug">
     <summary class="step-header">
-      <div class="step-number" style="background:var(--muted)">4</div>
+      <div class="step-number">4</div>
       <span class="step-title" data-i18n="step_debug">Debug</span>
       <span class="step-subtitle" data-i18n="debug_subtitle">All console output captured here</span>
     </summary>
     <div class="step-body">
-      <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+      <div class="debug-btn-row">
         <button id="copy-log-btn" class="debug-btn">
           <span data-i18n="btn_copy">Copy to clipboard</span>
         </button>
@@ -289,40 +278,23 @@
         <button id="defaults-btn" class="debug-btn">
           <span data-i18n="btn_defaults">Restore default settings</span>
         </button>
-        <span id="copy-log-status" style="font-size:12px;color:var(--muted);align-self:center;"></span>
+        <span id="copy-log-status"></span>
       </div>
-      <div id="debug-log-area" style="
-        background:var(--card2);
-        border:1px solid var(--border);
-        border-radius:6px;
-        padding:10px 12px;
-        height:220px;
-        overflow-y:auto;
-        font-family:var(--mono);
-        font-size:11px;
-        line-height:1.55;
-        color:var(--dim);
-        white-space:pre-wrap;
-        word-break:break-all;
-        scrollbar-width:thin;
-        scrollbar-color:var(--border) transparent;
-      "></div>
+      <div id="debug-log-area"></div>
       <!-- Debug controls: theme + language -->
-      <div style="display:flex;flex-direction:column;gap:8px;margin-top:12px;">
-        <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;">
-          <span
-            style="font-size:11px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:var(--muted);">Design
-            theme</span>
-          <div style="display:flex;align-items:center;gap:8px;">
-            <span style="font-size:12px;color:var(--dim);white-space:nowrap;">Platform</span>
+      <div class="debug-controls">
+        <div class="debug-controls-row">
+          <span class="debug-section-label">Design theme</span>
+          <div class="debug-control-group">
+            <span class="debug-group-label">Platform</span>
             <div class="pill-group pill-group-sm">
               <label><input type="radio" name="theme-platform" value="auto">Auto</label>
               <label><input type="radio" name="theme-platform" value="macos">macOS</label>
               <label><input type="radio" name="theme-platform" value="windows">Windows</label>
             </div>
           </div>
-          <div style="display:flex;align-items:center;gap:8px;">
-            <span style="font-size:12px;color:var(--dim);white-space:nowrap;">Color</span>
+          <div class="debug-control-group">
+            <span class="debug-group-label">Color</span>
             <div class="pill-group pill-group-sm">
               <label><input type="radio" name="theme-color" value="auto">Auto</label>
               <label><input type="radio" name="theme-color" value="light">Light</label>
@@ -330,10 +302,9 @@
             </div>
           </div>
         </div>
-        <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;">
-          <span
-            style="font-size:11px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:var(--muted);">Language</span>
-          <div style="display:flex;align-items:center;gap:8px;">
+        <div class="debug-controls-row">
+          <span class="debug-section-label">Language</span>
+          <div class="debug-control-group">
             <div class="pill-group pill-group-sm">
               <label><input type="radio" name="lang" value="auto">Auto</label>
               <label><input type="radio" name="lang" value="en">EN</label>
@@ -347,8 +318,8 @@
 
   <!-- ─────────────────────────── EXPLAINER (full) ────────────────────── -->
   <div id="explainer-full" class="step-card">
-    <div class="step-body" style="padding:20px 24px;">
-      <h2 style="font-size:15px;font-weight:600;margin-bottom:14px;" data-i18n="explainer_h2">How it works</h2>
+    <div class="step-body">
+      <h2 data-i18n="explainer_h2">How it works</h2>
       <dl id="explainer-dl">
         <dt data-i18n="explainer_processing_dt">Processing happens in the browser</dt>
         <dd data-i18n="explainer_processing_dd">Decoding, detection, and export all run as code inside the browser tab.
