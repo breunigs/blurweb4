@@ -13,14 +13,16 @@ export interface MediaItem {
   exported: boolean;
   trimStart?: number;
   trimEnd?: number;
-  exportRow: HTMLElement;
   exportBarFill: HTMLElement;
   exportEtaEl: HTMLElement;
   fileListRow: HTMLElement;
-  fileListMetaEl: HTMLElement;
+  fileListDurationEl: HTMLElement;
+  fileListDimsEl: HTMLElement;
+  fileListSizeEl: HTMLElement;
   usesLibav: boolean;
   metaPromise: Promise<FileMeta>;
   meta?: FileMeta;
+  singleFrame?: boolean;
 }
 
 export interface ItemStore {

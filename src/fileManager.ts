@@ -4,7 +4,7 @@ import {
   getCachedDetections,
   scheduleInference,
   makeImageKey,
-  filterByConf,
+  applyFilters,
 } from './detector';
 import { loadTrim } from './trimStorage';
 import { applyDetections } from './detectionDrawer';
@@ -33,15 +33,13 @@ export class FileManager {
   }
 
   private updateFileListMeta(item: MediaItem): void {
-    const parts: string[] = [];
     if (item.isVideo && item.player && item.player.duration > 0) {
-      parts.push(this.formatDuration(item.player.duration));
+      item.fileListDurationEl.textContent = this.formatDuration(item.player.duration);
     }
     if (item.canvas.width > 0 && item.canvas.height > 0) {
-      parts.push(`${item.canvas.width}×${item.canvas.height}`);
+      item.fileListDimsEl.textContent = `${item.canvas.width}×${item.canvas.height}`;
     }
-    parts.push(this.formatFileSize(item.file.size));
-    item.fileListMetaEl.textContent = parts.join(' · ');
+    item.fileListSizeEl.textContent = this.formatFileSize(item.file.size);
   }
 
   clearExamplesLoading(): void {
@@ -122,43 +120,34 @@ export class FileManager {
       ? '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="10" height="10" rx="1.5"/><polyline points="11,6 15,4 15,12 11,10"/></svg>'
       : '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="1" width="14" height="14" rx="2"/><polyline points="1,11 5,7 8,10 11,7 15,12"/><circle cx="5.5" cy="4.5" r="1.5"/></svg>';
 
-    const fileListBody = document.createElement('div');
-    fileListBody.className = 'file-list-body';
-
-    const fileListTop = document.createElement('div');
-    fileListTop.className = 'file-list-top';
-
     const fileListName = document.createElement('span');
     fileListName.className = 'file-list-name';
     fileListName.textContent = file.name;
     fileListName.title = file.name;
 
-    const fileListMeta = document.createElement('span');
-    fileListMeta.className = 'file-list-meta';
-    fileListMeta.textContent = this.formatFileSize(file.size);
-
-    fileListTop.append(fileListName, fileListMeta);
-
-    // Progress section (used by ExportManager as item.exportRow)
-    const exportRow = document.createElement('div');
-    exportRow.className = 'file-list-progress';
-    const rowBarTrack = document.createElement('div');
-    rowBarTrack.className = 'file-list-bar-track';
-    const rowBarFill = document.createElement('div');
-    rowBarFill.className = 'file-list-bar-fill';
-    rowBarTrack.appendChild(rowBarFill);
     const rowEta = document.createElement('span');
-    rowEta.className = 'file-list-eta';
-    exportRow.append(rowBarTrack, rowEta);
+    rowEta.className = 'file-list-eta col-eta';
 
-    fileListBody.append(fileListTop, exportRow);
+    const fileListDuration = document.createElement('span');
+    fileListDuration.className = 'file-list-duration';
+
+    const fileListDims = document.createElement('span');
+    fileListDims.className = 'file-list-dims';
+
+    const fileListSize = document.createElement('span');
+    fileListSize.className = 'file-list-size';
+    fileListSize.textContent = this.formatFileSize(file.size);
 
     const removeBtn = document.createElement('button');
     removeBtn.className = 'file-list-remove';
     removeBtn.innerHTML = '&times;';
     removeBtn.setAttribute('aria-label', 'Remove file');
 
-    fileListRow.append(fileListIcon, fileListBody, removeBtn);
+    // Progress bar: absolutely positioned 2px bottom overlay
+    const rowBarFill = document.createElement('div');
+    rowBarFill.className = 'file-list-bar-fill';
+
+    fileListRow.append(fileListIcon, fileListName, rowEta, fileListDuration, fileListDims, fileListSize, removeBtn, rowBarFill);
     this.fileListEl.appendChild(fileListRow);
 
     const item: MediaItem = {
@@ -167,11 +156,12 @@ export class FileManager {
       file,
       wrapper,
       canvas,
-      exportRow,
       exportBarFill: rowBarFill,
       exportEtaEl: rowEta,
       fileListRow,
-      fileListMetaEl: fileListMeta,
+      fileListDurationEl: fileListDuration,
+      fileListDimsEl: fileListDims,
+      fileListSizeEl: fileListSize,
       loaded: false,
       exported: false,
       usesLibav: false,
@@ -204,6 +194,7 @@ export class FileManager {
 
     // Reveal step cards on first file
     if (this.store.items.length === 1) {
+      document.getElementById('step-redaction')!.classList.add('active');
       document.getElementById('step-preview')!.classList.add('active');
       document.getElementById('step-export')!.classList.add('active');
     }
@@ -260,8 +251,8 @@ export class FileManager {
           const key = await makeImageKey(file, canvas.width, canvas.height);
           const cached = await getCachedDetections(key);
           if (cached !== null) {
-            const filtered = filterByConf(cached, getConfig().minConfidence);
-            applyDetections(ctx, filtered, getConfig().drawMode, getConfig().blackoutColor);
+            const filtered = applyFilters(cached, getConfig().minConfidence, getConfig().enabledLabels);
+            applyDetections(ctx, filtered, getConfig().drawMode, getConfig().solidColor, getConfig().expansionFraction);
             if (this.store.items[this.store.activeIndex] === item) {
               this.onShowDetectionResult(filtered);
               (window as unknown as Record<string, unknown>).__lastDetections = filtered;
@@ -275,8 +266,8 @@ export class FileManager {
               key,
               (dets) => {
                 this.onShowDetecting(false);
-                const filtered = filterByConf(dets, getConfig().minConfidence);
-                applyDetections(ctx, filtered, getConfig().drawMode, getConfig().blackoutColor);
+                const filtered = applyFilters(dets, getConfig().minConfidence, getConfig().enabledLabels);
+                applyDetections(ctx, filtered, getConfig().drawMode, getConfig().solidColor, getConfig().expansionFraction);
                 if (this.store.items[this.store.activeIndex] === item) {
                   this.onShowDetectionResult(filtered);
                 } else {
@@ -325,6 +316,7 @@ export class FileManager {
     const remaining = this.store.items.length;
 
     if (remaining === 0) {
+      document.getElementById('step-redaction')!.classList.remove('active');
       document.getElementById('step-preview')!.classList.remove('active');
       document.getElementById('step-export')!.classList.remove('active');
       document.getElementById('step-load')!.classList.remove('has-files');

@@ -5,18 +5,36 @@
 ```
 blurweb4/
 ├── build.mjs             esbuild dev server + production build script
-├── index.html            app shell (drop zone, tab bar, canvas, video controls)
+├── index.html            app shell (file list, 3-step UI, canvas, video controls)
 ├── src/
 │   ├── main.ts           entry point — registers decoders, instantiates App
-│   ├── app.ts            file handling, tab management, control wiring
+│   ├── app.ts            top-level orchestrator; owns model-loading + inference UI state
+│   ├── fileManager.ts    file/video loading, list UI, metadata extraction, inference triggering
+│   ├── playbackController.ts  video scrubbing, trim point UI, trim persistence
+│   ├── exportManager.ts  batch export orchestration, progress, ETA, wake-lock
+│   ├── config.ts         centralized AppConfig with localStorage persistence
+│   ├── naming.ts         template-variable substitution for export filenames
+│   ├── i18n.ts           EN + DE translations; auto-detect from browser language
+│   ├── themeManager.ts   platform (macOS/Windows) + color (light/dark) theme management
+│   ├── blurrer.ts        blur / solid-color / pixelate redaction rendering on canvas
+│   ├── detectionDrawer.ts  apply detections as outlines or redaction effects
+│   ├── fileMeta.ts       EXIF metadata from JPEGs; mediabunny metadata from videos
+│   ├── jpegUtils.ts      locate EXIF APP1 segment in JPEG byte stream
+│   ├── trimStorage.ts    IndexedDB persistence for video trim points
+│   ├── hangDetector.ts   main-thread hang detection via Web Worker rAF heartbeat
+│   ├── debugLog.ts       in-memory ring buffer capturing all console output
+│   ├── lruMap.ts         fixed-capacity LRU Map used by blurrer mask cache + detector
 │   ├── imageRenderer.ts  createImageBitmap → canvas (renders bitmap only, no detection)
 │   ├── videoPlayer.ts    mediabunny VideoSampleSink wrapper with play/pause/seek
 │   ├── hevcDecoder.ts    libav.js WASM fallback decoder for HEVC (registered at startup)
+│   ├── hevcWorker.ts     Web Worker running libav.js HEVC decode (sequential protocol)
 │   ├── softwareDecoder.ts  smart WebCodecs decoder with hw→sw→no-pref→libav fallback chain
 │   ├── libavCore.ts        shared libav.js AVC/AV1 core (used by softwareDecoder + libavVideoDecoder)
 │   ├── libavVideoDecoder.ts  libav.js fallback for AVC/AV1 when WebCodecs entirely absent
-│   ├── detector.ts       YOLOv5 ONNX inference, IDB cache, inference queue, drawing
+│   ├── detector.ts       ONNX cache management, inference scheduling, model loading
+│   ├── detector.worker.ts  Web Worker running ONNX inference (offloaded from main thread)
 │   ├── encoderConfig.ts  codec/hardware detection for export
+│   ├── qualityEncoder.ts WebCodecs AV1 quality-mode encoder (startup probe, SW preferred)
 │   ├── videoEncoder.ts   mediabunny Conversion-based re-encoder (bakes detections in)
 │   ├── imageExporter.ts  canvas.toBlob → JPEG download
 │   └── batchExporter.ts  sequential multi-file export with progress callbacks
@@ -352,51 +370,103 @@ Tests run on **port 3100** to avoid conflicting with `npm run dev` (port 3000).
 Playwright spawns the esbuild dev server automatically via `webServer` config
 and reuses it if already running on port 3100.
 
-## YOLOv5 object detection (src/detector.ts)
+## App architecture (src/app.ts + decomposed modules)
 
-Model: `models/detect_n_2024_04.onnx` (8 MB, labels: `plate`, `person`).
+`app.ts` was split into focused modules. `App` retains model-loading progress UI,
+inference status UI, config sync, and the debug panel. The three new modules are:
+
+- **`fileManager.ts` (`FileManager`)** — file list UI, lazy metadata extraction,
+  video/image loading, inference triggering. Callbacks into `App` for UI updates.
+- **`playbackController.ts` (`PlaybackController`)** — video scrubbing, trim-point
+  UI, trim persistence via `trimStorage`. Parses `[h:]m:ss[.SSS]` input format.
+- **`exportManager.ts` (`ExportManager`)** — export button state, per-file + global
+  progress, ETA from inference stats, cancellation, wake-lock for mobile.
+
+Test globals (`window.__setDrawMode`, `__setTrimStart`, `__setTrimEnd`, etc.) are
+wired up in `App` for Playwright test access without UI interaction.
+
+## Configuration (src/config.ts)
+
+`AppConfig` (via `getConfig()` / `setConfig()`) centralises all user-facing settings
+with `localStorage` persistence:
+
+| Key | Values | Notes |
+|---|---|---|
+| `model` | `detect_n` / `detect_x` | detect_x (178 MB) not persisted until first successful inference |
+| `drawMode` | `outline` / `blur` / `solidcolor` / `pixelate` | |
+| `metadataMode` | `keep` / `gps-only` / `strip` | |
+| `minConfidence` | 0–1 | |
+| `expansion` | fraction | uniform box padding |
+| `labels` | `plate` / `person` / both | |
+| `namingPattern` | template string | see naming.ts |
+
+## Export filename naming (src/naming.ts)
+
+`applyPattern(pattern, vars)` substitutes `{variable}` tokens. Supported variables:
+`input`, `index`, `year`, `month`, `day`, `hour`, `minute`, `timezone`,
+`lat`, `lon`, `duration`, `model`, `redaction_style`, `detect`, `min_confidence`,
+`area_expansion`. Unknown or unavailable variables become empty strings.
+
+## Redaction rendering (src/blurrer.ts + src/detectionDrawer.ts)
+
+**`Blurrer` (singleton `blurrer`)** renders three redaction styles onto a canvas context:
+- `blur` — stackblur-canvas with feathered mask (LRU cache of 64 mask bitmaps)
+- `solidcolor` — plain fill with rounded corners
+- `pixelate` — low-resolution block scaling
+
+Edge clamping: boxes within 0.5% of the canvas border snap flush and lose rounded
+corners. Rounded-corner radii are label-specific (`plate`: 0.95×, `person`: 0.80× of
+`min(w,h)/2`). Two-pass mask: feathered outer shape + solid interior pin for blur.
+
+**`detectionDrawer.ts`** provides `expandDetections()` (uniform box padding) and
+`applyDetections()` (dispatches to `Blurrer` or draws colored outline rectangles).
+Works with both `CanvasRenderingContext2D` and `OffscreenCanvasRenderingContext2D`.
+
+## YOLOv5 object detection (src/detector.ts + src/detector.worker.ts)
+
+Model: `models/detect_n_2024_04.onnx` (8 MB) or `detect_x` (178 MB), labels: `plate`, `person`.
 Input: `[1, 3, 1280, 1280]` float32 RGB CHW tensor normalized to [0, 1].
 Output: `[1, N, 7]` — rows of `[cx, cy, w, h, obj_conf, plate_conf, person_conf]`
 in model-pixel coordinates (0..1280, 0..1280).
 
+**ONNX runs in a Web Worker (`detector.worker.ts`)** to avoid main-thread freezes.
+The worker protocol is sequential (one message at a time):
+- `init` / `changeModel` — load ONNX session, return execution provider
+- `infer` — receive `Uint8ClampedArray` pixels (transferred), return detections
+
+**Execution provider priority in the worker:** WebGPU → WASM (WebGL removed; probed
+at worker startup, falls back on failure).
+
 **Preprocessing — letterboxing (important):**
-The model was trained on letterboxed inputs. `captureSnapshot` scales the source
-uniformly (`scale = min(MODEL_W/srcW, MODEL_H/srcH)`), draws it centred, and fills
-the remaining area with `rgb(114,114,114)` (YOLOv5 default). The resulting
-`scale`, `padX`, `padY` are stored in `Snapshot` and used in `postprocess` to
-unmap model-pixel coordinates back to original-image coordinates:
+The model was trained on letterboxed inputs. `captureSnapshot` on the main thread
+scales the source uniformly (`scale = min(MODEL_W/srcW, MODEL_H/srcH)`), draws it
+centred, and fills the remaining area with `rgb(114,114,114)` (YOLOv5 default). The
+resulting `scale`, `padX`, `padY` are stored in `Snapshot` and used in `postprocess`
+to unmap model-pixel coordinates back to original-image coordinates:
 ```typescript
 x = (cx - w/2 - padX) / scale
 y = (cy - h/2 - padY) / scale
 ```
 Stretching (old behaviour) caused badly missed detections on portrait sources.
 
-**Execution provider priority:** WebGPU → WebGL → WASM (probed at startup,
-falls back to next on failure). All ONNX calls are **serialized** via a
-promise chain (`onnxChain`) — concurrent `session.run()` calls cause issues
-with WASM/WebGL runtimes.
-
 **Background inference queue (preview path):**
-- `scheduleInference(source, key, callback)` — snapshots canvas pixels
-  synchronously (so subsequent draws don't corrupt the queued data), sets
-  `nextPending`, starts `drainQueue()` if not already running.
-- Queue size 1: the next pending item is always replaced by a newer one;
-  in-flight inference always runs to completion (ensures cache is populated).
-- After inference: writes to memory cache + IDB, calls `callback(detections)`.
+- `scheduleInference(source, key, callback)` — yields the main thread before
+  `captureSnapshot` (allows slider/pointer events), then snapshots pixels and sends
+  to worker. Size-1 pending queue: newer requests replace older ones; in-flight
+  inference always runs to completion.
+- After inference: writes to memory LRU cache (500 entries) + IDB, calls `callback`.
 
-**Export path:** `detectForExport(source, key)` — checks memory cache, then
-IDB, then runs inference directly (no queue). Used by `videoEncoder.ts`.
+**Export path:** `detectForExport(source, key)` — checks memory cache, then IDB,
+then runs inference via worker. Used by `videoEncoder.ts`.
 
 **Cache key:** `{MODEL_NAME}|{hash8}|{filename}|{filesize}|{WxH}|{frameRef}`
 where `frameRef` is `img` for images or `t{microseconds}` for video frames,
 and `hash8` is the first 8 hex bytes of a SHA-256 over the file's first 8 KB
-(cached in a `WeakMap<File>` after the first call). This makes the key stable
-across sessions for identical files while preventing collisions between different
-files that share the same name and size.
+(cached in a `WeakMap<File>` after the first call).
 
-**Persistent statistics:** inference count and total ms are stored in IDB
-(`blurweb4-detections` / `stats` store) and loaded at startup. Used to
-show `~Xs per frame` estimates in the status bar.
+**Persistent statistics:** per-model inference count and total ms are stored in IDB
+(`blurweb4-detections` / `stats` store) and loaded at startup. Used to show
+`~Xs per frame` estimates in the status bar.
 
 **Console logging:**
 ```
@@ -405,9 +475,8 @@ show `~Xs per frame` estimates in the status bar.
 [detector] export cache hit (memory) key="..." detections=2
 ```
 
-**Status bar:** `.detect-status` div inside each `.canvas-wrapper`, shown
-at top with spinner animation while inference is pending, hidden on completion
-or cache hit. Text: `" detecting… (~Xs per frame)"` once stats are available.
+**Status bar:** `.detect-status` div inside each `.canvas-wrapper`, shown at top
+with spinner while inference is pending, hidden on completion or cache hit.
 
 **Test reference detections** (from `detect_n_2024_04.onnx` on `jpeg.jpg`
 at display size 1536×2048, iPhone 12 mini photo):
@@ -430,9 +499,60 @@ Tolerance: ±5 pixels per coordinate. Cross-browser results are identical
 opening a file (with cold IDB cache) to log preprocessing params, per-channel
 tensor stats (BGR/RGB check), pre-NMS candidates, and coordinate unmap details.
 
+## Hang detection (src/hangDetector.ts)
+
+Inline Web Worker measures rAF lag against a 200 ms threshold. Logs hangs to
+`console.warn` (captured by `debugLog`). Resets baseline on window blur/focus
+to avoid false positives from battery throttling on mobile/background tabs.
+No exports — just side-effects on module load from `main.ts`.
+
+## Theme management (src/themeManager.ts)
+
+`applyTheme()` / `initThemeControls()` — platform (`macOS` / `Windows` / `web`) and
+color (`light` / `dark`) selection with `localStorage` persistence. Auto-detects from
+UA and `prefers-color-scheme`. Applies `data-theme="platform-color"` on `<html>`.
+Migrates legacy `'web'` platform value automatically.
+
+## Internationalisation (src/i18n.ts)
+
+Two languages: English (default) and German. Browser language auto-detected on first
+load. `t(key)` looks up a string; `tpl(key, vars)` substitutes `{variable}` tokens.
+`applyTranslations()` rewrites all `data-i18n` / `data-i18n-label` DOM attributes.
+Language switch calls `setLang()` + page reload (stateless; no hydration needed).
+
+## File metadata (src/fileMeta.ts + src/jpegUtils.ts)
+
+`extractImageMeta(file)` — raw EXIF TIFF parsing via `jpegUtils.findJpegApp1()`:
+extracts date/time, timezone offset, GPS latitude/longitude (ISO 6709 decimal).
+
+`extractVideoMeta(file)` — mediabunny `Input` for codec-agnostic metadata + duration.
+
+`FileMeta` fields are used by `naming.ts` for template substitution and shown in the
+file list UI.
+
+## Trim persistence (src/trimStorage.ts)
+
+`saveTrim(file, start, end)` / `loadTrim(file)` — IndexedDB persistence keyed by
+`${filename}|${filesize}`. Shares the `blurweb4-detections` database (separate
+`trims` store). Restores trim points when the same file is re-opened.
+
+## Debug log (src/debugLog.ts)
+
+Patches `console.log/warn/error` at module load into a 1000-entry circular buffer.
+`getEntries()` / `copyToClipboard()` exposed to the debug panel UI. Logs browser
+environment (UA, screen, WebGPU, WebCodecs) at startup.
+
+## Quality-mode AV1 encoder (src/qualityEncoder.ts)
+
+`QualityModeAv1Encoder` extends mediabunny's `CustomVideoEncoder` to use
+`latencyMode: 'quality'` instead of `'realtime'` for better export quality.
+A 2×2 startup probe verifies quality mode actually encodes before registering.
+Prefers software encoding (more reliable for quality mode). Falls back to
+mediabunny's default path if the probe fails.
+
 ## onnxruntime-web WASM files
 
 `build.mjs` copies `ort-*.wasm` and `ort-*.mjs` files from
 `node_modules/onnxruntime-web/dist/` into `dist/ort/` at build time.
-`detector.ts` sets `ort.env.wasm.wasmPaths = '/dist/ort/'` so the runtime
+`detector.worker.ts` sets `ort.env.wasm.wasmPaths = '/dist/ort/'` so the runtime
 finds them. The `dist/ort/` directory is gitignored.

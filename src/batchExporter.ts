@@ -13,6 +13,7 @@ export interface ExportItem {
   keepMetadata?: 'keep' | 'gps' | 'strip';
   keepAudio?: boolean;
   meta?: FileMeta;
+  singleFrame?: boolean;
 }
 
 export interface BatchCallbacks {
@@ -30,11 +31,17 @@ function triggerDownload(data: ArrayBuffer | Blob, filename: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
-export async function runBatch(items: ExportItem[], namingPattern: string, cb: BatchCallbacks): Promise<void> {
+export async function runBatch(
+  items: ExportItem[],
+  namingPattern: string,
+  cb: BatchCallbacks,
+  isCancelled?: () => boolean,
+): Promise<void> {
   const total = items.length;
   let completed = 0;
 
   for (let i = 0; i < items.length; i++) {
+    if (isCancelled?.()) break;
     const item = items[i];
     cb.onFileStart(i);
 
@@ -46,21 +53,31 @@ export async function runBatch(items: ExportItem[], namingPattern: string, cb: B
         cb.onFileProgress(i, 1);
         const { blob, filename } = await exportAsJpeg(item.canvas!, item.name, item.file, item.keepMetadata, 0.92, outputStem);
         triggerDownload(blob, filename);
+      } else if (item.singleFrame && item.canvas) {
+        // Single-frame selection → export JPEG from current canvas
+        cb.onFileProgress(i, 1);
+        const { blob, filename } = await exportAsJpeg(item.canvas, item.name, undefined, item.keepMetadata, 0.92, outputStem);
+        triggerDownload(blob, filename.replace(/\.[^.]+$/, '.jpg'));
       } else {
         const { buffer, filename } = await encodeVideo(
           item.file!,
-          (p) => cb.onFileProgress(i, p),
+          (p) => {
+            if (isCancelled?.()) throw new DOMException('Export cancelled', 'AbortError');
+            cb.onFileProgress(i, p);
+          },
           item.trimStart,
           item.trimEnd,
           item.keepMetadata,
           item.keepAudio,
           outputStem,
+          isCancelled,
         );
         cb.onFileProgress(i, 1);
         triggerDownload(buffer, filename);
       }
       cb.onFileEnd(i);
     } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') break;
       console.error(`Export failed for "${item.name}":`, err);
       cb.onFileEnd(i, err instanceof Error ? err : new Error(String(err)));
     }

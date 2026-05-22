@@ -5,10 +5,10 @@ import {
   getAverageInferenceMs,
   setModel,
   clearDetectionCache,
-  filterByConf,
+  applyFilters,
 } from './detector';
 import { applyDetections } from './detectionDrawer';
-import { getConfig, setConfig, DEFAULTS, type AppConfig, type ModelChoice } from './config';
+import { getConfig, setConfig, confirmLargeModelOk, DEFAULTS, type AppConfig, type ModelChoice } from './config';
 import { t, tpl, applyTranslations } from './i18n';
 import { getEntries, clearEntries, setOnUpdate, copyToClipboard } from './debugLog';
 import { renderImage } from './imageRenderer';
@@ -48,6 +48,7 @@ export class App {
   private loadedSummary!: HTMLElement;
   private stepPreviewSubtitle!: HTMLElement;
   private audioSettingRow!: HTMLElement;
+  private modelLoadAfterSwitch = false;
 
   init(): void {
     this.previewArea = document.getElementById('preview-area')!;
@@ -79,17 +80,13 @@ export class App {
       this.store,
       this.previewArea,
       document.getElementById('trim-section')!,
-      document.getElementById('trim-start') as HTMLInputElement,
-      document.getElementById('trim-end') as HTMLInputElement,
-      document.getElementById('trim-track-fill')!,
-      document.getElementById('trim-start-label')!,
-      document.getElementById('trim-end-label')!,
+      document.getElementById('scrubber') as HTMLInputElement,
+      document.getElementById('trim-start-text') as HTMLInputElement,
+      document.getElementById('trim-end-text') as HTMLInputElement,
+      document.getElementById('trim-start-now') as HTMLButtonElement,
+      document.getElementById('trim-end-now') as HTMLButtonElement,
+      document.getElementById('trim-whole-video') as HTMLButtonElement,
       document.getElementById('trim-duration-label')!,
-      document.getElementById('trim-slider')!,
-      document.getElementById('trim-preview-handle')!,
-      document.getElementById('trim-preview-label')!,
-      document.getElementById('trim-handle-start')!,
-      document.getElementById('trim-handle-end')!,
       (_item) => {
         // Trim changed: refresh export button state.
         this.exportManager.updateBtnState();
@@ -161,10 +158,6 @@ export class App {
         item.trimEnd = t;
         item.exported = false;
         this.exportManager.updateBtnState();
-        const dur = item.player.duration;
-        const steps = Number((document.getElementById('trim-end') as HTMLInputElement).max);
-        (document.getElementById('trim-end') as HTMLInputElement).value = String(Math.round((t / dur) * steps));
-        this.playback.updateTrimFill();
         this.playback.updateTrimLabels(item);
       }
     };
@@ -189,12 +182,23 @@ export class App {
       slider.value = String(Math.round(cfg.minConfidence * 100));
       (document.getElementById('conf-value') as HTMLElement).textContent = `${Math.round(cfg.minConfidence * 100)}%`;
     }
+    const expSlider = document.getElementById('expansion-slider') as HTMLInputElement | null;
+    if (expSlider) {
+      expSlider.value = String(Math.round(cfg.expansionFraction * 100));
+      (document.getElementById('expansion-value') as HTMLElement).textContent = `${Math.round(cfg.expansionFraction * 100)}%`;
+    }
+    const labelsRadioVal =
+      cfg.enabledLabels.includes('plate') && cfg.enabledLabels.includes('person') ? 'both'
+      : cfg.enabledLabels.includes('plate') ? 'plate'
+      : 'person';
+    const lr = document.querySelector<HTMLInputElement>(`input[name="enabledLabels"][value="${labelsRadioVal}"]`);
+    if (lr) lr.checked = true;
     const ni = document.getElementById('naming-pattern-input') as HTMLInputElement | null;
     if (ni) ni.value = cfg.namingPattern;
-    const cp = document.getElementById('blackout-color-picker') as HTMLInputElement | null;
-    if (cp) cp.value = cfg.blackoutColor;
-    const bl = document.getElementById('blackout-label') as HTMLElement | null;
-    if (bl) bl.style.setProperty('--blackout-swatch', cfg.blackoutColor);
+    const cp = document.getElementById('solidcolor-color-picker') as HTMLInputElement | null;
+    if (cp) cp.value = cfg.solidColor;
+    const bl = document.getElementById('solidcolor-label') as HTMLElement | null;
+    if (bl) bl.style.setProperty('--solidcolor-swatch', cfg.solidColor);
   }
 
   private async updateNamingInfoPanel(): Promise<void> {
@@ -203,9 +207,15 @@ export class App {
     const item = this.store.items[this.store.activeIndex];
     const stem = item ? item.name.replace(/\.[^.]+$/, '') : '';
     const meta = item ? (item.meta ?? await item.metaPromise) : {};
+    const cfg = getConfig();
     const values: Record<string, string> = {
       input: stem,
       index: '1',
+      model: cfg.model === 'detect_x' ? 'large' : 'small',
+      redaction_style: cfg.drawMode,
+      detect: [...cfg.enabledLabels].sort().join('-'),
+      min_confidence: String(cfg.minConfidence),
+      area_expansion: String(cfg.expansionFraction),
       ...Object.fromEntries(Object.entries(meta).filter(([, v]) => v !== undefined)),
     };
     const VARS: Array<{ key: string; i18nKey: Parameters<typeof t>[0] }> = [
@@ -220,6 +230,11 @@ export class App {
       { key: 'lat', i18nKey: 'var_desc_lat' },
       { key: 'lon', i18nKey: 'var_desc_lon' },
       { key: 'duration', i18nKey: 'var_desc_duration' },
+      { key: 'model', i18nKey: 'var_desc_model' },
+      { key: 'redaction_style', i18nKey: 'var_desc_redaction_style' },
+      { key: 'detect', i18nKey: 'var_desc_detect' },
+      { key: 'min_confidence', i18nKey: 'var_desc_min_confidence' },
+      { key: 'area_expansion', i18nKey: 'var_desc_area_expansion' },
     ];
     const tbody = document.getElementById('naming-vars-body')!;
     tbody.innerHTML = '';
@@ -283,11 +298,18 @@ export class App {
 
   // ── Inference status ────────────────────────────────────────────────────────
 
-  private showDetecting(on: boolean): void {
+  private showDetecting(on: boolean, context: 'inference' | 'loading-image' | 'loading-model' = 'inference'): void {
     if (on) {
-      const avg = getAverageInferenceMs();
-      this.detectStatusInline.textContent =
-        avg === null ? t('detecting_plain') : tpl('detecting_timed', { t: (avg / 1000).toFixed(1) });
+      let label: string;
+      if (context === 'loading-model') {
+        label = t('status_loading_model');
+      } else if (context === 'loading-image') {
+        label = t('status_loading_image');
+      } else {
+        const avg = getAverageInferenceMs();
+        label = avg === null ? t('detecting_plain') : tpl('detecting_timed', { t: (avg / 1000).toFixed(1) });
+      }
+      this.detectStatusInline.textContent = label;
       this.detectStatusInline.classList.add('visible');
     } else {
       this.detectStatusInline.classList.remove('visible');
@@ -297,12 +319,21 @@ export class App {
   private showDetectionResult(dets: import('./detector').Detection[]): void {
     this.files.clearExamplesLoading();
     this.detectStatusInline.classList.remove('visible');
+    if (this.modelLoadAfterSwitch) {
+      this.modelLoadAfterSwitch = false;
+      this.modelLoadProgress.classList.remove('visible');
+    }
+    confirmLargeModelOk();
     void dets;
   }
 
   private showInferenceError(err: Error): void {
     this.files.clearExamplesLoading();
     this.detectStatusInline.classList.remove('visible');
+    if (this.modelLoadAfterSwitch) {
+      this.modelLoadAfterSwitch = false;
+      this.modelLoadProgress.classList.remove('visible');
+    }
     console.error('[app] inference error shown in UI:', err.message);
   }
 
@@ -345,8 +376,8 @@ export class App {
       const t = e.target as HTMLInputElement;
       if (t.name === 'drawMode') setConfig({ drawMode: t.value as AppConfig['drawMode'] });
     });
-    document.getElementById('blackout-color-picker')?.addEventListener('input', (e) => {
-      setConfig({ blackoutColor: (e.target as HTMLInputElement).value });
+    document.getElementById('solidcolor-color-picker')?.addEventListener('input', (e) => {
+      setConfig({ solidColor: (e.target as HTMLInputElement).value });
     });
     document.getElementById('metadata-radio-group')!.addEventListener('change', (e) => {
       const t = e.target as HTMLInputElement;
@@ -362,6 +393,18 @@ export class App {
       const val = Number((e.target as HTMLInputElement).value) / 100;
       confValueEl.textContent = `${Math.round(val * 100)}%`;
       debouncedConfChange(val);
+    });
+    const expValueEl = document.getElementById('expansion-value') as HTMLElement;
+    const debouncedExpChange = debounce((val: number) => setConfig({ expansionFraction: val }), 150);
+    document.getElementById('expansion-slider')!.addEventListener('input', (e) => {
+      const val = Number((e.target as HTMLInputElement).value) / 100;
+      expValueEl.textContent = `${Math.round(val * 100)}%`;
+      debouncedExpChange(val);
+    });
+    document.getElementById('label-radio-group')!.addEventListener('change', (e) => {
+      const val = (e.target as HTMLInputElement).value;
+      const labels = val === 'both' ? ['plate', 'person'] : [val];
+      setConfig({ enabledLabels: labels });
     });
 
     window.addEventListener('configchange', (e) => void this.onConfigChange((e as CustomEvent<AppConfig>).detail));
@@ -383,7 +426,7 @@ export class App {
     this.syncConfigUI();
     if (cfg.model !== this.prevModel) {
       this.prevModel = cfg.model;
-      this.showDetecting(true);
+      this.showDetecting(true, 'loading-model');
       this.modelLoadProgress.classList.add('visible');
       this.modelLoadBarFill.style.width = '0%';
       // setModel() clears memCache synchronously before downloading. Start the
@@ -398,10 +441,12 @@ export class App {
         const error = err instanceof Error ? err : new Error(String(err));
         console.error('[app] model load failed:', error);
         this.detectStatusInline.classList.remove('visible');
-        return;
-      } finally {
         this.modelLoadProgress.classList.remove('visible');
+        return;
       }
+      // Keep the progress bar visible until inference finishes (bar stays at 100%).
+      this.modelLoadBarFill.style.width = '100%';
+      this.modelLoadAfterSwitch = true;
     }
     await this.rerenderActive();
   }
@@ -414,25 +459,27 @@ export class App {
       const cached = await getCachedDetections(key);
       if (cached !== null) {
         // Fast path: re-decode the image then overlay cached detections.
+        this.showDetecting(true, 'loading-image');
         await renderImage(item.file, item.canvas);
         const ctx = item.canvas.getContext('2d')!;
         this.showDetecting(false);
-        const filtered = filterByConf(cached, getConfig().minConfidence);
-        applyDetections(ctx, filtered, getConfig().drawMode, getConfig().blackoutColor);
+        const filtered = applyFilters(cached, getConfig().minConfidence, getConfig().enabledLabels);
+        applyDetections(ctx, filtered, getConfig().drawMode, getConfig().solidColor, getConfig().expansionFraction);
         this.showDetectionResult(filtered);
         (window as unknown as Record<string, unknown>).__lastDetections = filtered;
       } else {
         // No cache yet — render and schedule inference.
+        this.showDetecting(true, 'loading-image');
         await renderImage(item.file, item.canvas);
         const ctx = item.canvas.getContext('2d')!;
-        this.showDetecting(true);
+        this.showDetecting(true, 'inference');
         scheduleInference(
           item.canvas,
           key,
           (dets) => {
             this.showDetecting(false);
-            const filtered = filterByConf(dets, getConfig().minConfidence);
-            applyDetections(ctx, filtered, getConfig().drawMode, getConfig().blackoutColor);
+            const filtered = applyFilters(dets, getConfig().minConfidence, getConfig().enabledLabels);
+            applyDetections(ctx, filtered, getConfig().drawMode, getConfig().solidColor, getConfig().expansionFraction);
             this.showDetectionResult(filtered);
           },
           (err) => this.showInferenceError(err),

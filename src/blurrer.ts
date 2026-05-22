@@ -1,5 +1,5 @@
 /**
- * Blur and blackout rendering for detected regions.
+ * Blur and solid-color rendering for detected regions.
  *
  * Both modes use rounded corners:
  *   plate  → corner radius = min(w,h)/2 × 0.95  (near-ellipse)
@@ -129,13 +129,13 @@ export class Blurrer {
     this.#maxSize = maxSize;
   }
 
-  apply(ctx: AnyCtx, detections: Detection[], mode: 'blur' | 'blackout' | 'pixelate', color = '#000000'): void {
+  apply(ctx: AnyCtx, detections: Detection[], mode: 'blur' | 'solidcolor' | 'pixelate', color = '#000000'): void {
     const cw = (ctx as CanvasRenderingContext2D).canvas.width;
     const ch = (ctx as CanvasRenderingContext2D).canvas.height;
     for (const d of detections) {
       const r = Math.round((Math.min(d.w, d.h) / 2) * CORNER_RATIOS[d.label]);
       const box = clipToEdges(d.x, d.y, d.w, d.h, r, cw, ch);
-      if (mode === 'blackout') this.#solidArea(ctx, box, color);
+      if (mode === 'solidcolor') this.#solidArea(ctx, box, color);
       else if (mode === 'pixelate') this.#pixelateArea(ctx, box, cw);
       else this.#blurArea(ctx, box, cw, ch);
     }
@@ -154,7 +154,14 @@ export class Blurrer {
   // ── Pixelate ────────────────────────────────────────────────────────────────
 
   #pixelateArea(ctx: AnyCtx, box: ClippedBox, cw: number): void {
-    const { x, y, w, h, corners } = box;
+    const { corners } = box;
+    // Snap to integers so getImageData stride matches the loop stride.
+    const x = Math.round(box.x);
+    const y = Math.round(box.y);
+    const w = Math.round(box.w);
+    const h = Math.round(box.h);
+    if (w <= 0 || h <= 0) return;
+
     // Block size scales with detection size and image resolution so pixelation
     // looks visually similar regardless of canvas resolution.
     const resFactor = Math.max(1, cw / 1280);
@@ -162,6 +169,8 @@ export class Blurrer {
 
     const imgData = ctx.getImageData(x, y, w, h);
     const { data } = imgData;
+    // imgData.width is the actual integer width allocated by getImageData.
+    const stride = imgData.width;
 
     ctx.save();
     roundedRectPath(ctx, x, y, w, h, corners);
@@ -178,7 +187,7 @@ export class Blurrer {
         let r = 0, g = 0, b = 0, count = 0;
         for (let py = by; py < by + bh; py++) {
           for (let px = bx; px < bx + bw; px++) {
-            const idx = (py * w + px) * 4;
+            const idx = (py * stride + px) * 4;
             r += data[idx];
             g += data[idx + 1];
             b += data[idx + 2];

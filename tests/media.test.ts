@@ -913,6 +913,46 @@ test.describe('Trim persistence', () => {
   });
 });
 
+// ── "Whole video" button ─────────────────────────────────────────────────────
+
+test.describe('"Whole video" button', () => {
+  test('disabled when no trim; enabled after trim; resets trim on click', async ({ page }) => {
+    await injectDetections(page, VIDEO_INJECT_DETECTIONS);
+    await loadFile(page, path.join(EXAMPLES, 'x264.mp4'));
+    await waitForCanvas(page);
+    await page.waitForFunction(() => document.getElementById('trim-section')?.classList.contains('visible'));
+
+    // Initially untrimmed — button must be disabled.
+    const btn = page.locator('#trim-whole-video');
+    await expect(btn).toBeDisabled();
+
+    // Apply a trim (non-zero start).
+    await page.evaluate(() => (window as any).__setTrimStart(0.2));
+    await expect(btn).toBeEnabled();
+
+    // Read duration before clicking so we can assert end == duration after reset.
+    const duration = await page.evaluate(
+      () => ((window as unknown as Record<string, unknown>).__activePlayer as { duration: number } | undefined)?.duration ?? null,
+    );
+
+    // Click "whole video" — trim must reset to 0 / duration.
+    await btn.click();
+
+    const vals = await page.evaluate(
+      () => (window as any).__getActiveTrimValues() as { start: number; end: number } | null,
+    );
+
+    expect(vals).not.toBeNull();
+    expect(vals!.start).toBeCloseTo(0, 2);
+    if (duration !== null) {
+      expect(Math.abs(vals!.end - duration)).toBeLessThanOrEqual(0.05);
+    }
+
+    // Button must be disabled again after reset.
+    await expect(btn).toBeDisabled();
+  });
+});
+
 // ── Trim cache alignment ──────────────────────────────────────────────────────
 // Verify that trimming from a non-zero start doesn't break the inference cache.
 // Cache keys use the frame's absolute container timestamp (microsecondTimestamp),
@@ -1319,5 +1359,35 @@ test.describe('Batch export — Export All button', () => {
       Math.abs(outputDuration - inputDuration),
       `Output duration ${outputDuration.toFixed(3)} s differs from input ${inputDuration.toFixed(3)} s by more than 0.1 s`,
     ).toBeLessThanOrEqual(0.1);
+  });
+});
+
+// ── Step 2 header updates on file switch ──────────────────────────────────────
+
+test.describe('Step 2 header title updates on file switch', () => {
+  test('header changes between "Preview" and "Preview & Trim" when switching file types', async ({ page }) => {
+    await page.goto('http://localhost:3100');
+
+    // Load a video first.
+    await page.locator('#file-input').setInputFiles(path.join(EXAMPLES, 'x264.mp4'));
+    await waitForCanvas(page);
+    await page.waitForFunction(() => document.getElementById('trim-section')?.classList.contains('visible'));
+
+    const titleAfterVideo = await page.locator('#step-preview-title').textContent();
+    expect(titleAfterVideo?.trim().toLowerCase(), 'Title should mention trim after loading video').toContain('trim');
+
+    // Now load an image (it becomes the active file).
+    await page.locator('#file-input').setInputFiles(path.join(EXAMPLES, 'jpeg.jpg'));
+    await waitForCanvas(page);
+
+    const titleAfterImage = await page.locator('#step-preview-title').textContent();
+    expect(titleAfterImage?.trim().toLowerCase(), 'Title should not mention trim after switching to image').not.toContain('trim');
+
+    // Switch back to the video file.
+    await page.locator('.file-list-row').nth(0).click();
+    await page.waitForFunction(() => document.getElementById('trim-section')?.classList.contains('visible'));
+
+    const titleBackToVideo = await page.locator('#step-preview-title').textContent();
+    expect(titleBackToVideo?.trim().toLowerCase(), 'Title should mention trim again after switching back to video').toContain('trim');
   });
 });

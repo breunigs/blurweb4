@@ -1,4 +1,5 @@
 import type { FileMeta } from './fileMeta';
+import { getConfig } from './config';
 
 /**
  * Replace {variable} placeholders in pattern.
@@ -11,6 +12,7 @@ export function applyPattern(
   index: number,
   meta: FileMeta,
 ): string {
+  const cfg = getConfig();
   const vars: Record<string, string> = {
     input: inputStem,
     index: String(index),
@@ -23,6 +25,11 @@ export function applyPattern(
     lat: meta.lat ?? '',
     lon: meta.lon ?? '',
     duration: meta.duration ?? '',
+    model: cfg.model === 'detect_x' ? 'large' : 'small',
+    redaction_style: cfg.drawMode,
+    detect: [...cfg.enabledLabels].sort().join('-'),
+    min_confidence: String(cfg.minConfidence),
+    area_expansion: String(cfg.expansionFraction),
   };
   return pattern.replace(/\{(\w+)\}/g, (_, key: string) => vars[key] ?? '');
 }

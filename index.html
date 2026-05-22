@@ -23,7 +23,7 @@
   <link rel="manifest" href="/manifest.json">
   <link rel="apple-touch-icon" href="/icon.svg">
   <meta name="theme-color" content="#3b82f6">
-  <script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});</script>
+  <script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => { });</script>
 </head>
 
 <body>
@@ -33,7 +33,8 @@
   <!-- ─────────────────────────── EXPLAINER (top) ──────────────────────── -->
   <div id="explainer-top">
     <p><span data-i18n="explainer_top"></span> <a href="#explainer-full" data-i18n="explainer_more">Learn more ↓</a></p>
-    <p id="explainer-mobile-note" data-i18n="explainer_mobile_note">Works better on a desktop or laptop — mobile devices are usually too slow.</p>
+    <p id="explainer-mobile-note" data-i18n="explainer_mobile_note">Works better on a desktop or laptop — mobile devices
+      are usually too slow.</p>
   </div>
 
   <!-- ─────────────────────────── STEP 1: LOAD ─────────────────────────── -->
@@ -61,13 +62,19 @@
       </div>
       <div id="file-list">
         <div id="file-list-header">
-          <span>File</span>
-          <span>Duration · Dimensions · Size</span>
+          <span></span>
+          <span data-i18n="col_file">File</span>
+          <span class="col-eta" data-i18n="col_eta">ETA</span>
+          <span data-i18n="col_duration">Duration</span>
+          <span data-i18n="col_dimensions">Dimensions</span>
+          <span data-i18n="col_size">Size</span>
+          <span></span>
         </div>
       </div>
       <div class="export-actions">
         <button id="export-btn" disabled></button>
         <button id="export-all-btn" disabled></button>
+        <button id="cancel-export-btn" hidden data-i18n="btn_cancel_export">Cancel</button>
         <span id="global-eta"></span>
       </div>
     </div>
@@ -76,17 +83,13 @@
     </div>
   </div>
 
-  <!-- ──────────────────────────── STEP 2: REDACTION ─────────────────────── -->
-  <div class="step-card" id="step-preview">
+  <!-- ──────────────────────────── STEP 2: REDACTION (global settings) ─── -->
+  <div class="step-card" id="step-redaction">
     <div class="step-header">
       <div class="step-number">2</div>
       <span class="step-title" data-i18n="step_redaction">Redaction</span>
-      <div id="detect-status-inline"></div>
-      <span class="step-subtitle" id="step-preview-subtitle"></span>
     </div>
     <div class="step-body">
-
-      <!-- Config settings — above the canvas -->
       <div class="settings-grid">
         <!-- Redaction mode -->
         <div class="setting-row">
@@ -95,8 +98,9 @@
             <div class="pill-group" id="mode-radio-group">
               <label><input type="radio" name="drawMode" value="blur" checked><span
                   data-i18n="mode_blur">Blur</span></label>
-              <label id="blackout-label"><input type="radio" name="drawMode" value="blackout"><span
-                  data-i18n="mode_blackout">Solid color</span><input type="color" id="blackout-color-picker" tabindex="-1"></label>
+              <label id="solidcolor-label"><input type="radio" name="drawMode" value="solidcolor"><span
+                  data-i18n="mode_solidcolor">Solid color</span><input type="color" id="solidcolor-color-picker"
+                  tabindex="-1"></label>
               <label><input type="radio" name="drawMode" value="pixelate"><span
                   data-i18n="mode_pixelate">Pixelate</span></label>
               <label><input type="radio" name="drawMode" value="outline"><span data-i18n="mode_outline">Outline
@@ -105,12 +109,26 @@
           </div>
         </div>
 
+        <!-- Object types to redact -->
+        <div class="setting-row">
+          <span class="setting-row-label" data-i18n="setting_labels">Detect</span>
+          <div class="pill-group" id="label-radio-group">
+            <label><input type="radio" name="enabledLabels" value="plate"><span
+                data-i18n="label_plate">Plates</span></label>
+            <label><input type="radio" name="enabledLabels" value="person"><span
+                data-i18n="label_person">Faces</span></label>
+            <label><input type="radio" name="enabledLabels" value="both" checked><span
+                data-i18n="label_both">Both</span></label>
+          </div>
+        </div>
+
         <!-- Model -->
         <div class="setting-row">
           <span class="setting-row-label" data-i18n="setting_model">Detection model</span>
           <div id="model-group-wrap">
             <div class="pill-group" id="model-radio-group">
-              <label><input type="radio" name="model" value="detect_n" checked><span data-i18n="model_small">Small &mdash;
+              <label><input type="radio" name="model" value="detect_n" checked><span data-i18n="model_small">Small
+                  &mdash;
                   fast (8 MB)</span></label>
               <label><input type="radio" name="model" value="detect_x"><span data-i18n="model_large">Large &mdash;
                   accurate (342 MB)</span></label>
@@ -130,47 +148,63 @@
           </div>
         </div>
 
+        <!-- Expansion slider -->
+        <div class="setting-row">
+          <span class="setting-row-label" data-i18n="setting_expansion">Area expansion</span>
+          <div class="conf-row">
+            <input type="range" id="expansion-slider" min="0" max="100" value="0" step="1">
+            <span id="expansion-value" style="font-variant-numeric:tabular-nums;min-width:2.8em;">0%</span>
+          </div>
+        </div>
       </div>
+    </div>
+  </div>
+
+  <!-- ──────────────────────────── STEP 3: PREVIEW (per-file) ──────────── -->
+  <div class="step-card" id="step-preview">
+    <div class="step-header">
+      <div class="step-number">3</div>
+      <span class="step-title" id="step-preview-title" data-i18n="step_preview_image">Preview</span>
+      <div id="detect-status-inline"></div>
+      <span class="step-subtitle" id="step-preview-subtitle"></span>
+    </div>
+    <div class="step-body">
 
       <!-- Canvas preview -->
       <div id="preview-area"></div>
 
-      <!-- libav warning row — only shown for software-decoded files -->
-      <div id="detect-status-row">
-        <span id="libav-warning" hidden data-i18n="libav_warning">Software decoder active — seeking may be slow</span>
-      </div>
 
-      <!-- Trim (videos only) — visibility:hidden so it doesn't shift layout -->
+      <!-- Scrubber + trim (videos only) -->
       <div id="trim-section">
-        <div class="trim-slider" id="trim-slider">
-          <div class="trim-preview-handle" id="trim-preview-handle">
-            <span class="preview-time" id="trim-preview-label">0:00.000</span>
-            <div class="preview-pill">
-              <svg viewBox="0 0 16 10" width="14" height="9" aria-hidden="true">
-                <path d="M1,5 Q8,0.5 15,5 Q8,9.5 1,5" fill="none" stroke="currentColor" stroke-width="1.5"/>
-                <circle cx="8" cy="5" r="2.2" fill="currentColor"/>
-              </svg>
-            </div>
-          </div>
-          <div class="trim-track-bg"></div>
-          <div class="trim-track-fill" id="trim-track-fill"></div>
-          <input type="range" id="trim-start" min="0" max="1000" value="0" step="1">
-          <input type="range" id="trim-end" min="0" max="1000" value="1000" step="1">
-          <div class="trim-handle trim-handle-start" id="trim-handle-start" data-label="start"></div>
-          <div class="trim-handle trim-handle-end" id="trim-handle-end" data-label="end"></div>
+        <!-- Scrubber -->
+        <input type="range" id="scrubber" min="0" max="1000" value="0" step="1">
+        <!-- libav warning row — only shown for software-decoded files -->
+        <div id="detect-status-row">
+          <span id="libav-warning" hidden data-i18n="libav_warning">Software decoder active — seeking may be slow</span>
         </div>
-        <div class="trim-label-row">
-          <div class="trim-times">
-            <div class="trim-time-item start">
-              <span class="trim-time-label" data-i18n="trim_start">Start</span>
-              <span class="trim-time-value" id="trim-start-label">0:00.000</span>
+
+        <!-- Trim fields -->
+        <div id="trim-label-row"><span data-i18n="trim_label">Trim</span></div>
+        <div id="trim-fields">
+          <label class="trim-field">
+            <span data-i18n="trim_start">Start</span>
+            <div class="trim-input-wrap">
+              <input type="text" id="trim-start-text" class="trim-ts-input" value="0:00.000" inputmode="numeric">
+              <button class="trim-now-btn" id="trim-start-now" title="Use current position">&#x2316;</button>
             </div>
-            <span class="trim-duration" id="trim-duration-label"></span>
-            <div class="trim-time-item">
-              <span class="trim-time-label" data-i18n="trim_end">End</span>
-              <span class="trim-time-value" id="trim-end-label">0:00.000</span>
-            </div>
+          </label>
+          <div class="trim-center">
+            <span id="trim-duration-label" class="trim-duration"></span>
+            <button id="trim-whole-video" class="trim-whole-btn" disabled data-i18n="trim_whole_video">Whole
+              video</button>
           </div>
+          <label class="trim-field">
+            <span data-i18n="trim_end">End</span>
+            <div class="trim-input-wrap">
+              <input type="text" id="trim-end-text" class="trim-ts-input" value="0:00.000" inputmode="numeric">
+              <button class="trim-now-btn" id="trim-end-now" title="Use current position">&#x2316;</button>
+            </div>
+          </label>
         </div>
       </div>
 
@@ -191,8 +225,8 @@
           <div class="pill-group" id="metadata-radio-group">
             <label><input type="radio" name="keepMetadata" value="keep" checked><span
                 data-i18n="keep">Keep</span></label>
-            <label><input type="radio" name="keepMetadata" value="gps"><span
-                data-i18n="metadata_gps">GPS only</span></label>
+            <label><input type="radio" name="keepMetadata" value="gps"><span data-i18n="metadata_gps">GPS
+                only</span></label>
             <label><input type="radio" name="keepMetadata" value="strip"><span data-i18n="strip">Strip</span></label>
           </div>
         </div>
@@ -207,22 +241,17 @@
       <!-- Filename pattern -->
       <div class="naming-row" style="margin-bottom:12px;">
         <span class="setting-row-label" data-i18n="naming_pattern" style="white-space:nowrap;">Filename pattern</span>
-        <input type="text" id="naming-pattern-input"
-          style="font-family:var(--mono);padding:6px 10px;border:1px solid var(--border);
+        <input type="text" id="naming-pattern-input" style="font-family:var(--mono);padding:6px 10px;border:1px solid var(--border);
                  background:var(--card2);color:var(--text);border-radius:6px;font-size:13px;
                  min-width:160px;flex:1;max-width:320px;outline:none;">
-        <button id="naming-info-btn"
-          style="width:24px;height:24px;border-radius:50%;border:1px solid var(--border);
+        <button id="naming-info-btn" style="width:24px;height:24px;border-radius:50%;border:1px solid var(--border);
                  background:var(--card2);color:var(--dim);cursor:pointer;font-size:13px;
                  font-style:italic;font-family:Georgia,serif;flex-shrink:0;
-                 display:flex;align-items:center;justify-content:center;padding:0;"
-          title="Show variables">i</button>
+                 display:flex;align-items:center;justify-content:center;padding:0;" title="Show variables">i</button>
       </div>
-      <div id="naming-info-panel" hidden
-        style="margin-top:-8px;margin-bottom:12px;border:1px solid var(--border);border-radius:6px;
+      <div id="naming-info-panel" hidden style="margin-top:-8px;margin-bottom:12px;border:1px solid var(--border);border-radius:6px;
                padding:10px 12px;background:var(--card2);overflow-x:auto;">
-        <table id="naming-vars-table"
-          style="border-collapse:collapse;width:100%;min-width:300px;font-size:12px;">
+        <table id="naming-vars-table" style="border-collapse:collapse;width:100%;min-width:300px;font-size:12px;">
           <thead>
             <tr>
               <th style="text-align:left;padding:2px 10px 6px 0;color:var(--muted);font-weight:600;white-space:nowrap;"
@@ -281,7 +310,9 @@
       <!-- Debug controls: theme + language -->
       <div style="display:flex;flex-direction:column;gap:8px;margin-top:12px;">
         <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;">
-          <span style="font-size:11px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:var(--muted);">Design theme</span>
+          <span
+            style="font-size:11px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:var(--muted);">Design
+            theme</span>
           <div style="display:flex;align-items:center;gap:8px;">
             <span style="font-size:12px;color:var(--dim);white-space:nowrap;">Platform</span>
             <div class="pill-group pill-group-sm">
@@ -300,7 +331,8 @@
           </div>
         </div>
         <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;">
-          <span style="font-size:11px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:var(--muted);">Language</span>
+          <span
+            style="font-size:11px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:var(--muted);">Language</span>
           <div style="display:flex;align-items:center;gap:8px;">
             <div class="pill-group pill-group-sm">
               <label><input type="radio" name="lang" value="auto">Auto</label>
@@ -319,22 +351,31 @@
       <h2 style="font-size:15px;font-weight:600;margin-bottom:14px;" data-i18n="explainer_h2">How it works</h2>
       <dl id="explainer-dl">
         <dt data-i18n="explainer_processing_dt">Processing happens in the browser</dt>
-        <dd data-i18n="explainer_processing_dd">Decoding, detection, and export all run as code inside the browser tab. The files are read from disk into browser memory and are not transmitted over the network.</dd>
+        <dd data-i18n="explainer_processing_dd">Decoding, detection, and export all run as code inside the browser tab.
+          The files are read from disk into browser memory and are not transmitted over the network.</dd>
 
         <dt data-i18n="explainer_detects_dt">What it detects</dt>
-        <dd data-i18n="explainer_detects_dd">An AI model looks for faces and license plates in each image or video frame. Most of the training data consists of street photos taken in Hamburg, Germany. Results may be less reliable for footage from other regions or different settings.</dd>
+        <dd data-i18n="explainer_detects_dd">An AI model looks for faces and license plates in each image or video
+          frame. Most of the training data consists of street photos taken in Hamburg, Germany. Results may be less
+          reliable for footage from other regions or different settings.</dd>
 
         <dt data-i18n="explainer_wrong_dt">Why detections can be wrong or missing</dt>
-        <dd data-i18n="explainer_wrong_dd">Before scanning, images and frames are scaled down to 1280 pixels, so small objects may not be detected at all. The model can also miss things at unusual angles or in poor light, and occasionally marks something as a face or plate when it is not. Always review the result before sharing. Detection quality is the same across all browsers.</dd>
+        <dd data-i18n="explainer_wrong_dd">Before scanning, images and frames are scaled down to 1280 pixels, so small
+          objects may not be detected at all. The model can also miss things at unusual angles or in poor light, and
+          occasionally marks something as a face or plate when it is not. Always review the result before sharing.
+          Detection quality is the same across all browsers.</dd>
 
         <dt data-i18n="explainer_video_dt">Video not showing up?</dt>
-        <dd data-i18n="explainer_video_dd">Some video formats are not supported by every browser. If a video does not load, try a different browser.</dd>
+        <dd data-i18n="explainer_video_dd">Some video formats are not supported by every browser. If a video does not
+          load, try a different browser.</dd>
 
         <dt data-i18n="explainer_speed_dt">Processing speed</dt>
-        <dd data-i18n="explainer_speed_dd">Different browsers use different hardware paths for video decoding and AI inference. If processing is slow, trying a different browser may help.</dd>
+        <dd data-i18n="explainer_speed_dd">Different browsers use different hardware paths for video decoding and AI
+          inference. If processing is slow, trying a different browser may help.</dd>
 
         <dt data-i18n="explainer_terms_dt">Terms of use</dt>
-        <dd><span data-i18n="explainer_terms_dd"></span> <a href="https://github.com/breunigs/blurweb4" target="_blank" rel="noopener">github.com/breunigs/blurweb4</a>.</dd>
+        <dd><span data-i18n="explainer_terms_dd"></span> <a href="https://github.com/breunigs/blurweb4" target="_blank"
+            rel="noopener">github.com/breunigs/blurweb4</a>.</dd>
       </dl>
     </div>
   </div>

@@ -235,6 +235,21 @@ export function filterByConf(dets: Detection[], minConf: number): Detection[] {
   return minConf <= 0 ? dets : dets.filter((d) => d.conf >= minConf);
 }
 
+/** Filter detections to only include enabled label types. */
+export function filterByLabel(dets: Detection[], enabledLabels: string[]): Detection[] {
+  if (enabledLabels.length === 0) return [];
+  const set = new Set(enabledLabels);
+  return dets.filter((d) => set.has(d.label));
+}
+
+/** Apply both confidence and label filters from config. */
+export function applyFilters(dets: Detection[], minConf: number, enabledLabels: string[]): Detection[] {
+  return filterByLabel(filterByConf(dets, minConf), enabledLabels);
+}
+
+/** All detection labels the current model family supports. */
+export const ALL_LABELS = ['plate', 'person'] as const;
+
 /** Clear the in-memory cache and all cached detections from IndexedDB. */
 export function clearDetectionCache(): Promise<void> {
   memCache.clear();

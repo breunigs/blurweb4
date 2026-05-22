@@ -10,13 +10,31 @@ import {
 } from 'mediabunny';
 import type { VideoSample } from 'mediabunny';
 import { detectEncoder } from './encoderConfig';
-import { detectForExport, makeVideoKey, filterByConf } from './detector';
+import { detectForExport, makeVideoKey, applyFilters } from './detector';
 import { applyDetections } from './detectionDrawer';
 import { getConfig } from './config';
 
 export interface EncodeResult {
   buffer: ArrayBuffer;
   filename: string;
+}
+
+interface EncodeFinalizationStats {
+  count: number;
+  totalFinalizationMs: number;
+  totalEncodingMs: number;
+}
+
+function loadFinalizationStats(): EncodeFinalizationStats {
+  try {
+    const raw = localStorage.getItem('blurweb4-encode-stats');
+    if (raw) return JSON.parse(raw) as EncodeFinalizationStats;
+  } catch { /* ignore */ }
+  return { count: 0, totalFinalizationMs: 0, totalEncodingMs: 0 };
+}
+
+function saveFinalizationStats(s: EncodeFinalizationStats): void {
+  try { localStorage.setItem('blurweb4-encode-stats', JSON.stringify(s)); } catch { /* ignore */ }
 }
 
 export async function encodeVideo(
@@ -27,6 +45,7 @@ export async function encodeVideo(
   keepMetadata: 'keep' | 'gps' | 'strip' = 'keep',
   keepAudio = true,
   outputStem?: string,
+  isCancelled?: () => boolean,
 ): Promise<EncodeResult> {
   const input = new Input({ formats: ALL_FORMATS, source: new BlobSource(file) });
   try {
@@ -67,13 +86,49 @@ export async function encodeVideo(
     let offscreen: OffscreenCanvas | null = null;
     let offCtx: OffscreenCanvasRenderingContext2D | null = null;
     const drawMode = getConfig().drawMode;
-    const blackoutColor = getConfig().blackoutColor;
+    const solidColor = getConfig().solidColor;
 
     // Build trim option only when values are defined and non-trivial.
     const trim: { start?: number; end?: number } | undefined =
       (trimStart !== undefined && trimStart > 0) || trimEnd !== undefined
         ? { start: trimStart, end: trimEnd }
         : undefined;
+
+    const finStats = loadFinalizationStats();
+    // Fraction of total time spent in finalization phase (default 10% when no data yet).
+    const finalizationFraction = finStats.count > 0
+      ? finStats.totalFinalizationMs / (finStats.totalEncodingMs + finStats.totalFinalizationMs)
+      : 0.10;
+
+    const encodeStart = performance.now();
+    let finalizationStartTime: number | null = null;
+    let finalizationTimer: ReturnType<typeof setInterval> | null = null;
+    let capturedEstimatedMs = 0;
+
+    // Remap mediabunny's 0→1 progress to 0→(1−r) during encoding, then drive
+    // a timer-based interpolation from (1−r)→1 during container finalization.
+    const wrappedProgress = (p: number): void => {
+      if (p >= 1.0) {
+        if (finalizationStartTime === null) {
+          finalizationStartTime = performance.now();
+          const encodingMs = finalizationStartTime - encodeStart;
+          // Use stored average if available; otherwise 10% of encoding time.
+          capturedEstimatedMs = finStats.count > 0
+            ? finStats.totalFinalizationMs / finStats.count
+            : encodingMs * 0.10;
+
+          finalizationTimer = setInterval(() => {
+            const elapsed = performance.now() - finalizationStartTime!;
+            // frac approaches 0.99 asymptotically so the timer never falsely reports done.
+            const frac = Math.min(elapsed / capturedEstimatedMs, 0.99);
+            onProgress((1 - finalizationFraction) + frac * finalizationFraction);
+          }, 100);
+        }
+        return; // suppress mediabunny's 1.0; batchExporter calls onFileProgress(i,1) after execute()
+      }
+      // Leave room at the top of the progress range for the finalization phase.
+      onProgress(p * (1 - finalizationFraction));
+    };
 
     const conversion = await Conversion.init({
       input,
@@ -112,6 +167,7 @@ export async function encodeVideo(
         hardwareAcceleration: enc.hardwareAcceleration,
         ...(sourceBitrate !== null ? { bitrate: sourceBitrate } : {}),
         process: async (sample: VideoSample): Promise<OffscreenCanvas> => {
+          if (isCancelled?.()) throw new DOMException('Export cancelled', 'AbortError');
           if (!offscreen || offscreen.width !== sample.displayWidth || offscreen.height !== sample.displayHeight) {
             offscreen = new OffscreenCanvas(sample.displayWidth, sample.displayHeight);
             offCtx = offscreen.getContext('2d')!;
@@ -120,15 +176,37 @@ export async function encodeVideo(
           // Key uses the absolute container timestamp — same as preview seek.
           // Frames previewed at the trim-start position hit the cache here.
           const key = await makeVideoKey(file, offscreen.width, offscreen.height, sample.microsecondTimestamp);
-          const detections = filterByConf(await detectForExport(offscreen, key), getConfig().minConfidence);
-          applyDetections(offCtx!, detections, drawMode, blackoutColor);
+          const detections = applyFilters(await detectForExport(offscreen, key), getConfig().minConfidence, getConfig().enabledLabels);
+          if (isCancelled?.()) throw new DOMException('Export cancelled', 'AbortError');
+          applyDetections(offCtx!, detections, drawMode, solidColor, getConfig().expansionFraction);
           return offscreen;
         },
       },
     });
 
-    conversion.onProgress = onProgress;
-    await conversion.execute();
+    conversion.onProgress = wrappedProgress;
+    try {
+      await conversion.execute();
+    } finally {
+      if (finalizationTimer !== null) {
+        clearInterval(finalizationTimer);
+        finalizationTimer = null;
+      }
+    }
+
+    if (finalizationStartTime !== null) {
+      const actualFinalizationMs = performance.now() - finalizationStartTime;
+      const encodingMs = finalizationStartTime - encodeStart;
+      saveFinalizationStats({
+        count: finStats.count + 1,
+        totalFinalizationMs: finStats.totalFinalizationMs + actualFinalizationMs,
+        totalEncodingMs: finStats.totalEncodingMs + encodingMs,
+      });
+      console.log(
+        `[videoEncoder] finalization: ${actualFinalizationMs.toFixed(0)}ms` +
+        ` (estimated ${capturedEstimatedMs.toFixed(0)}ms, fraction=${(finalizationFraction * 100).toFixed(1)}%)`,
+      );
+    }
 
     const stem = outputStem ?? file.name.replace(/\.[^.]+$/, '');
     return { buffer: target.buffer!, filename: stem + enc.ext };

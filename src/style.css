@@ -401,19 +401,32 @@ body {
 }
 
 /* ── File list ─────────────────────────────────────────────── */
+
+/* Container: 7-column subgrid source
+   icon | name | eta | duration | dimensions | size | remove */
 #file-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  display: grid;
+  grid-template-columns: auto 1fr auto auto auto auto auto;
+  row-gap: 4px;
   max-height: 155px;
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--border) transparent;
 }
 
+/* Header and rows both span all 7 columns and inherit track sizes via subgrid */
+#file-list-header,
+.file-list-row {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  align-items: center;
+  column-gap: 10px;
+  padding: 7px 10px;
+}
+
 #file-list-header {
   display: none;
-  align-items: center;
   padding: 0 10px 2px;
   font-size: 10px;
   font-weight: 600;
@@ -427,30 +440,27 @@ body {
 }
 
 #step-load.has-files #file-list-header {
-  display: flex;
+  display: grid;
 }
 
-#file-list-header span:first-child {
-  flex: 1;
-  min-width: 0;
+/* ETA column: space always reserved, content invisible until first export */
+.col-eta {
+  visibility: hidden;
+  text-align: right;
 }
 
-#file-list-header span:last-child {
-  flex-shrink: 0;
-  padding-right: 32px; /* align with remove button */
+#step-load.has-eta .col-eta {
+  visibility: visible;
 }
 
 .file-list-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 7px 10px;
+  position: relative;
   border-radius: 8px;
   border: 1px solid var(--border);
   background: var(--card2);
   cursor: pointer;
   transition: border-color 0.12s, background 0.12s;
-  min-width: 0;
+  overflow: hidden;
 }
 
 .file-list-row:hover {
@@ -471,25 +481,9 @@ html[data-theme^='windows'] .file-list-row {
 }
 
 .file-list-icon {
-  flex-shrink: 0;
   color: var(--muted);
   display: flex;
   align-items: center;
-}
-
-.file-list-body {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.file-list-top {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  min-width: 0;
 }
 
 .file-list-name {
@@ -499,43 +493,6 @@ html[data-theme^='windows'] .file-list-row {
   overflow: hidden;
   text-overflow: ellipsis;
   min-width: 0;
-  flex: 1;
-}
-
-.file-list-meta {
-  font-size: 11px;
-  color: var(--dim);
-  white-space: nowrap;
-  flex-shrink: 0;
-  font-variant-numeric: tabular-nums;
-}
-
-/* Progress section: hidden by default, flexed when export is active */
-.file-list-progress {
-  display: none;
-  align-items: center;
-  gap: 8px;
-}
-
-.file-list-progress.active {
-  display: flex;
-}
-
-.file-list-bar-track {
-  flex: 1;
-  height: 3px;
-  background: var(--card);
-  border-radius: 2px;
-  border: 1px solid var(--border);
-  min-width: 60px;
-}
-
-.file-list-bar-fill {
-  height: 100%;
-  background: var(--accent);
-  border-radius: 2px;
-  width: 0%;
-  transition: width 0.15s ease;
 }
 
 .file-list-eta {
@@ -543,12 +500,28 @@ html[data-theme^='windows'] .file-list-row {
   color: var(--muted);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-  min-width: 60px;
+  text-align: right;
+}
+
+.file-list-eta.done {
+  color: var(--accent);
+}
+
+.file-list-eta.error {
+  color: #f87171;
+}
+
+.file-list-duration,
+.file-list-dims,
+.file-list-size {
+  font-size: 11px;
+  color: var(--dim);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
   text-align: right;
 }
 
 .file-list-remove {
-  flex-shrink: 0;
   width: 22px;
   height: 22px;
   display: flex;
@@ -570,12 +543,25 @@ html[data-theme^='windows'] .file-list-row {
   color: #f87171;
 }
 
+/* Progress bar: 2px absolute overlay at bottom of each row */
+.file-list-bar-fill {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  background: var(--accent);
+  width: 0%;
+  transition: width 0.15s ease;
+}
+
 /* ── 2. Redaction ──────────────────────────────────────────── */
+#step-redaction,
 #step-preview,
 #step-export {
   display: none;
 }
 
+#step-redaction.active,
 #step-preview.active,
 #step-export.active {
   display: block;
@@ -675,17 +661,17 @@ html[data-theme^='windows'] .file-list-row {
 }
 
 /* Solid-color label: swatch dot + invisible overlay color picker */
-#blackout-label {
+#solidcolor-label {
   position: relative;
 }
 
-#blackout-label::after {
+#solidcolor-label::after {
   content: '';
   display: inline-block;
   width: 18px;
   height: 14px;
   border-radius: 4px;
-  background: var(--blackout-swatch, #000);
+  background: var(--solidcolor-swatch, #000);
   border: 1px solid rgba(128, 128, 128, 0.4);
   margin-left: 4px;
   vertical-align: middle;
@@ -693,7 +679,7 @@ html[data-theme^='windows'] .file-list-row {
   pointer-events: none;
 }
 
-#blackout-color-picker {
+#solidcolor-color-picker {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -705,8 +691,8 @@ html[data-theme^='windows'] .file-list-row {
   padding: 0;
 }
 
-/* Enable picker clicks only when blackout mode is already selected */
-input[name="drawMode"][value="blackout"]:checked ~ #blackout-color-picker {
+/* Enable picker clicks only when solidcolor mode is already selected */
+input[name="drawMode"][value="solidcolor"]:checked ~ #solidcolor-color-picker {
   pointer-events: auto;
 }
 
@@ -720,202 +706,157 @@ input[name="drawMode"][value="blackout"]:checked ~ #blackout-color-picker {
   display: block;
 }
 
-.trim-label-row {
+/* ── Scrubber ─────────────────────────────────────────────────── */
+#scrubber {
+  width: 100%;
+  margin-top: 12px;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--card2);
+  border: 1px solid var(--border);
+  outline: none;
+  cursor: pointer;
+  display: block;
+}
+
+#scrubber::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.15);
+}
+
+#scrubber::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.15);
+}
+
+#scrubber:focus::-webkit-slider-thumb {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+#scrubber:focus::-moz-range-thumb {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+/* ── Trim fields ──────────────────────────────────────────────── */
+#trim-label-row {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--dim);
+  margin-top: 12px;
+}
+
+#trim-fields {
   display: flex;
   align-items: center;
-  justify-content: center;
-  margin-top: 8px;
+  gap: 12px;
+  margin-top: 6px;
+  flex-wrap: wrap;
 }
 
-.trim-section-label {
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-
-.trim-times {
+.trim-field {
   display: flex;
-  gap: 20px;
+  flex-direction: column;
+  gap: 4px;
   font-size: 12px;
-  font-family: var(--mono);
   color: var(--dim);
+}
+
+.trim-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.trim-ts-input {
+  font-family: var(--mono);
+  font-size: 12px;
+  width: 90px;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--card2);
+  color: var(--text);
+  outline: none;
   font-variant-numeric: tabular-nums;
 }
 
-.trim-time-item {
+.trim-ts-input:focus {
+  border-color: var(--accent);
+}
+
+.trim-now-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  background: var(--card2);
+  color: var(--dim);
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.trim-now-btn:hover {
+  background: var(--card);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.trim-center {
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
-  gap: 1px;
-}
-
-.trim-time-item.start {
-  align-items: flex-start;
-}
-
-.trim-time-item:last-child {
-  align-items: flex-end;
-}
-
-.trim-time-label {
-  font-size: 10px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-
-.trim-time-value {
-  font-size: 13px;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
 }
 
 .trim-duration {
   font-size: 12px;
   color: var(--muted);
   text-align: center;
-  flex: 1;
 }
 
-/* Dual-range track with preview handle above and house handles below */
-.trim-slider {
-  position: relative;
-  height: 89px;
-}
-
-/* Preview handle — sits above the track */
-.trim-preview-handle {
-  position: absolute;
-  top: 0;
-  left: 0;
-  transform: translateX(-50%);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  cursor: ew-resize;
-  z-index: 3;
-  user-select: none;
-}
-
-.preview-time {
-  font-size: 10px;
-  font-family: var(--mono);
-  color: var(--dim);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  text-align: center;
-  line-height: 14px;
-  height: 14px;
-}
-
-.preview-pill {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 2px 5px;
-  height: 17px;
-  box-sizing: border-box;
-  background: var(--bg);
-  border: 1.5px solid var(--accent);
-  border-radius: 4px;
-  color: var(--accent);
-}
-
-/* Stem: from pill bottom through the track */
-.trim-preview-handle::after {
-  content: '';
-  position: absolute;
-  top: 31px; /* 14px timestamp + 17px pill = pill bottom */
-  left: 50%;
-  transform: translateX(-50%);
-  width: 2px;
-  height: 16px; /* 9px gap + 5px track + 2px into house zone */
-  background: #000;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.55);
-  border-radius: 1px;
-}
-
-.trim-track-bg {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 40px;
-  height: 5px;
-  background: var(--card2);
-  border-radius: 3px;
+.trim-whole-btn {
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 5px;
   border: 1px solid var(--border);
+  background: var(--card2);
+  color: var(--dim);
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
-.trim-track-fill {
-  position: absolute;
-  top: 40px;
-  height: 5px;
-  background: var(--accent);
-  border-radius: 3px;
-  pointer-events: none;
-  z-index: 1;
-}
-
-/* Range inputs: hidden, used only for value storage */
-.trim-slider input[type='range'] {
-  position: absolute;
-  top: 40px;
-  width: 100%;
-  height: 5px;
-  margin: 0;
-  opacity: 0;
-  pointer-events: none;
-  -webkit-appearance: none;
-  appearance: none;
-}
-
-/* House-shaped trim handles — sit below the track, triangle tip touching track bottom */
-.trim-handle {
-  position: absolute;
-  top: 45px;
-  width: 36px;
-  height: 44px; /* 30px house + 14px label */
-  transform: translateX(-50%);
-  cursor: ew-resize;
-  z-index: 2;
-  user-select: none;
-}
-
-/* The ⌂ house shape */
-.trim-handle::before {
-  content: '';
-  position: absolute;
-  left: 50%;
-  top: 0;
-  transform: translateX(-50%);
-  width: 14px;
-  height: 30px;
-  clip-path: polygon(50% 0%, 100% 35%, 100% 100%, 0% 100%, 0% 35%);
-  background: var(--accent);
-}
-
-/* "start" / "end" label below the house */
-.trim-handle::after {
-  content: attr(data-label);
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  text-align: center;
-  font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--muted);
-  line-height: 14px;
-}
-
-.trim-handle.active::before {
-  filter: brightness(1.2) drop-shadow(0 0 4px var(--accent));
-}
-
-.trim-handle.active::after {
+.trim-whole-btn:not(:disabled):hover {
+  background: var(--card);
   color: var(--accent);
+  border-color: var(--accent);
+}
+
+.trim-whole-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 
 /* ── 3. Settings ───────────────────────────────────────────── */
@@ -1091,6 +1032,23 @@ input[name="drawMode"][value="blackout"]:checked ~ #blackout-color-picker {
 #export-all-btn:disabled {
   opacity: 0.35;
   cursor: default;
+}
+
+#cancel-export-btn {
+  padding: 10px 18px;
+  background: rgba(248, 113, 113, 0.12);
+  color: #f87171;
+  border: 1px solid #f87171;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  font-family: inherit;
+  transition: background 0.1s, color 0.1s;
+}
+
+#cancel-export-btn:hover {
+  background: #f87171;
+  color: #fff;
 }
 
 /* Export overall progress — bottom edge of the load card */

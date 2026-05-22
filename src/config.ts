@@ -1,14 +1,18 @@
-export type DrawMode = 'outline' | 'blackout' | 'blur' | 'pixelate';
+export type DrawMode = 'outline' | 'solidcolor' | 'blur' | 'pixelate';
 export type ModelChoice = 'detect_n' | 'detect_x';
 export type MetadataMode = 'keep' | 'gps' | 'strip';
 
 export interface AppConfig {
   model: ModelChoice;
   drawMode: DrawMode;
-  blackoutColor: string;
+  solidColor: string;
   keepMetadata: MetadataMode;
   keepAudio: boolean;
   minConfidence: number;
+  /** Fraction [0, 1] by which to expand each detection box on all sides. */
+  expansionFraction: number;
+  /** Which detection labels to redact. */
+  enabledLabels: string[];
   namingPattern: string;
 }
 
@@ -16,10 +20,12 @@ const STORAGE_KEY = 'blurweb4-config';
 export const DEFAULTS: AppConfig = {
   model: 'detect_n',
   drawMode: 'blur',
-  blackoutColor: '#000000',
+  solidColor: '#000000',
   keepMetadata: 'keep',
   keepAudio: true,
   minConfidence: 0.05,
+  expansionFraction: 0,
+  enabledLabels: ['plate', 'person'],
   namingPattern: '{input}',
 };
 
@@ -42,10 +48,32 @@ export function getConfig(): AppConfig {
   return current;
 }
 
+/**
+ * Whether the large model (detect_x) has proven to work in this session.
+ * On iOS, large models crash the tab with OOM before inference completes.
+ * We avoid persisting detect_x until we know it can actually run inference.
+ */
+let largeModelConfirmed = false;
+
+/** Call after the first successful inference when detect_x is active. */
+export function confirmLargeModelOk(): void {
+  if (current.model === 'detect_x' && !largeModelConfirmed) {
+    largeModelConfirmed = true;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(current));
+    } catch { /* ok */ }
+  }
+}
+
 export function setConfig(patch: Partial<AppConfig>): void {
   current = { ...current, ...patch };
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(current));
+    // Don't persist detect_x until we've confirmed it works (iOS OOM guard).
+    const toSave: AppConfig =
+      current.model === 'detect_x' && !largeModelConfirmed
+        ? { ...current, model: 'detect_n' }
+        : current;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
   } catch {
     /* ok */
   }

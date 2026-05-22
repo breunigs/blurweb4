@@ -59,6 +59,9 @@ worker.onmessage = ({ data }: MessageEvent<HangMessage>) => {
     maxHang = Math.max(maxHang, data.lag);
   } else {
     maxHang = Math.max(maxHang, data);
+    // hangStart may be null if the timer already fired and reset it; fall back
+    // to the current time so the subsequent log still has a valid timestamp.
+    if (hangStart === null) hangStart = new Date();
   }
   if (pendingLogTimer === null) {
     pendingLogTimer = setTimeout(() => {

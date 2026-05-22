@@ -4,15 +4,16 @@ import {
   scheduleInference,
   makeVideoKey,
   getAverageInferenceMs,
-  filterByConf,
+  applyFilters,
   type Detection,
 } from './detector';
 import { applyDetections } from './detectionDrawer';
 import { getConfig } from './config';
+import { t, tpl } from './i18n';
 
 function detStatusText(): string {
   const avg = getAverageInferenceMs();
-  return avg === null ? ' detecting…' : ` detecting… (~${(avg / 1000).toFixed(1)}s per frame)`;
+  return avg === null ? t('detecting_plain') : tpl('detecting_timed', { t: (avg / 1000).toFixed(1) });
 }
 
 export class VideoPlayer {
@@ -51,8 +52,8 @@ export class VideoPlayer {
   }
 
   private applyAndNotify(dets: Detection[]): void {
-    const filtered = filterByConf(dets, getConfig().minConfidence);
-    applyDetections(this.ctx, filtered, getConfig().drawMode, getConfig().blackoutColor);
+    const filtered = applyFilters(dets, getConfig().minConfidence, getConfig().enabledLabels);
+    applyDetections(this.ctx, filtered, getConfig().drawMode, getConfig().solidColor, getConfig().expansionFraction);
     this.onDetection?.(filtered);
   }
 

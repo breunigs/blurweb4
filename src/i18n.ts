@@ -52,9 +52,16 @@ const STRINGS = {
     dropzone_text: 'Drop images or videos here',
     btn_choose_files: 'Choose files',
     btn_load_examples: 'Load examples',
+    col_file: 'File',
+    col_eta: 'ETA',
+    col_duration: 'Duration',
+    col_dimensions: 'Dimensions',
+    col_size: 'Size',
 
     // Step 2 — Redaction
     step_preview: 'Preview & trim',
+    step_preview_image: 'Preview',
+    step_preview_video: 'Preview & Trim',
     step_redaction: 'Redaction',
     aria_prev: 'Previous file',
     aria_file_select: 'Selected file',
@@ -64,6 +71,7 @@ const STRINGS = {
     trim_label: 'Trim range',
     trim_start: 'Start',
     trim_end: 'End',
+    trim_whole_video: 'Whole video',
 
     // Step 3 — Settings
     step_settings: 'Settings',
@@ -76,6 +84,11 @@ const STRINGS = {
     metadata_gps: 'GPS only',
     strip: 'Strip',
     setting_confidence: 'Min. confidence',
+    setting_expansion: 'Area expansion',
+    setting_labels: 'Detect',
+    label_plate: 'Plates',
+    label_person: 'Faces',
+    label_both: 'Both',
     setting_redaction: 'Redaction style',
     naming_pattern: 'Filename pattern',
     naming_col_variable: 'Variable',
@@ -92,8 +105,13 @@ const STRINGS = {
     var_desc_lat: 'GPS latitude',
     var_desc_lon: 'GPS longitude',
     var_desc_duration: 'Video duration (hh:mm:ss)',
+    var_desc_model: 'Detection model (small/large)',
+    var_desc_redaction_style: 'Redaction style (blur, solidcolor, pixelate, outline)',
+    var_desc_detect: 'What is detected (person, plate, or person-plate)',
+    var_desc_min_confidence: 'Minimum confidence threshold',
+    var_desc_area_expansion: 'Area expansion fraction',
     mode_blur: 'Blur',
-    mode_blackout: 'Solid color',
+    mode_solidcolor: 'Solid color',
     mode_pixelate: 'Pixelate',
     mode_outline: 'Outline (debug)',
 
@@ -101,6 +119,7 @@ const STRINGS = {
     step_export: 'Export',
     btn_export: 'Export {name}',
     btn_export_all: 'Export all ({n})',
+    btn_cancel_export: 'Cancel',
     overall: 'Overall',
 
     // Step 5 — Debug
@@ -147,6 +166,8 @@ const STRINGS = {
     copied: 'Copied!',
     detecting_plain: 'Detecting\u2026',
     detecting_timed: 'Detecting\u2026 (~{t}s)',
+    status_loading_model: 'Loading model\u2026',
+    status_loading_image: 'Loading\u2026',
 
     // Dynamic — file nav / summary
     files_loaded_one: '1 file loaded',
@@ -159,6 +180,7 @@ const STRINGS = {
     estimating: 'Estimating\u2026',
     done: 'Done',
     failed: 'Failed',
+    cancelled: 'Cancelled',
   },
 
   de: {
@@ -168,8 +190,15 @@ const STRINGS = {
     dropzone_text: 'Bilder oder Videos hier ablegen',
     btn_choose_files: 'Dateien ausw\u00e4hlen',
     btn_load_examples: 'Beispiele laden',
+    col_file: 'Datei',
+    col_eta: 'ETA',
+    col_duration: 'Dauer',
+    col_dimensions: 'Aufl\u00f6sung',
+    col_size: 'Gr\u00f6\u00dfe',
 
     step_preview: 'Vorschau & Schnitt',
+    step_preview_image: 'Vorschau',
+    step_preview_video: 'Vorschau & Schnitt',
     step_redaction: 'Redaktion',
     aria_prev: 'Vorherige Datei',
     aria_file_select: 'Ausgew\u00e4hlte Datei',
@@ -179,6 +208,7 @@ const STRINGS = {
     trim_label: 'Schnittbereich',
     trim_start: 'Start',
     trim_end: 'Ende',
+    trim_whole_video: 'Ganzes Video',
 
     step_settings: 'Einstellungen',
     setting_model: 'Erkennungsmodell',
@@ -190,6 +220,11 @@ const STRINGS = {
     metadata_gps: 'Nur GPS',
     strip: 'Entfernen',
     setting_confidence: 'Min. Konfidenz',
+    setting_expansion: 'Bereichserweiterung',
+    setting_labels: 'Erkennen',
+    label_plate: 'Kennzeichen',
+    label_person: 'Gesichter',
+    label_both: 'Beides',
     setting_redaction: 'Schw\u00e4rzungsstil',
     naming_pattern: 'Dateiname-Muster',
     naming_col_variable: 'Variable',
@@ -206,14 +241,20 @@ const STRINGS = {
     var_desc_lat: 'GPS-Breitengrad',
     var_desc_lon: 'GPS-L\u00e4ngengrad',
     var_desc_duration: 'Videodauer (hh:mm:ss)',
+    var_desc_model: 'Erkennungsmodell (small/large)',
+    var_desc_redaction_style: 'Schw\u00e4rzungsstil (blur, solidcolor, pixelate, outline)',
+    var_desc_detect: 'Was erkannt wird (person, plate oder person-plate)',
+    var_desc_min_confidence: 'Minimale Konfidenz',
+    var_desc_area_expansion: 'Bereichserweiterung (Anteil)',
     mode_blur: 'Unsch\u00e4rfe',
-    mode_blackout: 'Volltonfarbe',
+    mode_solidcolor: 'Volltonfarbe',
     mode_pixelate: 'Verpixeln',
     mode_outline: 'Umriss (Debug)',
 
     step_export: 'Exportieren',
     btn_export: '{name} exportieren',
     btn_export_all: 'Alle exportieren ({n})',
+    btn_cancel_export: 'Abbrechen',
     overall: 'Gesamt',
 
     step_debug: 'Debug',
@@ -257,6 +298,8 @@ const STRINGS = {
     copied: 'Kopiert!',
     detecting_plain: 'Erkennung\u2026',
     detecting_timed: 'Erkennung\u2026 (~{t}s)',
+    status_loading_model: 'Modell laden\u2026',
+    status_loading_image: 'Laden\u2026',
 
     files_loaded_one: '1 Datei geladen',
     files_loaded_n: '{n} Dateien geladen',
@@ -267,6 +310,7 @@ const STRINGS = {
     estimating: 'Sch\u00e4tzung\u2026',
     done: 'Fertig',
     failed: 'Fehlgeschlagen',
+    cancelled: 'Abgebrochen',
   },
 } as const;
 
