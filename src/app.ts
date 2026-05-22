@@ -9,6 +9,7 @@ import {
 } from './detector';
 import { applyDetections } from './detectionDrawer';
 import { getConfig, setConfig, confirmLargeModelOk, DEFAULTS, type AppConfig, type ModelChoice } from './config';
+import { applyPattern } from './naming';
 import { t, tpl, applyTranslations } from './i18n';
 import { getEntries, clearEntries, setOnUpdate, copyToClipboard } from './debugLog';
 import { renderImage } from './imageRenderer';
@@ -123,10 +124,16 @@ export class App {
 
     // Test globals
     const w = window as unknown as Record<string, unknown>;
+    w.__applyPattern = applyPattern;
     w.__setDrawMode = (m: string) => setConfig({ drawMode: m as AppConfig['drawMode'] });
     w.__setMinConfidence = (v: number) => {
       w.__lastDetections = undefined;
       setConfig({ minConfidence: v });
+    };
+    w.__setLabels = (val: string) => {
+      w.__lastDetections = undefined;
+      const labels = val === 'both' ? ['plate', 'person'] : [val];
+      setConfig({ enabledLabels: labels });
     };
     w.__setTrimStart = (t: number) => {
       const item = this.store.items[this.store.activeIndex];

@@ -1476,6 +1476,118 @@ test.describe('Batch export — Export All button', () => {
   });
 });
 
+// ── Label filtering ───────────────────────────────────────────────────────────
+// JPEG_INJECT_DETECTIONS has 3 plates (conf ≥ 0.79) and 2 persons (conf ≥ 0.12).
+// Default minConfidence is 0.05, so all 5 pass the confidence filter.
+// Switching enabledLabels must change which detections are rendered.
+
+test.describe('Label filtering', () => {
+  test('plate-only: shows only plate detections', async ({ page }) => {
+    await injectDetections(page, JPEG_INJECT_DETECTIONS);
+    await loadFile(page, path.join(EXAMPLES, 'jpeg.jpg'));
+    await waitForCanvas(page);
+    await waitForDetections(page);
+
+    await page.evaluate(() => (window as any).__setLabels('plate'));
+    const detections = await waitForDetections(page);
+
+    expect(detections.length).toBe(3);
+    expect(detections.every((d: any) => d.label === 'plate')).toBe(true);
+  });
+
+  test('person-only: shows only person detections', async ({ page }) => {
+    await injectDetections(page, JPEG_INJECT_DETECTIONS);
+    await loadFile(page, path.join(EXAMPLES, 'jpeg.jpg'));
+    await waitForCanvas(page);
+    await waitForDetections(page);
+
+    await page.evaluate(() => (window as any).__setLabels('person'));
+    const detections = await waitForDetections(page);
+
+    expect(detections.length).toBe(2);
+    expect(detections.every((d: any) => d.label === 'person')).toBe(true);
+  });
+
+  test('both: all detections shown after switching from plate-only', async ({ page }) => {
+    await injectDetections(page, JPEG_INJECT_DETECTIONS);
+    await loadFile(page, path.join(EXAMPLES, 'jpeg.jpg'));
+    await waitForCanvas(page);
+    await waitForDetections(page);
+
+    // Narrow to plate-only first, then expand back to both.
+    await page.evaluate(() => (window as any).__setLabels('plate'));
+    await waitForDetections(page);
+
+    await page.evaluate(() => (window as any).__setLabels('both'));
+    const detections = await waitForDetections(page);
+
+    expect(detections.length).toBe(5);
+    expect(detections.some((d: any) => d.label === 'plate')).toBe(true);
+    expect(detections.some((d: any) => d.label === 'person')).toBe(true);
+  });
+
+  test('canvas: plate-only does not redact person boxes; person-only does not redact plate boxes', async ({ page }) => {
+    // Use solidcolor mode: a redacted box centre is near-black; an unredacted pixel is not.
+    // Plate box at inject coords (53, 1376, 40, 11) — sample at (74, 1382).
+    // Person box at inject coords (727, 1335, 9, 17) — sample at (731, 1343).
+    await injectDetections(page, JPEG_INJECT_DETECTIONS);
+    await loadFile(page, path.join(EXAMPLES, 'jpeg.jpg'));
+    await waitForCanvas(page);
+    await waitForDetections(page);
+
+    // Set solidcolor so redacted pixels become near-black.
+    await page.evaluate(() => { (window as any).__lastDetections = undefined; });
+    await page.evaluate(() => (window as any).__setDrawMode('solidcolor'));
+    await waitForDetections(page);
+
+    // ── plate-only: plate box must be black, person box must be original (non-black). ──
+    await page.evaluate(() => (window as any).__setLabels('plate'));
+    await waitForDetections(page);
+
+    const plateOnlyPixels = await page.evaluate(() => {
+      const ctx = document.querySelector<HTMLCanvasElement>('.canvas-wrapper.active canvas')!.getContext('2d')!;
+      const platePx = ctx.getImageData(74, 1382, 1, 1).data;
+      const personPx = ctx.getImageData(731, 1343, 1, 1).data;
+      return {
+        plate: [platePx[0], platePx[1], platePx[2]],
+        person: [personPx[0], personPx[1], personPx[2]],
+      };
+    });
+
+    expect(plateOnlyPixels.plate[0], `plate box R in plate-only: ${plateOnlyPixels.plate}`).toBeLessThan(10);
+    expect(plateOnlyPixels.plate[1], `plate box G in plate-only: ${plateOnlyPixels.plate}`).toBeLessThan(10);
+    expect(plateOnlyPixels.plate[2], `plate box B in plate-only: ${plateOnlyPixels.plate}`).toBeLessThan(10);
+    // Person box must be original scene pixels — at least one channel above 20.
+    expect(
+      plateOnlyPixels.person.some((v) => v > 20),
+      `person box should be unredacted in plate-only mode: ${plateOnlyPixels.person}`,
+    ).toBe(true);
+
+    // ── person-only: person box must be black, plate box must be original (non-black). ──
+    await page.evaluate(() => (window as any).__setLabels('person'));
+    await waitForDetections(page);
+
+    const personOnlyPixels = await page.evaluate(() => {
+      const ctx = document.querySelector<HTMLCanvasElement>('.canvas-wrapper.active canvas')!.getContext('2d')!;
+      const platePx = ctx.getImageData(74, 1382, 1, 1).data;
+      const personPx = ctx.getImageData(731, 1343, 1, 1).data;
+      return {
+        plate: [platePx[0], platePx[1], platePx[2]],
+        person: [personPx[0], personPx[1], personPx[2]],
+      };
+    });
+
+    expect(personOnlyPixels.person[0], `person box R in person-only: ${personOnlyPixels.person}`).toBeLessThan(10);
+    expect(personOnlyPixels.person[1], `person box G in person-only: ${personOnlyPixels.person}`).toBeLessThan(10);
+    expect(personOnlyPixels.person[2], `person box B in person-only: ${personOnlyPixels.person}`).toBeLessThan(10);
+    // Plate box must be original scene pixels — at least one channel above 20.
+    expect(
+      personOnlyPixels.plate.some((v) => v > 20),
+      `plate box should be unredacted in person-only mode: ${personOnlyPixels.plate}`,
+    ).toBe(true);
+  });
+});
+
 // ── Step 2 header updates on file switch ──────────────────────────────────────
 
 test.describe('Step 2 header title updates on file switch', () => {
