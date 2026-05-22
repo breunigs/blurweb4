@@ -19,7 +19,7 @@ import type { Detection } from './detector';
 
 // ── Corner ratios ─────────────────────────────────────────────────────────────
 
-const CORNER_RATIOS: Record<'plate' | 'person', number> = { plate: 0.95, person: 0.8 };
+const CORNER_RATIOS: Record<'plate' | 'person', number> = { plate: 0.5, person: 0.8 };
 
 /** Fraction of the canvas dimension within which a box edge is snapped to the border. */
 const EDGE_THRESHOLD = 0.005; // 0.5 %
