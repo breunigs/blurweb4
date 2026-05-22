@@ -121,30 +121,41 @@ function roundedRectPath(
   ctx.closePath();
 }
 
-// ── Blur worker ───────────────────────────────────────────────────────────────
+// ── Blur worker pool ──────────────────────────────────────────────────────────
 
-let _blurWorker: Worker | null = null;
+const POOL_SIZE = Math.min(4, navigator.hardwareConcurrency || 2);
+const _blurWorkers: Worker[] = [];
 let _blurWorkerNextId = 0;
+let _poolRoundRobin = 0;
 const _blurWorkerPending = new Map<number, (result: ArrayBuffer | null, error?: string) => void>();
 
+function makeBlurWorker(): Worker {
+  const w = new Worker(new URL('./blurWorker.js', import.meta.url), { type: 'module' });
+  w.onmessage = (e: MessageEvent) => {
+    const { id, blurred, error } = e.data as { id: number; blurred?: ArrayBuffer; error?: string };
+    const resolve = _blurWorkerPending.get(id);
+    _blurWorkerPending.delete(id);
+    resolve?.(blurred ?? null, error);
+  };
+  w.onerror = (e: ErrorEvent) => {
+    const err = e.message || 'blur worker crashed';
+    for (const resolve of _blurWorkerPending.values()) resolve(null, err);
+    _blurWorkerPending.clear();
+    const idx = _blurWorkers.indexOf(w);
+    if (idx !== -1) _blurWorkers.splice(idx, 1);
+  };
+  return w;
+}
+
 function getBlurWorker(): Worker {
-  if (!_blurWorker) {
-    _blurWorker = new Worker(new URL('./blurWorker.js', import.meta.url), { type: 'module' });
-    _blurWorker.onmessage = (e: MessageEvent) => {
-      const { id, blurred, error } = e.data as { id: number; blurred?: ArrayBuffer; error?: string };
-      const resolve = _blurWorkerPending.get(id);
-      _blurWorkerPending.delete(id);
-      resolve?.(blurred ?? null, error);
-    };
-    _blurWorker.onerror = (e: ErrorEvent) => {
-      // Reject all pending requests on a worker crash.
-      const err = e.message || 'blur worker crashed';
-      for (const resolve of _blurWorkerPending.values()) resolve(null, err);
-      _blurWorkerPending.clear();
-      _blurWorker = null;
-    };
+  if (_blurWorkers.length < POOL_SIZE) {
+    const w = makeBlurWorker();
+    _blurWorkers.push(w);
+    return w;
   }
-  return _blurWorker;
+  const w = _blurWorkers[_poolRoundRobin % _blurWorkers.length];
+  _poolRoundRobin++;
+  return w;
 }
 
 function stackBlurInWorker(pixels: ArrayBuffer, width: number, height: number, strength: number): Promise<ArrayBuffer> {
@@ -275,12 +286,54 @@ export class Blurrer {
     const version = ++this.#version;
     const cw = (ctx as CanvasRenderingContext2D).canvas.width;
     const ch = (ctx as CanvasRenderingContext2D).canvas.height;
-    for (const d of detections) {
+
+    if (mode !== 'blur') {
+      for (const d of detections) {
+        const r = Math.round((Math.min(d.w, d.h) / 2) * CORNER_RATIOS[d.label]);
+        const box = clipToEdges(d.x, d.y, d.w, d.h, r, cw, ch);
+        if (mode === 'solidcolor') this.#solidArea(ctx, box, color);
+        else this.#pixelateArea(ctx, box, cw);
+      }
+      return;
+    }
+
+    // Precompute each detection's sampling region (box extended by 2×feather).
+    // Used to detect overlaps so we never run two blurs concurrently when their
+    // regions touch — that would cause each to putImageData original pixels over
+    // the other's result.
+    type BlurItem = { box: ClippedBox; xi: number; yi: number; xe: number; ye: number };
+    const items: BlurItem[] = detections.map(d => {
       const r = Math.round((Math.min(d.w, d.h) / 2) * CORNER_RATIOS[d.label]);
       const box = clipToEdges(d.x, d.y, d.w, d.h, r, cw, ch);
-      if (mode === 'solidcolor') this.#solidArea(ctx, box, color);
-      else if (mode === 'pixelate') this.#pixelateArea(ctx, box, cw);
-      else await this.#blurArea(ctx, box, cw, ch, version);
+      const feather = Math.round(Math.max(3, Math.max(box.w, box.h) / 12));
+      return {
+        box,
+        xi: Math.max(0, Math.floor(box.x - feather * 2)),
+        yi: Math.max(0, Math.floor(box.y - feather * 2)),
+        xe: Math.min(cw, Math.ceil(box.x + box.w + feather * 2)),
+        ye: Math.min(ch, Math.ceil(box.y + box.h + feather * 2)),
+      };
+    });
+
+    // Greedy batch grouping: pack as many non-overlapping detections as possible
+    // into each batch.  Batches run sequentially; within a batch, blurs run in
+    // parallel (safe because their sampling regions don't touch).
+    const batches: number[][] = [];
+    for (let i = 0; i < items.length; i++) {
+      const a = items[i];
+      let placed = false;
+      for (const batch of batches) {
+        const fits = batch.every(j => {
+          const b = items[j];
+          return a.xe <= b.xi || b.xe <= a.xi || a.ye <= b.yi || b.ye <= a.yi;
+        });
+        if (fits) { batch.push(i); placed = true; break; }
+      }
+      if (!placed) batches.push([i]);
+    }
+
+    for (const batch of batches) {
+      await Promise.all(batch.map(i => this.#blurArea(ctx, items[i].box, cw, ch, version)));
     }
   }
 
@@ -393,8 +446,11 @@ export class Blurrer {
       blurredBuf = fallback.data.buffer;
     }
 
-    // Alpha-blend: blurred × mask + plain × (1-mask). The blend loop is O(wi×hi)
-    // simple arithmetic — typically 5–15 ms even for large 4K detection regions.
+    // If a newer apply() call started while we were awaiting the worker,
+    // discard this result rather than overwriting the canvas with stale pixels.
+    if (this.#version !== version) return;
+
+    // Alpha-blend: blurred × mask + plain × (1-mask).
     const mask = this.#getMask(wi, hi, feather, ox, oy, w, h, corners, snapL, snapT, snapR, snapB);
     const blurredPx = new Uint8ClampedArray(blurredBuf);
     const plainPx = plain.data;
@@ -404,10 +460,6 @@ export class Blurrer {
       blurredPx[i + 1] = blurredPx[i + 1] * a + plainPx[i + 1] * (1 - a);
       blurredPx[i + 2] = blurredPx[i + 2] * a + plainPx[i + 2] * (1 - a);
     }
-
-    // If a newer apply() call started while we were awaiting the worker,
-    // discard this result rather than overwriting the canvas with stale pixels.
-    if (this.#version !== version) return;
     ctx.putImageData(new ImageData(blurredPx, wi, hi), xi, yi);
   }
 
