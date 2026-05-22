@@ -53,8 +53,9 @@ export class VideoPlayer {
 
   private applyAndNotify(dets: Detection[]): void {
     const filtered = applyFilters(dets, getConfig().minConfidence, getConfig().enabledLabels);
-    applyDetections(this.ctx, filtered, getConfig().drawMode, getConfig().solidColor, getConfig().expansionFraction);
-    this.onDetection?.(filtered);
+    applyDetections(this.ctx, filtered, getConfig().drawMode, getConfig().solidColor, getConfig().expansionFraction)
+      .then(() => this.onDetection?.(filtered))
+      .catch((err) => console.error('[videoPlayer] applyDetections failed:', err));
   }
 
   async load(file: File): Promise<void> {

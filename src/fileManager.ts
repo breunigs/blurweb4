@@ -252,7 +252,7 @@ export class FileManager {
           const cached = await getCachedDetections(key);
           if (cached !== null) {
             const filtered = applyFilters(cached, getConfig().minConfidence, getConfig().enabledLabels);
-            applyDetections(ctx, filtered, getConfig().drawMode, getConfig().solidColor, getConfig().expansionFraction);
+            await applyDetections(ctx, filtered, getConfig().drawMode, getConfig().solidColor, getConfig().expansionFraction);
             if (this.store.items[this.store.activeIndex] === item) {
               this.onShowDetectionResult(filtered);
               (window as unknown as Record<string, unknown>).__lastDetections = filtered;
@@ -267,12 +267,15 @@ export class FileManager {
               (dets) => {
                 this.onShowDetecting(false);
                 const filtered = applyFilters(dets, getConfig().minConfidence, getConfig().enabledLabels);
-                applyDetections(ctx, filtered, getConfig().drawMode, getConfig().solidColor, getConfig().expansionFraction);
-                if (this.store.items[this.store.activeIndex] === item) {
-                  this.onShowDetectionResult(filtered);
-                } else {
-                  this.clearExamplesLoading();
-                }
+                applyDetections(ctx, filtered, getConfig().drawMode, getConfig().solidColor, getConfig().expansionFraction)
+                  .then(() => {
+                    if (this.store.items[this.store.activeIndex] === item) {
+                      this.onShowDetectionResult(filtered);
+                    } else {
+                      this.clearExamplesLoading();
+                    }
+                  })
+                  .catch((err) => console.error('[fileManager] applyDetections failed:', err));
               },
               (err) => {
                 if (this.store.items[this.store.activeIndex] === item) {

@@ -229,6 +229,20 @@ body {
   background: rgba(255, 255, 255, 0.02);
 }
 
+details.step-card > summary.step-header {
+  list-style: none;
+  cursor: pointer;
+  border-bottom: none;
+}
+
+details.step-card > summary.step-header::-webkit-details-marker {
+  display: none;
+}
+
+details.step-card[open] > summary.step-header {
+  border-bottom: 1px solid var(--border);
+}
+
 .step-number {
   width: 26px;
   height: 26px;
@@ -692,7 +706,7 @@ html[data-theme^='windows'] .file-list-row {
 }
 
 /* Enable picker clicks only when solidcolor mode is already selected */
-input[name="drawMode"][value="solidcolor"]:checked ~ #solidcolor-color-picker {
+input[name="drawMode"][value="solidcolor"]:checked~#solidcolor-color-picker {
   pointer-events: auto;
 }
 
@@ -871,6 +885,7 @@ input[name="drawMode"][value="solidcolor"]:checked ~ #solidcolor-color-picker {
 .setting-row {
   display: contents;
 }
+
 .setting-row[hidden] {
   display: none;
 }
@@ -971,7 +986,8 @@ input[name="drawMode"][value="solidcolor"]:checked ~ #solidcolor-color-picker {
   width: 100%;
 }
 
-#conf-slider {
+#conf-slider,
+#expansion-slider {
   flex: 1;
   min-width: 120px;
   max-width: 300px;
@@ -1049,6 +1065,26 @@ input[name="drawMode"][value="solidcolor"]:checked ~ #solidcolor-color-picker {
 #cancel-export-btn:hover {
   background: #f87171;
   color: #fff;
+}
+
+#cancel-export-btn.cancelling,
+#cancel-export-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+  pointer-events: none;
+}
+
+#cancel-export-btn.cancelling::before {
+  content: '';
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border: 2px solid rgba(248, 113, 113, 0.4);
+  border-top-color: #f87171;
+  border-radius: 50%;
+  animation: spin 0.75s linear infinite;
+  margin-right: 6px;
+  vertical-align: middle;
 }
 
 /* Export overall progress — bottom edge of the load card */
@@ -1176,7 +1212,8 @@ input[name="drawMode"][value="solidcolor"]:checked ~ #solidcolor-color-picker {
     padding: 0;
   }
 
-  #conf-slider {
+  #conf-slider,
+  #expansion-slider {
     max-width: none;
   }
 

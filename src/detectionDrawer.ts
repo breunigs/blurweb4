@@ -63,13 +63,13 @@ export function expandDetections(detections: Detection[], fraction: number, cw: 
 }
 
 /** Apply detections to the canvas using the current draw mode. */
-export function applyDetections(
+export async function applyDetections(
   ctx: AnyCtx,
   detections: Detection[],
   mode: DrawMode,
   color = '#000000',
   expansionFraction = 0,
-): void {
+): Promise<void> {
   if (detections.length === 0) return;
   const cw = (ctx as CanvasRenderingContext2D).canvas.width;
   const ch = (ctx as CanvasRenderingContext2D).canvas.height;
@@ -77,7 +77,7 @@ export function applyDetections(
   if (mode === 'outline') {
     drawOutline(ctx, expanded);
   } else {
-    blurrer.apply(ctx, expanded, mode, color);
+    await blurrer.apply(ctx, expanded, mode, color);
   }
 }
 

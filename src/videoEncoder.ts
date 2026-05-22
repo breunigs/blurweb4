@@ -178,7 +178,7 @@ export async function encodeVideo(
           const key = await makeVideoKey(file, offscreen.width, offscreen.height, sample.microsecondTimestamp);
           const detections = applyFilters(await detectForExport(offscreen, key), getConfig().minConfidence, getConfig().enabledLabels);
           if (isCancelled?.()) throw new DOMException('Export cancelled', 'AbortError');
-          applyDetections(offCtx!, detections, drawMode, solidColor, getConfig().expansionFraction);
+          await applyDetections(offCtx!, detections, drawMode, solidColor, getConfig().expansionFraction);
           return offscreen;
         },
       },

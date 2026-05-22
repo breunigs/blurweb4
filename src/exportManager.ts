@@ -34,7 +34,11 @@ export class ExportManager {
     private readonly onExportStateChange: (exporting: boolean) => void,
   ) {
     this.cancelBtn = document.getElementById('cancel-export-btn') as HTMLButtonElement;
-    this.cancelBtn.addEventListener('click', () => { this.cancelled = true; });
+    this.cancelBtn.addEventListener('click', () => {
+      this.cancelled = true;
+      this.cancelBtn.disabled = true;
+      this.cancelBtn.classList.add('cancelling');
+    });
   }
 
   get isExporting(): boolean {
@@ -211,6 +215,8 @@ export class ExportManager {
     }
     this.exporting = false;
     this.cancelBtn.hidden = true;
+    this.cancelBtn.disabled = false;
+    this.cancelBtn.classList.remove('cancelling');
     this.onExportStateChange(false);
     this.updateBtnState();
 

@@ -32,17 +32,17 @@
 
   <!-- ─────────────────────────── EXPLAINER (top) ──────────────────────── -->
   <div id="explainer-top">
-    <p><span data-i18n="explainer_top"></span> <a href="#explainer-full" data-i18n="explainer_more">Learn more ↓</a></p>
+    <p><span data-i18n="explainer_top">Automatically blurs faces and license plates in your photos and videos. Everything runs on your device — nothing is uploaded. Detection is not perfect, so always check the result before you share.</span> <a href="#explainer-full" data-i18n="explainer_more">Learn more ↓</a></p>
     <p id="explainer-mobile-note" data-i18n="explainer_mobile_note">Works better on a desktop or laptop — mobile devices
       are usually too slow.</p>
   </div>
 
   <!-- ─────────────────────────── STEP 1: LOAD ─────────────────────────── -->
-  <div class="step-card" id="step-load">
-    <div class="step-header">
+  <details class="step-card" id="step-load" open>
+    <summary class="step-header">
       <div class="step-number">1</div>
       <span class="step-title" data-i18n="step_load">Load files</span>
-    </div>
+    </summary>
     <div class="step-body" id="load-body">
       <div id="drop-zone">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"
@@ -81,14 +81,14 @@
     <div id="export-global-row">
       <div id="global-progress-fill"></div>
     </div>
-  </div>
+  </details>
 
   <!-- ──────────────────────────── STEP 2: REDACTION (global settings) ─── -->
-  <div class="step-card" id="step-redaction">
-    <div class="step-header">
+  <details class="step-card" id="step-redaction" open>
+    <summary class="step-header">
       <div class="step-number">2</div>
       <span class="step-title" data-i18n="step_redaction">Redaction</span>
-    </div>
+    </summary>
     <div class="step-body">
       <div class="settings-grid">
         <!-- Redaction mode -->
@@ -158,16 +158,16 @@
         </div>
       </div>
     </div>
-  </div>
+  </details>
 
   <!-- ──────────────────────────── STEP 3: PREVIEW (per-file) ──────────── -->
-  <div class="step-card" id="step-preview">
-    <div class="step-header">
+  <details class="step-card" id="step-preview" open>
+    <summary class="step-header">
       <div class="step-number">3</div>
       <span class="step-title" id="step-preview-title" data-i18n="step_preview_image">Preview</span>
       <div id="detect-status-inline"></div>
       <span class="step-subtitle" id="step-preview-subtitle"></span>
-    </div>
+    </summary>
     <div class="step-body">
 
       <!-- Canvas preview -->
@@ -209,14 +209,14 @@
       </div>
 
     </div>
-  </div>
+  </details>
 
   <!-- ──────────────────────────── STEP 3: EXPORT ─────────────────────── -->
-  <div class="step-card" id="step-export">
-    <div class="step-header">
+  <details class="step-card" id="step-export" open>
+    <summary class="step-header">
       <div class="step-number">3</div>
       <span class="step-title" data-i18n="step_export">Export</span>
-    </div>
+    </summary>
     <div class="step-body">
       <!-- Metadata + Audio settings -->
       <div class="settings-grid" style="margin-bottom:16px;">
@@ -266,15 +266,15 @@
         </table>
       </div>
     </div>
-  </div>
+  </details>
 
   <!-- ──────────────────────────── STEP 5: DEBUG LOG ─────────────────── -->
-  <div class="step-card" id="step-debug">
-    <div class="step-header">
+  <details class="step-card" id="step-debug">
+    <summary class="step-header">
       <div class="step-number" style="background:var(--muted)">4</div>
       <span class="step-title" data-i18n="step_debug">Debug</span>
       <span class="step-subtitle" data-i18n="debug_subtitle">All console output captured here</span>
-    </div>
+    </summary>
     <div class="step-body">
       <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
         <button id="copy-log-btn" class="debug-btn">
@@ -343,7 +343,7 @@
         </div>
       </div>
     </div>
-  </div>
+  </details>
 
   <!-- ─────────────────────────── EXPLAINER (full) ────────────────────── -->
   <div id="explainer-full" class="step-card">

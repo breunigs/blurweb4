@@ -464,7 +464,7 @@ export class App {
         const ctx = item.canvas.getContext('2d')!;
         this.showDetecting(false);
         const filtered = applyFilters(cached, getConfig().minConfidence, getConfig().enabledLabels);
-        applyDetections(ctx, filtered, getConfig().drawMode, getConfig().solidColor, getConfig().expansionFraction);
+        await applyDetections(ctx, filtered, getConfig().drawMode, getConfig().solidColor, getConfig().expansionFraction);
         this.showDetectionResult(filtered);
         (window as unknown as Record<string, unknown>).__lastDetections = filtered;
       } else {
@@ -479,8 +479,9 @@ export class App {
           (dets) => {
             this.showDetecting(false);
             const filtered = applyFilters(dets, getConfig().minConfidence, getConfig().enabledLabels);
-            applyDetections(ctx, filtered, getConfig().drawMode, getConfig().solidColor, getConfig().expansionFraction);
-            this.showDetectionResult(filtered);
+            applyDetections(ctx, filtered, getConfig().drawMode, getConfig().solidColor, getConfig().expansionFraction)
+              .then(() => this.showDetectionResult(filtered))
+              .catch((err) => console.error('[app] applyDetections failed:', err));
           },
           (err) => this.showInferenceError(err),
         );

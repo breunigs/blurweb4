@@ -586,9 +586,11 @@ test.describe('Draw modes', () => {
     await waitForCanvas(page);
     await waitForDetections(page);
 
+    // Clear the sentinel so waitForDetections below only resolves after
+    // rerenderActive() finishes applying the new draw mode.
+    await page.evaluate(() => { (window as any).__lastDetections = undefined; });
     await page.evaluate(() => (window as any).__setDrawMode('blackout'));
-    // Give the re-render a moment to complete (synchronous applyDetections call)
-    await page.waitForTimeout(200);
+    await waitForDetections(page);
 
     const pixel = await page.evaluate(() => {
       const canvas = document.querySelector<HTMLCanvasElement>('.canvas-wrapper.active canvas')!;
@@ -620,12 +622,14 @@ test.describe('Draw modes', () => {
     // Switch back to file 0 and change mode to blackout while it is active.
     await page.locator('.file-list-row').nth(0).click();
     await waitForDetections(page);
+    await page.evaluate(() => { (window as any).__lastDetections = undefined; });
     await page.evaluate(() => (window as any).__setDrawMode('blackout'));
-    await page.waitForTimeout(200); // let the re-render complete
+    await waitForDetections(page); // resolves after rerenderActive() sets __lastDetections
 
     // Switch to file 1 — the fix calls rerenderActive() which must apply blackout.
+    await page.evaluate(() => { (window as any).__lastDetections = undefined; });
     await page.locator('.file-list-row').nth(1).click();
-    await page.waitForTimeout(300);
+    await waitForDetections(page);
 
     // Point (74, 1382) is inside the plate detection box.
     // With blackout it must be near-black; with blur it would be a non-black blurred value.
@@ -689,7 +693,7 @@ test.describe('Blurrer unit tests', () => {
     canvasH = 300,
   ) {
     return page.evaluate(
-      ({ det, coords, cw, ch }) => {
+      async ({ det, coords, cw, ch }) => {
         const blurrer = (window as any).__blurrer;
         const canvas = new OffscreenCanvas(cw, ch);
         const ctx = canvas.getContext('2d') as OffscreenCanvasRenderingContext2D;
@@ -700,7 +704,7 @@ test.describe('Blurrer unit tests', () => {
             ctx.fillRect(x, y, 1, 1);
           }
         }
-        blurrer.apply(ctx, [det], 'blur');
+        await blurrer.apply(ctx, [det], 'blur');
         return coords.map(([x, y]: [number, number]) => {
           const d = ctx.getImageData(x, y, 1, 1).data;
           return [d[0], d[1], d[2]] as [number, number, number];
