@@ -225,6 +225,7 @@ export function getInferenceStats(): Record<ModelChoice, InferenceModelStats> {
 // cache lookups work normally).
 (window as unknown as Record<string, unknown>).__getInferenceStats = getInferenceStats;
 (window as unknown as Record<string, unknown>).__makeVideoKey = makeVideoKey;
+(window as unknown as Record<string, unknown>).__clearDetectionCache = clearDetectionCache;
 
 // ── In-memory cache ───────────────────────────────────────────────────────────
 
@@ -553,6 +554,7 @@ async function drainQueue(): Promise<void> {
       continue;
     }
     (window as unknown as Record<string, unknown>).__lastDetections = detections;
+    (window as unknown as Record<string, unknown>).__lastInferenceKey = req.key;
     req.callback(detections);
   }
   queueRunning = false;

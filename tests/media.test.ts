@@ -580,7 +580,7 @@ const DETECTION_VIDEO_CASES = [
 
 test.describe('Draw modes', () => {
   // Load the JPEG, wait for outline-mode detections (default), then switch modes.
-  test('blackout: detection centre is solid black', async ({ page }) => {
+  test('solid color: detection centre is solid black', async ({ page }) => {
     await injectDetections(page, JPEG_INJECT_DETECTIONS);
     await loadFile(page, path.join(EXAMPLES, 'jpeg.jpg'));
     await waitForCanvas(page);
@@ -589,7 +589,7 @@ test.describe('Draw modes', () => {
     // Clear the sentinel so waitForDetections below only resolves after
     // rerenderActive() finishes applying the new draw mode.
     await page.evaluate(() => { (window as any).__lastDetections = undefined; });
-    await page.evaluate(() => (window as any).__setDrawMode('blackout'));
+    await page.evaluate(() => (window as any).__setDrawMode('solidcolor'));
     await waitForDetections(page);
 
     const pixel = await page.evaluate(() => {
@@ -604,8 +604,8 @@ test.describe('Draw modes', () => {
 
   test('settings apply to newly-active file on switch', async ({ page }) => {
     // Load the JPEG twice as two separate "files".  Both are initially rendered
-    // with the default (blur) draw mode.  Then change to blackout while file 0
-    // is active, switch to file 1 — the fix must re-render file 1 with blackout.
+    // with the default (blur) draw mode.  Then change to solidcolor while file 0
+    // is active, switch to file 1 — the fix must re-render file 1 with solidcolor.
     await injectDetections(page, JPEG_INJECT_DETECTIONS);
     await page.goto('http://localhost:3100');
 
@@ -619,28 +619,28 @@ test.describe('Draw modes', () => {
     await waitForCanvas(page);
     await waitForDetections(page);
 
-    // Switch back to file 0 and change mode to blackout while it is active.
+    // Switch back to file 0 and change mode to solidcolor while it is active.
     await page.locator('.file-list-row').nth(0).click();
     await waitForDetections(page);
     await page.evaluate(() => { (window as any).__lastDetections = undefined; });
-    await page.evaluate(() => (window as any).__setDrawMode('blackout'));
+    await page.evaluate(() => (window as any).__setDrawMode('solidcolor'));
     await waitForDetections(page); // resolves after rerenderActive() sets __lastDetections
 
-    // Switch to file 1 — the fix calls rerenderActive() which must apply blackout.
+    // Switch to file 1 — the fix calls rerenderActive() which must apply solidcolor.
     await page.evaluate(() => { (window as any).__lastDetections = undefined; });
     await page.locator('.file-list-row').nth(1).click();
     await waitForDetections(page);
 
     // Point (74, 1382) is inside the plate detection box.
-    // With blackout it must be near-black; with blur it would be a non-black blurred value.
+    // With solidcolor it must be near-black; with blur it would be a non-black blurred value.
     const pixel = await page.evaluate(() => {
       const canvas = document.querySelector<HTMLCanvasElement>('.canvas-wrapper.active canvas')!;
       const d = canvas.getContext('2d')!.getImageData(74, 1382, 1, 1).data;
       return [d[0], d[1], d[2]];
     });
-    expect(pixel[0], `R channel at detection centre must be near-black in blackout mode: ${pixel}`).toBeLessThan(10);
-    expect(pixel[1], `G channel at detection centre must be near-black in blackout mode: ${pixel}`).toBeLessThan(10);
-    expect(pixel[2], `B channel at detection centre must be near-black in blackout mode: ${pixel}`).toBeLessThan(10);
+    expect(pixel[0], `R channel at detection centre must be near-black in solidcolor mode: ${pixel}`).toBeLessThan(10);
+    expect(pixel[1], `G channel at detection centre must be near-black in solidcolor mode: ${pixel}`).toBeLessThan(10);
+    expect(pixel[2], `B channel at detection centre must be near-black in solidcolor mode: ${pixel}`).toBeLessThan(10);
   });
 
   test('blur: detection region is visually blurred (not sharp)', async ({ page }) => {
@@ -1071,6 +1071,116 @@ test.describe('Trim cache alignment', () => {
       newInferences,
       `Trim did not reduce the number of inferred frames. Got ${newInferences}, expected ≤ 15 (half of the 30-frame video)`,
     ).toBeLessThanOrEqual(15);
+  });
+
+  test('trimmed export: first exported frame uses its own detections, not frame-0 detections', async ({ page }) => {
+    // Use distinct injected detections for frame 0 and frame 2 (different labels
+    // make the check unambiguous).
+    //
+    // Root cause of the bug: mediabunny sets sample.microsecondTimestamp relative to
+    // the trim start before calling process() (see conversion.js).  For the first
+    // exported frame the adjusted value is 0, which collides with frame 0's IDB cache
+    // key (t0) → wrong detections applied.
+    //
+    // For the test to be deterministic we need frame 2 to be the very first frame
+    // the export calls process() with adjusted timestamp 0.  mediaBunny yields the
+    // "last frame ≤ trimStart" first, so we set trimStart = frame 2's exact container
+    // timestamp (obtained from __lastInferenceKey after seekTo).  That makes frame 2
+    // itself the "last frame ≤ trimStart", giving it adjusted ts = 0.  The fix then
+    // adds trimStart * 1e6 back to recover the absolute timestamp for the cache key.
+    const FRAME0_INJECT: Detection[] = [{ label: 'plate', conf: 0.9, x: 42, y: 42, w: 11, h: 11 }];
+    const FRAME2_INJECT: Detection[] = [{ label: 'person', conf: 0.9, x: 500, y: 500, w: 80, h: 200 }];
+
+    await page.goto('http://localhost:3100');
+    if (!(await page.evaluate(() => typeof VideoDecoder !== 'undefined'))) {
+      test.skip(true, 'WebCodecs not available');
+      return;
+    }
+
+    // Clear any stale detection cache and seed frame 0 with FRAME0_INJECT.
+    await page.evaluate(async (dets) => {
+      const w = window as unknown as Record<string, unknown>;
+      const clear = w.__clearDetectionCache as (() => Promise<void>) | undefined;
+      if (clear) await clear();
+      w.__detectionOverride = dets;
+      w.__lastDetections = undefined;
+      w.__lastInferenceKey = undefined;
+    }, FRAME0_INJECT as unknown as Parameters<typeof page.evaluate>[1]);
+
+    await page.locator('#file-input').setInputFiles(path.join(EXAMPLES, 'x264.mp4'));
+    await page.waitForFunction(
+      () => {
+        const c = document.querySelector<HTMLCanvasElement>('.canvas-wrapper.active canvas[data-loaded="true"]');
+        return c !== null && c.width > 0;
+      },
+      { timeout: 30_000 },
+    );
+    await waitForDetections(page, 30_000);
+    await page.waitForTimeout(500); // wait for IDB write
+
+    // Now seed frame 2 with FRAME2_INJECT.  First change the override, then seek so
+    // the preview inference fires and writes FRAME2_INJECT to IDB under frame 2's key.
+    await page.evaluate((dets) => {
+      const w = window as unknown as Record<string, unknown>;
+      w.__detectionOverride = dets;
+      w.__lastDetections = undefined;
+      w.__lastInferenceKey = undefined;
+    }, FRAME2_INJECT as unknown as Parameters<typeof page.evaluate>[1]);
+    await page.evaluate(() => {
+      const player = (window as unknown as Record<string, unknown>).__activePlayer as {
+        seekTo(t: number): Promise<void>;
+      };
+      return player.seekTo(2 / 30);
+    });
+    await waitForDetections(page, 30_000);
+    await page.waitForTimeout(500); // wait for IDB write
+
+    // Extract the exact microsecond timestamp of frame 2 from the cache key so we
+    // can set trimStart to exactly that value.  This ensures mediabunny's first
+    // process() call sees adjusted_ts = max(frame2_ts - trimStart, 0) = 0, and our
+    // fix recovers frame2_ts by adding trimStart back.
+    const lastKey = await page.evaluate(
+      () => (window as unknown as Record<string, unknown>).__lastInferenceKey as string | undefined,
+    );
+    const tsMatch = lastKey?.match(/\|t(\d+)$/);
+    expect(tsMatch, `Could not parse timestamp from inference key: "${lastKey}"`).not.toBeNull();
+    const frame2TsUs = parseInt(tsMatch![1], 10);
+    const frame2TsSec = frame2TsUs / 1_000_000;
+
+    // Clear override (export must use only the IDB cache), arm the tracker, set trim.
+    await page.evaluate(() => {
+      delete (window as unknown as Record<string, unknown>).__detectionOverride;
+      (window as unknown as Record<string, unknown>).__exportedFrameDetections = [];
+    });
+    await page.evaluate(
+      ({ start, end }) => {
+        const w = window as unknown as Record<string, unknown>;
+        (w.__setTrimStartSilent as (t: number) => void)?.(start);
+        (w.__setTrimEndSilent as (t: number) => void)?.(end);
+      },
+      // end = start + ~100 ms — exports only 2–3 frames, keeping the test fast.
+      { start: frame2TsSec, end: frame2TsSec + 0.1 },
+    );
+
+    const downloadPromise = page.waitForEvent('download', { timeout: 90_000 });
+    await page.locator('#export-btn').click();
+    await downloadPromise;
+
+    type Det = { label: string; conf: number; x: number; y: number; w: number; h: number };
+    const exportedFrameDets = await page.evaluate(
+      () => (window as unknown as Record<string, unknown>).__exportedFrameDetections as Det[][],
+    );
+
+    expect(exportedFrameDets.length, 'No frames were processed during export').toBeGreaterThan(0);
+
+    const firstFrameDets = exportedFrameDets[0];
+    // Bug: adjusted_ts = 0 → key t0 → FRAME0_INJECT (plate at x=42).
+    // Fix: adjusted_ts + trimStart*1e6 = frame2_ts → key t{frame2TsUs} → FRAME2_INJECT (person).
+    expect(
+      firstFrameDets[0]?.label,
+      `First exported frame should use frame-2 detections ('person'), not frame-0's ('plate'). ` +
+        `frame2TsUs=${frame2TsUs}, firstFrameDets=${JSON.stringify(firstFrameDets)}`,
+    ).toBe('person');
   });
 });
 

@@ -173,12 +173,19 @@ export async function encodeVideo(
             offCtx = offscreen.getContext('2d')!;
           }
           sample.draw(offCtx!, 0, 0);
-          // Key uses the absolute container timestamp — same as preview seek.
-          // Frames previewed at the trim-start position hit the cache here.
-          const key = await makeVideoKey(file, offscreen.width, offscreen.height, sample.microsecondTimestamp);
+          // mediabunny re-zeros sample.microsecondTimestamp relative to the trim
+          // start before invoking process() — add trimStart back to recover the
+          // absolute container timestamp so the cache key matches the preview path.
+          const tsAbsolute = sample.microsecondTimestamp + (trimStart ?? 0) * 1_000_000;
+          const key = await makeVideoKey(file, offscreen.width, offscreen.height, tsAbsolute);
           const detections = applyFilters(await detectForExport(offscreen, key), getConfig().minConfidence, getConfig().enabledLabels);
           if (isCancelled?.()) throw new DOMException('Export cancelled', 'AbortError');
           await applyDetections(offCtx!, detections, drawMode, solidColor, getConfig().expansionFraction);
+          // Expose for integration tests — populate only when the test has armed the collector.
+          const _g = window as unknown as Record<string, unknown>;
+          if (Array.isArray(_g.__exportedFrameDetections)) {
+            (_g.__exportedFrameDetections as unknown[]).push(detections);
+          }
           return offscreen;
         },
       },
