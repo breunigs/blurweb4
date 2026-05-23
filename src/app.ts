@@ -27,6 +27,7 @@ async function tauriConfirm(message: string): Promise<boolean> {
 import { ExportManager } from './exportManager';
 import { PlaybackController } from './playbackController';
 import { FileManager } from './fileManager';
+import { clearAllTrims } from './trimStorage';
 
 export class App {
   private store: ItemStore = { items: [], activeIndex: -1 };
@@ -292,6 +293,7 @@ export class App {
     });
     document.getElementById('defaults-btn')!.addEventListener('click', () => {
       setConfig({ ...DEFAULTS });
+      clearAllTrims().catch(console.error);
     });
     document.getElementById('delete-detections-btn')?.addEventListener('click', () => {
       tauriConfirm(t('confirm_delete_detections')).then((ok) => {

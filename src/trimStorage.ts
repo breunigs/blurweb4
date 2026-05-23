@@ -58,3 +58,15 @@ export async function loadTrim(fileKey: string): Promise<{ start: number; end: n
     return null;
   }
 }
+
+export function clearAllTrims(): Promise<void> {
+  return dbPromise.then(
+    (db) =>
+      new Promise((resolve, reject) => {
+        const tx = db.transaction('trims', 'readwrite');
+        tx.objectStore('trims').clear();
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+      }),
+  );
+}
