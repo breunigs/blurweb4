@@ -44,7 +44,18 @@ function load(): AppConfig {
 
 let current: AppConfig = load();
 
+/** True on phones (not tablets): mobile UA + small screen (< 768 px on short axis). */
+function isMobilePhone(): boolean {
+  const ua = navigator.userAgent;
+  const mobileUA = /Android|iPhone|iPod|Windows Phone/i.test(ua);
+  const smallScreen = Math.min(screen.width, screen.height) < 768;
+  return mobileUA && smallScreen;
+}
+
 export function getConfig(): AppConfig {
+  if (isMobilePhone() && current.model === 'detect_x') {
+    return { ...current, model: 'detect_n' };
+  }
   return current;
 }
 
