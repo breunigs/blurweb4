@@ -350,7 +350,6 @@ export class Blurrer {
   // ── Pixelate ────────────────────────────────────────────────────────────────
 
   #pixelateArea(ctx: AnyCtx, box: ClippedBox, cw: number): void {
-    // Snap to integers so getImageData stride matches the loop stride.
     const x = Math.round(box.x);
     const y = Math.round(box.y);
     const w = Math.round(box.w);
@@ -362,41 +361,21 @@ export class Blurrer {
     const resFactor = Math.max(1, cw / 1280);
     const pixelSize = Math.max(8, Math.min(60, Math.round((Math.min(w, h) / 8) * resFactor)));
 
-    const imgData = ctx.getImageData(x, y, w, h);
-    const { data } = imgData;
-    // imgData.width is the actual integer width allocated by getImageData.
-    const stride = imgData.width;
+    const cols = Math.ceil(w / pixelSize);
+    const rows = Math.ceil(h / pixelSize);
+
+    // Scale down to block resolution (GPU averages pixels), then scale back up
+    // with nearest-neighbor — avoids O(w×h) JS pixel loops entirely.
+    const small = new OffscreenCanvas(cols, rows);
+    const smallCtx = small.getContext('2d')!;
+    smallCtx.drawImage(ctx.canvas as unknown as OffscreenCanvas, x, y, w, h, 0, 0, cols, rows);
 
     ctx.save();
     ctx.beginPath();
     ctx.rect(x, y, w, h);
     ctx.clip();
-
-    const cols = Math.ceil(w / pixelSize);
-    const rows = Math.ceil(h / pixelSize);
-    for (let row = 0; row < rows; row++) {
-      for (let col = 0; col < cols; col++) {
-        const bx = col * pixelSize;
-        const by = row * pixelSize;
-        const bw = Math.min(pixelSize, w - bx);
-        const bh = Math.min(pixelSize, h - by);
-        let r = 0, g = 0, b = 0, count = 0;
-        for (let py = by; py < by + bh; py++) {
-          for (let px = bx; px < bx + bw; px++) {
-            const idx = (py * stride + px) * 4;
-            r += data[idx];
-            g += data[idx + 1];
-            b += data[idx + 2];
-            count++;
-          }
-        }
-        if (count > 0) {
-          ctx.fillStyle = `rgb(${Math.round(r / count)},${Math.round(g / count)},${Math.round(b / count)})`;
-          ctx.fillRect(x + bx, y + by, bw, bh);
-        }
-      }
-    }
-
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(small, 0, 0, cols, rows, x, y, w, h);
     ctx.restore();
   }
 
