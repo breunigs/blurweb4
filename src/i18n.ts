@@ -132,11 +132,6 @@ const STRINGS = {
     confirm_delete_detections: 'Delete all cached detections?',
 
     // Explainer
-    explainer_top:
-      'Automatically blurs faces and license plates in your photos and videos. Everything runs on your device \u2014 nothing is uploaded. Detection is not perfect, so always check the result before you share.',
-    explainer_more: 'Learn more \u2193',
-    explainer_mobile_note:
-      'Works better on a desktop or laptop \u2014 mobile devices are usually too slow.',
     explainer_h2: 'How it works',
     explainer_processing_dt: 'Processing happens in the browser',
     explainer_processing_dd:
@@ -266,11 +261,6 @@ const STRINGS = {
     confirm_delete_detections: 'Alle gespeicherten Erkennungen l\u00f6schen?',
 
     // Explainer
-    explainer_top:
-      'Gesichter und Kfz-Kennzeichen in Fotos und Videos werden automatisch unkenntlich gemacht. Die Verarbeitung l\u00e4uft vollst\u00e4ndig im Browser \u2014 Dateien werden nicht \u00fcbertragen. Die Erkennung ist nicht perfekt: Das Ergebnis sollte vor dem Teilen immer gepr\u00fcft werden.',
-    explainer_more: 'Mehr erfahren \u2193',
-    explainer_mobile_note:
-      'Auf einem Desktop oder Laptop l\u00e4sst sich das Tool besser bedienen \u2014 mobile Ger\u00e4te sind in der Regel zu langsam.',
     explainer_h2: 'So funktioniert es',
     explainer_processing_dt: 'Verarbeitung im Browser',
     explainer_processing_dd:

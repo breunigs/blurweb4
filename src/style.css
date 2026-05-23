@@ -121,25 +121,6 @@ body {
   color: var(--accent);
 }
 
-/* ── Top explainer ─────────────────────────────────────────── */
-#explainer-top {
-  font-size: 13px;
-  color: var(--dim);
-  margin-bottom: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-#explainer-top a {
-  color: var(--accent);
-  text-decoration: none;
-  white-space: nowrap;
-}
-
-#explainer-top a:hover {
-  text-decoration: underline;
-}
 
 /* Only show the mobile note on touch/pointer-coarse devices */
 #explainer-mobile-note {
@@ -759,6 +740,33 @@ input[name="drawMode"][value="solidcolor"]:checked~#solidcolor-color-picker {
   cursor: pointer;
   border: none;
   box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.15);
+}
+
+@media (pointer: coarse) {
+  #scrubber {
+    /* Expand the interactive strip without changing visual height.
+       padding-block adds 10px top/bottom touch slop; reduce margin-top
+       by the same amount so the visible track stays in the same place. */
+    margin-top: 2px;
+    padding-block: 10px;
+  }
+  #scrubber::-webkit-slider-thumb {
+    /* Larger transparent border acts as invisible hit-area padding */
+    width: 14px;
+    height: 14px;
+    border: 10px solid transparent;
+    background-clip: padding-box;
+    box-sizing: content-box;
+    box-shadow: none;
+  }
+  #scrubber::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border: 10px solid transparent;
+    background-clip: padding-box;
+    box-sizing: content-box;
+    box-shadow: none;
+  }
 }
 
 #scrubber:focus::-webkit-slider-thumb {
