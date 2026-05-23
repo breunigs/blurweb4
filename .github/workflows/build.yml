@@ -98,9 +98,13 @@ jobs:
 
       - name: Build frontend
         run: npm run build
+        env:
+          SKIP_HEVC_WASM: ${{ matrix.platform == 'macos-latest' && '1' || '' }}
 
       - name: Prepare Tauri distribution
         run: npm run prepare-tauri-dist
+        env:
+          SKIP_HEVC_WASM: ${{ matrix.platform == 'macos-latest' && '1' || '' }}
 
       - name: Generate icons
         run: npx tauri icon icon.svg

@@ -79,6 +79,9 @@ self.addEventListener('fetch', (e) => {
 }
 generateServiceWorker();
 
+// On macOS Tauri builds, native WebCodecs handles HEVC — skip the 2 MB WASM fallback.
+const skipHevcWasm = process.env.SKIP_HEVC_WASM === '1';
+
 const buildConfig = {
   entryPoints: {
     bundle: 'src/main.ts',
@@ -92,6 +95,9 @@ const buildConfig = {
   sourcemap: dev,
   target: ['chrome114', 'firefox115'],
   minify: !dev,
+  define: {
+    'SKIP_HEVC_WASM': String(skipHevcWasm),
+  },
 };
 
 if (dev) {

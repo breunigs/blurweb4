@@ -69,8 +69,15 @@ console.log('  examples/');
 walkAndCopy(join(ROOT, 'models'), join(OUT, 'models'));
 console.log('  models/');
 
-// vendor/ — include only subdirs that exist (WASM files may not be built yet)
+// vendor/ — include only subdirs that exist (WASM files may not be built yet).
+// On macOS Tauri builds (SKIP_HEVC_WASM=1), native WebCodecs handles HEVC so
+// the 2 MB libav-hevc WASM is excluded to reduce bundle size.
+const skipHevcWasm = process.env.SKIP_HEVC_WASM === '1';
 for (const dir of ['libav-hevc', 'libav-avc-av1']) {
+  if (dir === 'libav-hevc' && skipHevcWasm) {
+    console.log(`  vendor/${dir}/ — skipped (SKIP_HEVC_WASM=1)`);
+    continue;
+  }
   const src = join(ROOT, 'vendor', dir);
   if (!existsSync(src)) {
     console.warn(`  vendor/${dir}/ — skipped (not built)`);

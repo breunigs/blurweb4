@@ -267,4 +267,9 @@ export class HevcFallbackDecoder extends CustomVideoDecoder {
   }
 }
 
-registerDecoder(HevcFallbackDecoder);
+// SKIP_HEVC_WASM is set at build time (esbuild define) for Tauri macOS builds
+// where native WebCodecs handles HEVC — no WASM fallback needed.
+declare const SKIP_HEVC_WASM: boolean;
+if (!SKIP_HEVC_WASM) {
+  registerDecoder(HevcFallbackDecoder);
+}
