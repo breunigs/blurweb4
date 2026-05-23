@@ -53,9 +53,6 @@ function isMobilePhone(): boolean {
 }
 
 export function getConfig(): AppConfig {
-  if (isMobilePhone() && current.model === 'detect_x') {
-    return { ...current, model: 'detect_n' };
-  }
   return current;
 }
 
@@ -63,6 +60,8 @@ export function getConfig(): AppConfig {
  * Whether the large model (detect_x) has proven to work in this session.
  * On iOS, large models crash the tab with OOM before inference completes.
  * We avoid persisting detect_x until we know it can actually run inference.
+ * On mobile phones we never persist detect_x — if the tab crashes (OOM) the
+ * page reload falls back to detect_n from localStorage.
  */
 let largeModelConfirmed = false;
 
@@ -70,6 +69,7 @@ let largeModelConfirmed = false;
 export function confirmLargeModelOk(): void {
   if (current.model === 'detect_x' && !largeModelConfirmed) {
     largeModelConfirmed = true;
+    if (isMobilePhone()) return; // never persist large model on mobile
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(current));
     } catch { /* ok */ }

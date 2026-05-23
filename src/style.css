@@ -221,19 +221,20 @@ body {
   padding: 14px 18px;
   border-bottom: 1px solid var(--border);
   background: rgba(255, 255, 255, 0.02);
+  position: relative;
 }
 
-details.step-card > summary.step-header {
+details.step-card>summary.step-header {
   list-style: none;
   cursor: pointer;
   border-bottom: none;
 }
 
-details.step-card > summary.step-header::-webkit-details-marker {
+details.step-card>summary.step-header::-webkit-details-marker {
   display: none;
 }
 
-details.step-card[open] > summary.step-header {
+details.step-card[open]>summary.step-header {
   border-bottom: 1px solid var(--border);
 }
 
@@ -261,6 +262,10 @@ details.step-card[open] > summary.step-header {
   font-size: 12px;
   color: var(--dim);
   margin-left: auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 
 .step-body {
@@ -637,7 +642,10 @@ html[data-theme^='windows'] .file-list-row {
   font-family: var(--mono);
 }
 
-/* Detecting spinner — lives in the step header */
+/* Detecting spinner — in the normal header flex flow, right of the title.
+   margin-left:auto on the subtitle creates the gap between this and the filename.
+   white-space:nowrap on the subtitle means toggling display only changes the gap
+   width, never the row height — so there is no CLS. */
 #detect-status-inline {
   display: none;
   align-items: center;
@@ -645,6 +653,8 @@ html[data-theme^='windows'] .file-list-row {
   font-size: 12px;
   font-family: var(--mono);
   color: var(--dim);
+  flex-shrink: 0;
+  margin-top: 2px;
 }
 
 #detect-status-inline.visible {
@@ -1132,7 +1142,7 @@ input[name="drawMode"][value="solidcolor"]:checked~#solidcolor-color-picker {
   color: var(--text);
   border-radius: 6px;
   font-size: 13px;
-  min-width: 160px;
+  min-width: 200px;
   flex: 1;
   max-width: 320px;
   outline: none;
@@ -1290,8 +1300,43 @@ input[name="drawMode"][value="solidcolor"]:checked~#solidcolor-color-picker {
     max-width: none;
   }
 
+  /* File table: hide dimensions and size columns */
+  #file-list {
+    grid-template-columns: auto 1fr auto auto auto;
+  }
+
+  .file-list-dims,
+  .file-list-size,
+  #file-list-header>span:nth-child(5),
+  #file-list-header>span:nth-child(6) {
+    display: none;
+  }
+
+  /* Model selector: hide file sizes */
+  .model-size {
+    display: none;
+  }
+
+  /* Naming row: wrap label onto its own line */
+  .naming-row {
+    flex-wrap: wrap;
+  }
+
+  .naming-row .setting-row-label {
+    width: 100%;
+  }
+
   #naming-pattern-input {
     max-width: none;
+    min-width: 0;
+    flex: 1;
+  }
+}
+
+/* ── Phone-only (hide drop zone, keep on tablets) ─────────── */
+@media (max-width: 480px) {
+  #drop-zone {
+    display: none;
   }
 }
 

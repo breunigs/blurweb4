@@ -76,8 +76,8 @@ const STRINGS = {
     // Step 3 — Settings
     step_settings: 'Settings',
     setting_model: 'Detection model',
-    model_small: 'Fast \u2014 small (8\u00a0MB)',
-    model_large: 'Accurate \u2014 large (178\u00a0MB)',
+    model_small: 'Fast \u2014 small',
+    model_large: 'Accurate \u2014 large',
     setting_metadata: 'Metadata',
     setting_audio: 'Audio',
     keep: 'Keep',
@@ -212,8 +212,8 @@ const STRINGS = {
 
     step_settings: 'Einstellungen',
     setting_model: 'Erkennungsmodell',
-    model_small: 'Schnell \u2014 klein (8\u00a0MB)',
-    model_large: 'Genau \u2014 gro\u00df (178\u00a0MB)',
+    model_small: 'Schnell \u2014 klein',
+    model_large: 'Genau \u2014 gro\u00df',
     setting_metadata: 'Metadaten',
     setting_audio: 'Audio',
     keep: 'Behalten',
