@@ -119,8 +119,10 @@
           <span class="setting-row-label" data-i18n="setting_model">Detection model</span>
           <div id="model-group-wrap">
             <div class="pill-group" id="model-radio-group">
-              <label><input type="radio" name="model" value="detect_n" checked><span data-i18n="model_small">Fast &mdash; small</span><span class="model-size"> (8&nbsp;MB)</span></label>
-              <label><input type="radio" name="model" value="detect_x"><span data-i18n="model_large">Accurate &mdash; large</span><span class="model-size"> (178&nbsp;MB)</span></label>
+              <label><input type="radio" name="model" value="detect_n" checked><span data-i18n="model_small">Fast
+                  &mdash; small</span><span class="model-size"> (8&nbsp;MB)</span></label>
+              <label><input type="radio" name="model" value="detect_x"><span data-i18n="model_large">Accurate &mdash;
+                  large</span><span class="model-size"> (178&nbsp;MB)</span></label>
             </div>
             <div id="model-load-progress">
               <div id="model-load-bar-fill"></div>
@@ -169,7 +171,7 @@
         <input type="range" id="scrubber" min="0" max="1000" value="0" step="1">
         <!-- libav warning row — only shown for software-decoded files -->
         <div id="detect-status-row">
-          <span id="libav-warning" hidden data-i18n="libav_warning">Software decoder active — seeking may be slow</span>
+          <span id="libav-warning" hidden data-i18n="libav_warning">Software decoding — seeking may be slow</span>
         </div>
 
         <!-- Trim fields -->

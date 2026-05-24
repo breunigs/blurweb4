@@ -67,7 +67,7 @@ const STRINGS = {
     aria_file_select: 'Selected file',
     aria_next: 'Next file',
     detecting: 'Detecting\u2026',
-    libav_warning: 'Software decoder active \u2014 seeking may be slow',
+    libav_warning: 'Software decoding \u2014 seeking may be slow',
     trim_label: 'Trim range',
     trim_start: 'Start',
     trim_end: 'End',

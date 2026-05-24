@@ -744,27 +744,38 @@ input[name="drawMode"][value="solidcolor"]:checked~#solidcolor-color-picker {
 
 @media (pointer: coarse) {
   #scrubber {
-    /* Expand the interactive strip without changing visual height.
-       padding-block adds 10px top/bottom touch slop; reduce margin-top
-       by the same amount so the visible track stays in the same place. */
+    /* Make the input element as tall as the thumb so it's the touch target.
+       The input's own background is suppressed; the track is painted by
+       the pseudo-element below so only that stays 4px tall. */
+    height: 22px;
+    background: transparent;
+    border: none;
     margin-top: 2px;
-    padding-block: 10px;
+  }
+  #scrubber::-webkit-slider-container {
+    background: transparent;
+  }
+  #scrubber::-webkit-slider-runnable-track {
+    height: 4px;
+    border-radius: 2px;
+    background: var(--card2);
+    border: 1px solid var(--border);
+  }
+  #scrubber::-moz-range-track {
+    height: 4px;
+    border-radius: 2px;
+    background: var(--card2);
+    border: 1px solid var(--border);
   }
   #scrubber::-webkit-slider-thumb {
-    /* Larger transparent border acts as invisible hit-area padding */
-    width: 14px;
-    height: 14px;
-    border: 10px solid transparent;
-    background-clip: padding-box;
-    box-sizing: content-box;
+    width: 22px;
+    height: 22px;
+    margin-top: -9px;
     box-shadow: none;
   }
   #scrubber::-moz-range-thumb {
-    width: 14px;
-    height: 14px;
-    border: 10px solid transparent;
-    background-clip: padding-box;
-    box-sizing: content-box;
+    width: 22px;
+    height: 22px;
     box-shadow: none;
   }
 }
