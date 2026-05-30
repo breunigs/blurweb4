@@ -87,4 +87,7 @@ for (const dir of ['libav-hevc', 'libav-avc-av1']) {
   console.log(`  vendor/${dir}/`);
 }
 
+// licenses.html + licenses.txt — must run after tauri-dist/ exists
+await import('./generate-licenses.mjs');
+
 console.log(`\ntauri-dist/ ready`);
