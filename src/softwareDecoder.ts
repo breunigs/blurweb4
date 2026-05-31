@@ -256,7 +256,11 @@ export class SmartWebCodecsDecoder extends CustomVideoDecoder {
       }
     };
 
-    let ok = this.runtimeError === null && this.decoder.state === 'configured' && (await tryFlush());
+    let ok =
+      this.runtimeError === null &&
+      this.decoder.state === 'configured' &&
+      (await tryFlush()) &&
+      this.runtimeError === null; // re-check: output callback may have set it during flush
 
     while (!ok) {
       this.reinitWithNextMode();
@@ -271,7 +275,7 @@ export class SmartWebCodecsDecoder extends CustomVideoDecoder {
         }
       }
 
-      ok = await tryFlush();
+      ok = (await tryFlush()) && this.runtimeError === null;
     }
 
     if (ok) {
