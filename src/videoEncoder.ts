@@ -170,7 +170,7 @@ export async function encodeVideo(
           if (isCancelled?.()) throw new DOMException('Export cancelled', 'AbortError');
           if (!offscreen || offscreen.width !== sample.displayWidth || offscreen.height !== sample.displayHeight) {
             offscreen = new OffscreenCanvas(sample.displayWidth, sample.displayHeight);
-            offCtx = offscreen.getContext('2d')!;
+            offCtx = offscreen.getContext('2d', { willReadFrequently: true })!;
           }
           sample.draw(offCtx!, 0, 0);
           // mediabunny re-zeros sample.microsecondTimestamp relative to the trim
