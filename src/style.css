@@ -203,6 +203,7 @@ body {
   border-bottom: 1px solid var(--border);
   background: rgba(255, 255, 255, 0.02);
   position: relative;
+  white-space: nowrap;
 }
 
 details.step-card>summary.step-header {
