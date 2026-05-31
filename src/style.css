@@ -401,6 +401,7 @@ details.step-card[open]>summary.step-header {
 #file-list {
   display: grid;
   grid-template-columns: auto 1fr auto auto auto auto auto;
+  column-gap: 10px;
   row-gap: 4px;
   max-height: 155px;
   overflow-y: auto;
@@ -408,20 +409,22 @@ details.step-card[open]>summary.step-header {
   scrollbar-color: var(--border) transparent;
 }
 
-/* Header and rows both span all 7 columns and inherit track sizes via subgrid */
+/* Header and rows both span all 7 columns and inherit track sizes via subgrid.
+   No horizontal padding here — Firefox places subgrid tracks relative to the
+   content-box, so padding would shift all columns right and overflow the last one.
+   Instead, visual inset is created by padding on the first/last cells. */
 #file-list-header,
 .file-list-row {
   display: grid;
   grid-column: 1 / -1;
   grid-template-columns: subgrid;
   align-items: center;
-  column-gap: 10px;
-  padding: 7px 10px;
+  padding: 7px 0;
 }
 
 #file-list-header {
   display: none;
-  padding: 0 10px 2px;
+  padding: 0 0 2px;
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.06em;
@@ -478,6 +481,7 @@ html[data-theme^='windows'] .file-list-row {
   color: var(--muted);
   display: flex;
   align-items: center;
+  padding-left: 10px;
 }
 
 .file-list-name {
@@ -529,6 +533,7 @@ html[data-theme^='windows'] .file-list-row {
   border-radius: 4px;
   line-height: 1;
   padding: 0;
+  margin-right: 10px;
   transition: background 0.1s, color 0.1s;
 }
 
