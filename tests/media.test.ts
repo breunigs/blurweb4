@@ -538,21 +538,6 @@ const VIDEO_REF_DETECTIONS: RefDetection[] = [
   { label: 'person', conf_min: 0.52, x:  460, y: 390, w: 13, h: 21 },
   { label: 'person', conf_min: 0.52, x:  506, y: 380, w: 13, h: 23 },
 ];
-// Firefox AV1 decoder produces slightly different pixel values than Chromium's, pushing
-// x=199 below the NMS threshold while surfacing a new box at x=88.  All other boxes
-// match the Chromium reference within ±5 px.
-const FIREFOX_AV1_VIDEO_REF_DETECTIONS: RefDetection[] = [
-  { label: 'plate',  conf_min: 0.52, x: 1603, y: 460, w: 60, h: 17 },
-  { label: 'person', conf_min: 0.52, x:   20, y: 403, w: 15, h: 28 },
-  { label: 'person', conf_min: 0.52, x:   88, y: 432, w: 12, h: 18 },
-  { label: 'person', conf_min: 0.52, x:  226, y: 377, w: 13, h: 24 },
-  { label: 'person', conf_min: 0.52, x:  258, y: 379, w: 10, h: 19 },
-  { label: 'person', conf_min: 0.52, x:  283, y: 390, w: 16, h: 25 },
-  { label: 'person', conf_min: 0.52, x:  314, y: 387, w: 15, h: 24 },
-  { label: 'person', conf_min: 0.52, x:  435, y: 385, w: 12, h: 20 },
-  { label: 'person', conf_min: 0.52, x:  459, y: 390, w: 12, h: 21 },
-  { label: 'person', conf_min: 0.52, x:  507, y: 382, w: 13, h: 21 },
-];
 // H.265 via libav.js WASM — pixel differences vs WebCodecs may shift NMS outcomes.
 // Using the same 10-detection reference as H.264/AV1; run on Linux to verify.
 const H265_VIDEO_REF_DETECTIONS = VIDEO_REF_DETECTIONS;
@@ -1297,7 +1282,7 @@ for (const { file, codec, wasmFallback, refDetections, minConf } of DETECTION_VI
   test.describe(`Object detection — ${codec} first frame (${file})`, () => {
     test.setTimeout(wasmFallback ? 240_000 : 60_000);
 
-    test('first-frame detections match reference', async ({ page, browserName }) => {
+    test('first-frame detections match reference', async ({ page }) => {
 
       await loadFile(page, path.join(EXAMPLES, file));
 
@@ -1338,10 +1323,7 @@ for (const { file, codec, wasmFallback, refDetections, minConf } of DETECTION_VI
       }
 
       const detections = await waitForDetections(page, waitMs);
-      const ref = browserName === 'firefox' && file === 'av1.mp4'
-        ? FIREFOX_AV1_VIDEO_REF_DETECTIONS
-        : refDetections;
-      assertDetectionsMatch(detections, ref, minConf);
+      assertDetectionsMatch(detections, refDetections, minConf);
     });
   });
 }
