@@ -760,7 +760,7 @@ input[name="drawMode"][value="solidcolor"]:checked~#solidcolor-color-picker {
     margin-top: 2px;
   }
   #scrubber::-webkit-slider-container {
-    background: transparent;
+    background: var(--card);
   }
   #scrubber::-webkit-slider-runnable-track {
     height: 4px;
