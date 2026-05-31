@@ -378,6 +378,74 @@ test.describe('H.265 playback — frame-by-frame updates (libav.js fallback)', (
   });
 });
 
+// ── H.265 HEVC — pixel format 62 (10-bit I420P10) regression ────────────────
+// x265.mp4 decodes via the libav.js WASM fallback (HevcFallbackDecoder).
+// The decoder must handle AV_PIX_FMT_YUV420P10LE (format 62) without
+// logging "unsupported pixel format 62; skipping" and must paint the canvas.
+
+test.describe('H.265 HEVC — pixel format 62 (10-bit I420P10) decoding', () => {
+  test.setTimeout(120_000);
+
+  test('decodes 10-bit HEVC without "unsupported pixel format" warning', async ({ page }) => {
+    // Capture warnings before loading the file so we catch every frame skip.
+    const warnings: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'warning') warnings.push(msg.text());
+    });
+
+    await injectDetections(page, H265_VIDEO_INJECT_DETECTIONS);
+    await loadFile(page, path.join(EXAMPLES, 'x265.mp4'));
+
+    if (!(await webCodecsSupported(page))) {
+      test.skip(true, 'WebCodecs not available');
+    }
+
+    // Wait for canvas or error — do NOT skip on error (we want to catch the bug).
+    await page.waitForFunction(
+      () => {
+        const wrapper = document.querySelector('.canvas-wrapper.active');
+        if (!wrapper) return false;
+        const canvas = wrapper.querySelector<HTMLCanvasElement>('canvas[data-loaded="true"]');
+        if (canvas && canvas.width > 0) return true;
+        return !!wrapper.querySelector('.error-msg');
+      },
+      { timeout: 90_000 },
+    );
+
+    // Assert: no "unsupported pixel format" warnings from HevcFallbackDecoder.
+    const pixelFmtWarnings = warnings.filter((w) => w.includes('unsupported pixel format'));
+    expect(
+      pixelFmtWarnings,
+      `HevcFallbackDecoder emitted unsupported pixel format warning(s): ${pixelFmtWarnings.join('; ')}`,
+    ).toHaveLength(0);
+
+    // Assert: canvas rendered with correct dimensions and non-black content.
+    const state = await page.evaluate(() => {
+      const wrapper = document.querySelector('.canvas-wrapper.active');
+      if (!wrapper) return { kind: 'none' } as const;
+      const canvas = wrapper.querySelector<HTMLCanvasElement>('canvas[data-loaded="true"]');
+      if (canvas && canvas.width > 0) {
+        const ctx = canvas.getContext('2d')!;
+        const total = canvas.width * canvas.height;
+        const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+        let nonBlack = 0;
+        for (let i = 0; i < data.length; i += 4) {
+          if (data[i] > 10 || data[i + 1] > 10 || data[i + 2] > 10) nonBlack++;
+        }
+        return { kind: 'canvas', width: canvas.width, height: canvas.height, nonBlack, total } as const;
+      }
+      const err = wrapper.querySelector('.error-msg');
+      return { kind: 'error', msg: err?.textContent ?? 'unknown' } as const;
+    });
+
+    expect(state.kind, `Expected canvas but got: ${JSON.stringify(state)}`).toBe('canvas');
+    if (state.kind !== 'canvas') return;
+    expect(state.width).toBe(1920);
+    expect(state.height).toBe(1080);
+    expect(state.nonBlack / state.total).toBeGreaterThan(0.2);
+  });
+});
+
 // ── Export: output video duration matches input ───────────────────────────
 // For each video, click Export and intercept the browser download.
 // Pipe the downloaded bytes through ffprobe to read the container duration,

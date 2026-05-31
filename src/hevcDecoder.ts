@@ -33,25 +33,11 @@ const AV_PIX_FMT_MAP: Record<number, VideoSamplePixelFormat> = {
   13: 'I422', // AV_PIX_FMT_YUVJ422P  (full-range)
   14: 'I444', // AV_PIX_FMT_YUVJ444P  (full-range)
   23: 'NV12', // AV_PIX_FMT_NV12
-  63: 'I420P10', // AV_PIX_FMT_YUV420P10LE
+  62: 'I420P10', // AV_PIX_FMT_YUV420P10LE
 };
 
 // AVPixelFormats where the data is inherently full-range (JPEG variants).
 const AV_PIX_FMT_FULL_RANGE = new Set([12, 13, 14]); // YUVJ420P, YUVJ422P, YUVJ444P
-
-// Chroma plane counts per format (planes beyond the first luma plane)
-const CHROMA_PLANES: Partial<Record<VideoSamplePixelFormat, 1 | 2>> = {
-  I420: 2,
-  I420P10: 2,
-  I420P12: 2,
-  I422: 2,
-  I422P10: 2,
-  I422P12: 2,
-  I444: 2,
-  I444P10: 2,
-  I444P12: 2,
-  NV12: 1,
-};
 
 // ── Color space maps (FFmpeg enum → WebCodecs string) ────────────────────────
 const AV_COL_PRI: Record<number, string> = {
@@ -195,7 +181,11 @@ export class HevcFallbackDecoder extends CustomVideoDecoder {
       const w = frame.width as number;
       const h = frame.height as number;
 
-      const layout = this.packedLayout(format, w, h);
+      // Use the layout returned by libav.js default copyout — it carries the
+      // actual AVFrame linesizes, which are correct for all bit-depths.
+      // (video_packed mode is broken for 10-bit planar formats.)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const layout = frame.layout as { offset: number; stride: number }[] | undefined;
 
       let displayWidth = w;
       let displayHeight = h;
@@ -220,15 +210,27 @@ export class HevcFallbackDecoder extends CustomVideoDecoder {
         fullRange,
       };
 
-      const sample = new VideoSample(frame.data as Uint8Array, {
-        format,
+      // iOS Safari's VideoFrame does not support I420P10. Downscale to 8-bit I420
+      // so mediabunny can create a VideoFrame on all platforms.
+      let sampleData = frame.data as Uint8Array;
+      let sampleLayout = layout;
+      let sampleFormat = format;
+      if (format === 'I420P10' && layout) {
+        const converted = this.downscaleI420P10ToI420(sampleData, layout, w, h);
+        sampleData = converted.data;
+        sampleLayout = converted.layout;
+        sampleFormat = 'I420';
+      }
+
+      const sample = new VideoSample(sampleData, {
+        format: sampleFormat,
         codedWidth: w,
         codedHeight: h,
         displayWidth,
         displayHeight,
         timestamp: ((frame.pts as number) ?? 0) / 1_000_000,
         duration: 0,
-        layout,
+        layout: sampleLayout,
         colorSpace,
       });
 
@@ -236,34 +238,53 @@ export class HevcFallbackDecoder extends CustomVideoDecoder {
     }
   }
 
-  private packedLayout(format: VideoSamplePixelFormat, w: number, h: number): { offset: number; stride: number }[] {
-    const yStride = w;
-    const ySize = yStride * h;
-    const nChroma = CHROMA_PLANES[format] ?? 2;
+  // Convert I420P10LE (10-bit, 2 bytes/sample) → I420 (8-bit, 1 byte/sample).
+  // iOS Safari's VideoFrame does not support I420P10, so we drop the 2 LSBs.
+  // The layout from libav default copyout includes alignment padding between
+  // planes, so we must iterate row-by-row using the per-plane stride.
+  private downscaleI420P10ToI420(
+    data: Uint8Array,
+    layout: { offset: number; stride: number }[],
+    w: number,
+    h: number,
+  ): { data: Uint8Array; layout: { offset: number; stride: number }[] } {
+    const uvW = w >>> 1;
+    const uvH = h >>> 1;
+    const yDstStride = w;
+    const uvDstStride = uvW;
+    const uDstOffset = yDstStride * h;
+    const vDstOffset = uDstOffset + uvDstStride * uvH;
+    const out = new Uint8Array(vDstOffset + uvDstStride * uvH);
 
-    if (format === 'NV12') {
-      return [
-        { offset: 0, stride: w },
-        { offset: ySize, stride: w },
-      ];
-    }
+    // 10-bit LE samples: low byte holds bits 0-7, high byte holds bits 8-9.
+    // Shift the uint16 value right by 2 to obtain the top 8 bits.
+    const view16 = new Uint16Array(data.buffer, data.byteOffset, data.byteLength >>> 1);
 
-    const is422 = format.startsWith('I422');
-    const is444 = format.startsWith('I444');
-    const chromaW = is444 ? w : w >> 1;
-    const chromaH = is422 || is444 ? h : h >> 1;
-    const uvStride = chromaW;
-    const uvSize = uvStride * chromaH;
+    const copyPlane = (srcByteOffset: number, srcByteStride: number, dstByteOffset: number, planeW: number, planeH: number) => {
+      const srcBase16 = srcByteOffset >>> 1;
+      const srcStride16 = srcByteStride >>> 1;
+      for (let row = 0; row < planeH; row++) {
+        const s = srcBase16 + row * srcStride16;
+        const d = dstByteOffset + row * planeW;
+        for (let col = 0; col < planeW; col++) {
+          out[d + col] = view16[s + col] >>> 2;
+        }
+      }
+    };
 
-    if (nChroma === 2) {
-      return [
-        { offset: 0, stride: yStride },
-        { offset: ySize, stride: uvStride },
-        { offset: ySize + uvSize, stride: uvStride },
-      ];
-    }
+    const [y, u, v] = layout;
+    copyPlane(y.offset, y.stride, 0, w, h);
+    copyPlane(u.offset, u.stride, uDstOffset, uvW, uvH);
+    copyPlane(v.offset, v.stride, vDstOffset, uvW, uvH);
 
-    return [{ offset: 0, stride: yStride }];
+    return {
+      data: out,
+      layout: [
+        { offset: 0, stride: yDstStride },
+        { offset: uDstOffset, stride: uvDstStride },
+        { offset: vDstOffset, stride: uvDstStride },
+      ],
+    };
   }
 }
 

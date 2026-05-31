@@ -85,16 +85,12 @@ self.addEventListener('message', (e: MessageEvent) => {
               time_base_den: 1_000_000,
             },
           ],
-          { copyoutFrame: 'video_packed' },
         );
         const { frames, transfers } = extractFrames(rawFrames);
         self.postMessage({ type: 'frames', frames }, { transfer: transfers });
       } else if (msg.type === 'flush') {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const rawFrames: any[] = await libav.ff_decode_multi(c, pkt, frame, [], {
-          fin: true,
-          copyoutFrame: 'video_packed',
-        });
+        const rawFrames: any[] = await libav.ff_decode_multi(c, pkt, frame, [], { fin: true });
         const { frames, transfers } = extractFrames(rawFrames);
         self.postMessage({ type: 'frames', frames }, { transfer: transfers });
       } else if (msg.type === 'close') {
