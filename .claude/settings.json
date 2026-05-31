@@ -26,7 +26,13 @@
       "Read(/usr/local/go/**)",
       "WebFetch(domain:raw.githubusercontent.com)",
       "Bash(gh run:*)",
-      "Bash(gh api:*)"
+      "Bash(gh api:*)",
+      "Bash(cat /home/stefan/code/blurweb4/src-tauri/capabilities/*.json)",
+      "Read(//home/stefan/.cargo/registry/src/**)",
+      "Bash(cargo metadata:*)",
+      "Bash(cargo check:*)",
+      "Bash(ffmpeg -i examples/x264.mp4 -vf \"select=eq\\(n\\\\,0\\)\" -vframes 1 /tmp/x264_frame0.jpg -y -v quiet)",
+      "Bash(firefox --version)"
     ],
     "additionalDirectories": [
       "/tmp"

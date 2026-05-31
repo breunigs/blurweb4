@@ -272,20 +272,25 @@ function buildMaskSDF(
 export class Blurrer {
   readonly #cache = new Map<string, Float32Array>();
   readonly #maxSize: number;
-  // Incremented at the start of every apply() call. #blurArea captures the
-  // value and checks it before putImageData — if it has changed, a newer
-  // render has started and this (stale) result is discarded rather than
-  // overwriting the canvas.
-  #version = 0;
+  // Per-canvas version counter. Incremented at the start of every apply()
+  // call for a given canvas. #blurArea captures the value and checks it
+  // before putImageData — if it has changed, a newer render has started for
+  // *the same canvas* and this stale result is discarded. Using per-canvas
+  // counters prevents concurrent renders on different canvases (e.g. a JPEG
+  // preview and a video frame loading simultaneously) from cancelling each
+  // other's in-flight blur workers.
+  readonly #canvasVersions = new WeakMap<HTMLCanvasElement | OffscreenCanvas, number>();
 
   constructor(maxSize = 64) {
     this.#maxSize = maxSize;
   }
 
   async apply(ctx: AnyCtx, detections: Detection[], mode: 'blur' | 'solidcolor' | 'pixelate', color = '#000000'): Promise<void> {
-    const version = ++this.#version;
-    const cw = (ctx as CanvasRenderingContext2D).canvas.width;
-    const ch = (ctx as CanvasRenderingContext2D).canvas.height;
+    const canvas = (ctx as CanvasRenderingContext2D).canvas;
+    const version = (this.#canvasVersions.get(canvas) ?? 0) + 1;
+    this.#canvasVersions.set(canvas, version);
+    const cw = canvas.width;
+    const ch = canvas.height;
 
     if (mode !== 'blur') {
       for (const d of detections) {
@@ -333,7 +338,7 @@ export class Blurrer {
     }
 
     for (const batch of batches) {
-      await Promise.all(batch.map(i => this.#blurArea(ctx, items[i].box, cw, ch, version)));
+      await Promise.all(batch.map(i => this.#blurArea(ctx, canvas, items[i].box, cw, ch, version)));
     }
   }
 
@@ -381,7 +386,7 @@ export class Blurrer {
 
   // ── Blur ────────────────────────────────────────────────────────────────────
 
-  async #blurArea(ctx: AnyCtx, box: ClippedBox, cw: number, ch: number, version: number): Promise<void> {
+  async #blurArea(ctx: AnyCtx, canvas: HTMLCanvasElement | OffscreenCanvas, box: ClippedBox, cw: number, ch: number, version: number): Promise<void> {
     const { x, y, w, h, corners, snapL, snapT, snapR, snapB } = box;
     const feather = Math.round(Math.max(3, Math.max(w, h) / 12));
 
@@ -427,7 +432,7 @@ export class Blurrer {
 
     // If a newer apply() call started while we were awaiting the worker,
     // discard this result rather than overwriting the canvas with stale pixels.
-    if (this.#version !== version) return;
+    if (this.#canvasVersions.get(canvas) !== version) return;
 
     // Alpha-blend: blurred × mask + plain × (1-mask).
     const mask = this.#getMask(wi, hi, feather, ox, oy, w, h, corners, snapL, snapT, snapR, snapB);
