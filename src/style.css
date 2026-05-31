@@ -933,6 +933,7 @@ input[name="drawMode"][value="solidcolor"]:checked~#solidcolor-color-picker {
   border: 1px solid var(--border);
   border-radius: 8px;
   overflow-x: auto;
+  scrollbar-width: none;
   width: fit-content;
   max-width: 100%;
 }
@@ -969,6 +970,10 @@ input[name="drawMode"][value="solidcolor"]:checked~#solidcolor-color-picker {
 }
 
 .pill-group input[type='radio'] {
+  display: none;
+}
+
+.pill-group::-webkit-scrollbar {
   display: none;
 }
 
