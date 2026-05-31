@@ -1769,7 +1769,103 @@ test.describe('Label filtering', () => {
   });
 });
 
-// ── Step 2 header updates on file switch ──────────────────────────────────────
+// ── HDR tone-mapping toggle ──────────────────────────────────────────────────
+// av1.mp4 encodes bt2020+hlg content — confirmed to surface transfer='hlg' in
+// both Chrome and Firefox via WebCodecs.  The toggle button is injected into the
+// canvas wrapper by fileManager when the player fires onHdrDetected.
+
+const AV1_HDR_KEY = `hdr-tone-mapping|av1.mp4|732633`;
+
+test.describe('HDR tone-mapping toggle', () => {
+  test.setTimeout(60_000);
+
+  test('toggle button appears for HDR video and is off by default', async ({ page }) => {
+    await injectDetections(page, VIDEO_INJECT_DETECTIONS);
+    await loadFile(page, path.join(EXAMPLES, 'av1.mp4'));
+
+    if (!(await webCodecsSupported(page))) {
+      test.skip(true, 'WebCodecs not available');
+    }
+
+    await waitForCanvas(page);
+
+    // Toggle is injected asynchronously after the first HDR frame is drawn.
+    await page.waitForSelector('.canvas-wrapper.active .hdr-toggle', { timeout: 15_000 });
+
+    const text = await page.locator('.canvas-wrapper.active .hdr-toggle').textContent();
+    expect(text?.trim()).toBe('HDR: off');
+
+    // No preference stored yet — localStorage key should be absent.
+    const stored = await page.evaluate((key) => localStorage.getItem(key), AV1_HDR_KEY);
+    expect(stored).toBeNull();
+  });
+
+  test('clicking toggle switches to on and saves preference', async ({ page }) => {
+    await injectDetections(page, VIDEO_INJECT_DETECTIONS);
+    await loadFile(page, path.join(EXAMPLES, 'av1.mp4'));
+
+    if (!(await webCodecsSupported(page))) {
+      test.skip(true, 'WebCodecs not available');
+    }
+
+    await waitForCanvas(page);
+    await page.waitForSelector('.canvas-wrapper.active .hdr-toggle', { timeout: 15_000 });
+
+    await page.locator('.canvas-wrapper.active .hdr-toggle').click();
+
+    const text = await page.locator('.canvas-wrapper.active .hdr-toggle').textContent();
+    expect(text?.trim()).toBe('HDR: on');
+
+    const stored = await page.evaluate((key) => localStorage.getItem(key), AV1_HDR_KEY);
+    expect(stored).toBe('true');
+  });
+
+  test('saved preference (on) is restored when file is reloaded', async ({ page }) => {
+    // Pre-set the preference before the first navigation.
+    await page.goto('http://localhost:3100');
+    await page.evaluate((key) => localStorage.setItem(key, 'true'), AV1_HDR_KEY);
+
+    await injectDetections(page, VIDEO_INJECT_DETECTIONS);
+    await page.locator('#file-input').setInputFiles(path.join(EXAMPLES, 'av1.mp4'));
+
+    if (!(await webCodecsSupported(page))) {
+      test.skip(true, 'WebCodecs not available');
+    }
+
+    await waitForCanvas(page);
+    await page.waitForSelector('.canvas-wrapper.active .hdr-toggle', { timeout: 15_000 });
+
+    const text = await page.locator('.canvas-wrapper.active .hdr-toggle').textContent();
+    expect(text?.trim()).toBe('HDR: on');
+  });
+
+  test('toggle does not appear for JPEG image', async ({ page }) => {
+    await loadFile(page, path.join(EXAMPLES, 'jpeg.jpg'));
+    await waitForCanvas(page);
+
+    // Give any async callbacks time to fire.
+    await page.waitForTimeout(500);
+
+    const count = await page.locator('.canvas-wrapper.active .hdr-toggle').count();
+    expect(count).toBe(0);
+  });
+
+  test('"Restore default settings" clears HDR localStorage preference', async ({ page }) => {
+    await page.goto('http://localhost:3100');
+    // Plant a preference so we can verify it gets cleared.
+    await page.evaluate((key) => localStorage.setItem(key, 'true'), AV1_HDR_KEY);
+
+    const storedBefore = await page.evaluate((key) => localStorage.getItem(key), AV1_HDR_KEY);
+    expect(storedBefore).toBe('true');
+
+    await page.locator('#defaults-btn').click();
+
+    const storedAfter = await page.evaluate((key) => localStorage.getItem(key), AV1_HDR_KEY);
+    expect(storedAfter).toBeNull();
+  });
+});
+
+// ── Step 2 header updates on file switch ─────────────────────────────────────
 
 test.describe('Step 2 header title updates on file switch', () => {
   test('header changes between "Preview" and "Preview & Trim" when switching file types', async ({ page }) => {

@@ -14,6 +14,7 @@ export interface ExportItem {
   keepAudio?: boolean;
   meta?: FileMeta;
   singleFrame?: boolean;
+  toneMappingEnabled?: boolean;
 }
 
 export interface BatchCallbacks {
@@ -71,6 +72,7 @@ export async function runBatch(
           item.keepAudio,
           outputStem,
           isCancelled,
+          item.toneMappingEnabled ?? false,
         );
         cb.onFileProgress(i, 1);
         triggerDownload(buffer, filename);

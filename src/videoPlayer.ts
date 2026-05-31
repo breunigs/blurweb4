@@ -1,4 +1,5 @@
 import { Input, ALL_FORMATS, BlobSource, VideoSampleSink } from 'mediabunny';
+import type { VideoSample } from 'mediabunny';
 import {
   getCachedDetections,
   scheduleInference,
@@ -8,6 +9,7 @@ import {
   type Detection,
 } from './detector';
 import { applyDetections } from './detectionDrawer';
+import { drawSample, isHdrSample } from './hdrToneMapper';
 import { getConfig } from './config';
 import { t, tpl } from './i18n';
 
@@ -36,6 +38,12 @@ export class VideoPlayer {
   currentTime = 0; // seconds
   duration = 0; // seconds
 
+  /** Whether HDR tone-mapping is applied when drawing frames. */
+  toneMappingEnabled = false;
+  /** Fired once when the first HDR frame is detected (transfer=hlg/pq or bt2020 primaries). */
+  onHdrDetected: (() => void) | null = null;
+  private _hdrDetected = false;
+
   onTimeUpdate: ((time: number) => void) | null = null;
   onEnd: (() => void) | null = null;
   onDetection: ((dets: Detection[]) => void) | null = null;
@@ -49,6 +57,22 @@ export class VideoPlayer {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d', { willReadFrequently: true })!;
     this.statusEl = statusEl;
+  }
+
+  /** Set tone-mapping on/off and redraw the current frame. */
+  setToneMapping(enabled: boolean): void {
+    this.toneMappingEnabled = enabled;
+    if (this.sink && this.currentTime >= 0) {
+      void this.seekTo(this.currentTime);
+    }
+  }
+
+  private drawFrame(sample: VideoSample): void {
+    if (!this._hdrDetected && isHdrSample(sample)) {
+      this._hdrDetected = true;
+      this.onHdrDetected?.();
+    }
+    drawSample(sample, this.ctx, this.toneMappingEnabled);
   }
 
   private applyAndNotify(dets: Detection[]): void {
@@ -77,7 +101,7 @@ export class VideoPlayer {
     if (firstSample) {
       this.canvas.width = firstSample.displayWidth;
       this.canvas.height = firstSample.displayHeight;
-      firstSample.draw(this.ctx, 0, 0);
+      this.drawFrame(firstSample);
       this.currentTime = firstSample.timestamp;
 
       this.inferenceGen++;
@@ -128,7 +152,7 @@ export class VideoPlayer {
     if (sample) {
       this.canvas.width = sample.displayWidth;
       this.canvas.height = sample.displayHeight;
-      sample.draw(this.ctx, 0, 0);
+      this.drawFrame(sample);
       this.currentTime = sample.timestamp;
       this.onTimeUpdate?.(this.currentTime);
 
@@ -185,7 +209,7 @@ export class VideoPlayer {
         break;
       }
 
-      sample.draw(this.ctx, 0, 0);
+      this.drawFrame(sample);
       this.currentTime = sample.timestamp;
       this.onTimeUpdate?.(this.currentTime);
       this.canvas.dispatchEvent(new CustomEvent('videoframe', { detail: { timestamp: this.currentTime } }));
@@ -231,5 +255,6 @@ export class VideoPlayer {
     this.input = null;
     this.sink = null;
     this.file = null;
+    this._hdrDetected = false;
   }
 }

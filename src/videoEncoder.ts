@@ -12,6 +12,7 @@ import type { VideoSample } from 'mediabunny';
 import { detectEncoder } from './encoderConfig';
 import { detectForExport, makeVideoKey, applyFilters } from './detector';
 import { applyDetections } from './detectionDrawer';
+import { drawSample } from './hdrToneMapper';
 import { getConfig } from './config';
 
 export interface EncodeResult {
@@ -46,6 +47,7 @@ export async function encodeVideo(
   keepAudio = true,
   outputStem?: string,
   isCancelled?: () => boolean,
+  applyToneMapping = false,
 ): Promise<EncodeResult> {
   const input = new Input({ formats: ALL_FORMATS, source: new BlobSource(file) });
   try {
@@ -172,7 +174,7 @@ export async function encodeVideo(
             offscreen = new OffscreenCanvas(sample.displayWidth, sample.displayHeight);
             offCtx = offscreen.getContext('2d', { willReadFrequently: true })!;
           }
-          sample.draw(offCtx!, 0, 0);
+          drawSample(sample, offCtx!, applyToneMapping);
           // mediabunny re-zeros sample.microsecondTimestamp relative to the trim
           // start before invoking process() — add trimStart back to recover the
           // absolute container timestamp so the cache key matches the preview path.

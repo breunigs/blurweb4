@@ -109,6 +109,7 @@ export class SmartWebCodecsDecoder extends CustomVideoDecoder {
   private decoder: VideoDecoder | null = null;
   private runtimeError: Error | null = null;
   private libavCore: LibavAvcAv1Core | null = null;
+  private _loggedFirstFrame = false;
   /**
    * All EncodedVideoChunks sent since the last successful flush.
    * Kept so we can replay them through a new decoder mode or libav.
@@ -140,6 +141,15 @@ export class SmartWebCodecsDecoder extends CustomVideoDecoder {
     try {
       const dec = new VideoDecoder({
         output: (frame) => {
+          if (!this._loggedFirstFrame) {
+            this._loggedFirstFrame = true;
+            const cs = frame.colorSpace;
+            console.log(
+              `[webCodecsDecoder] first frame: codec=${codec} mode=${mode}`,
+              `w=${frame.codedWidth} h=${frame.codedHeight} displayW=${frame.displayWidth} displayH=${frame.displayHeight}`,
+              `colorSpace=${JSON.stringify({ primaries: cs.primaries, transfer: cs.transfer, matrix: cs.matrix, fullRange: cs.fullRange })}`,
+            );
+          }
           this.onSample(new VideoSample(frame, { timestamp: frame.timestamp / 1_000_000 }));
         },
         error: (e) => {

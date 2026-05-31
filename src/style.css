@@ -622,6 +622,33 @@ html[data-theme^='windows'] .file-list-row {
   text-align: center;
 }
 
+.hdr-toggle {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-family: var(--mono);
+  background: rgba(0, 0, 0, 0.55);
+  color: #d1fae5;
+  border: 1px solid rgba(209, 250, 229, 0.35);
+  border-radius: 4px;
+  cursor: pointer;
+  user-select: none;
+  backdrop-filter: blur(4px);
+  transition: opacity 0.15s;
+  z-index: 10;
+}
+
+.hdr-toggle:hover {
+  opacity: 0.85;
+}
+
+.hdr-toggle--off {
+  color: #d1d5db;
+  border-color: rgba(209, 213, 219, 0.35);
+}
+
 /* Detection status row — below the canvas */
 #detect-status-row {
   min-height: 20px;

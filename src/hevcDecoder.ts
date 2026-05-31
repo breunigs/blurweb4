@@ -161,18 +161,6 @@ export class HevcFallbackDecoder extends CustomVideoDecoder {
   private emitFrames(frames: any[]): void {
     for (const frame of frames) {
       const format = AV_PIX_FMT_MAP[frame.format as number];
-      if (!this._loggedFirstFrame && format) {
-        this._loggedFirstFrame = true;
-        console.log(
-          '[hevcDecoder] first frame:',
-          `pix_fmt=${frame.format as number}(${format})`,
-          `primaries=${frame.color_primaries as number}`,
-          `trc=${frame.color_trc as number}`,
-          `space=${frame.color_space as number}`,
-          `range=${frame.color_range as number}`,
-          `config.colorSpace=${JSON.stringify(this.config.colorSpace ?? null)}`,
-        );
-      }
       if (!format) {
         console.warn(`HevcFallbackDecoder: unsupported pixel format ${frame.format as number}; skipping`);
         continue;
@@ -209,6 +197,22 @@ export class HevcFallbackDecoder extends CustomVideoDecoder {
         matrix: AV_COL_SPC[frame.color_space as number] as any,
         fullRange,
       };
+
+      if (!this._loggedFirstFrame) {
+        this._loggedFirstFrame = true;
+        console.log(
+          '[hevcDecoder] first frame:',
+          `pix_fmt=${frame.format as number}(${format})`,
+          `w=${w} h=${h} displayW=${displayWidth} displayH=${displayHeight}`,
+          `sar=${JSON.stringify(sar)}`,
+          `color_primaries=${frame.color_primaries as number}`,
+          `color_trc=${frame.color_trc as number}`,
+          `color_space=${frame.color_space as number}`,
+          `color_range=${frame.color_range as number}`,
+          `config.colorSpace=${JSON.stringify(this.config.colorSpace ?? null)}`,
+          `resolved colorSpace=${JSON.stringify(colorSpace)}`,
+        );
+      }
 
       // iOS Safari's VideoFrame does not support I420P10. Downscale to 8-bit I420
       // so mediabunny can create a VideoFrame on all platforms.

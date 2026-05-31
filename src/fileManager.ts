@@ -16,6 +16,33 @@ import type { Detection } from './detector';
 import type { PlaybackController } from './playbackController';
 import type { ExportManager } from './exportManager';
 
+function hdrStorageKey(file: File): string {
+  return `hdr-tone-mapping|${file.name}|${file.size}`;
+}
+
+function loadHdrPreference(file: File): boolean {
+  try {
+    const v = localStorage.getItem(hdrStorageKey(file));
+    if (v !== null) return v !== 'false';
+  } catch { /* ignore */ }
+  return false; // default: off
+}
+
+function saveHdrPreference(file: File, enabled: boolean): void {
+  try { localStorage.setItem(hdrStorageKey(file), String(enabled)); } catch { /* ignore */ }
+}
+
+export function clearAllHdrPreferences(): void {
+  try {
+    const keys: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k?.startsWith('hdr-tone-mapping|')) keys.push(k);
+    }
+    for (const k of keys) localStorage.removeItem(k);
+  } catch { /* ignore */ }
+}
+
 export class FileManager {
   private examplesBtn: HTMLButtonElement | null = null;
   private fileListEl: HTMLElement = document.getElementById('file-list')!
@@ -169,6 +196,7 @@ export class FileManager {
       exported: false,
       usesLibav: false,
       metaPromise: Promise.resolve({}),
+      toneMappingEnabled: isVideo ? loadHdrPreference(file) : false,
     };
 
     removeBtn.addEventListener('click', (e) => {
@@ -213,9 +241,16 @@ export class FileManager {
       item.player = player;
       (window as unknown as Record<string, unknown>).__activePlayer = player;
 
+      player.toneMappingEnabled = item.toneMappingEnabled;
+
       player.onLibavFallback = () => {
         item.usesLibav = true;
         if (this.store.items[this.store.activeIndex] === item) this.libavWarningEl.hidden = false;
+      };
+
+      player.onHdrDetected = () => {
+        const btn = this.createHdrToggle(item, player);
+        wrapper.appendChild(btn);
       };
 
       // Show detection result summary when this player's frame is detected.
@@ -398,6 +433,23 @@ export class FileManager {
     if (width > 0 && height > 0) {
       this.previewArea.style.aspectRatio = `${width} / ${height}`;
     }
+  }
+
+  private createHdrToggle(item: MediaItem, player: VideoPlayer): HTMLButtonElement {
+    const btn = document.createElement('button');
+    btn.className = 'hdr-toggle';
+    const update = () => {
+      btn.textContent = item.toneMappingEnabled ? 'HDR: on' : 'HDR: off';
+      btn.classList.toggle('hdr-toggle--off', !item.toneMappingEnabled);
+    };
+    update();
+    btn.addEventListener('click', () => {
+      item.toneMappingEnabled = !item.toneMappingEnabled;
+      saveHdrPreference(item.file, item.toneMappingEnabled);
+      update();
+      player.setToneMapping(item.toneMappingEnabled);
+    });
+    return btn;
   }
 
   showError(wrapper: HTMLDivElement, canvas: HTMLCanvasElement, msg: string): void {

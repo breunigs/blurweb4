@@ -23,6 +23,7 @@ export interface MediaItem {
   metaPromise: Promise<FileMeta>;
   meta?: FileMeta;
   singleFrame?: boolean;
+  toneMappingEnabled: boolean;
 }
 
 export interface ItemStore {

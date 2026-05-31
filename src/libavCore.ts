@@ -194,23 +194,6 @@ export class LibavAvcAv1Core {
     for (const frame of frames) {
       const format = AV_PIX_FMT_MAP[frame.format as number];
 
-      if (!this._loggedFirstFrame) {
-        this._loggedFirstFrame = true;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const layoutSummary = (frame.layout as any[])?.map((p: { offset: number; stride: number }) => `${p.offset}+${p.stride}`).join(', ');
-        console.log(
-          `[libavCore] first frame: codec=${this.codec}`,
-          `pix_fmt=${frame.format as number}(${format ?? 'unknown'})`,
-          `w=${frame.width as number} h=${frame.height as number}`,
-          `dataType=${Object.prototype.toString.call(frame.data)}`,
-          `dataLen=${(frame.data as Uint8Array)?.length}`,
-          `layout=[${layoutSummary ?? 'none'}]`,
-          `sar=${JSON.stringify(frame.sample_aspect_ratio)}`,
-          `pts=${frame.pts as number}`,
-          `color_range=${frame.color_range as number}`,
-        );
-      }
-
       if (!format) {
         console.warn(`LibavAvcAv1Core: unsupported pixel format ${frame.format as number}; skipping`);
         continue;
@@ -242,6 +225,27 @@ export class LibavAvcAv1Core {
         matrix: AV_COL_SPC[frame.color_space as number] as any,
         fullRange,
       };
+
+      if (!this._loggedFirstFrame) {
+        this._loggedFirstFrame = true;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const layoutSummary = (frame.layout as any[])?.map((p: { offset: number; stride: number }) => `${p.offset}+${p.stride}`).join(', ');
+        console.log(
+          `[libavCore] first frame: codec=${this.codec}`,
+          `pix_fmt=${frame.format as number}(${format})`,
+          `w=${w} h=${h} displayW=${displayWidth} displayH=${displayHeight}`,
+          `dataType=${Object.prototype.toString.call(frame.data)}`,
+          `dataLen=${(frame.data as Uint8Array)?.length}`,
+          `layout=[${layoutSummary ?? 'none'}]`,
+          `sar=${JSON.stringify(sar)}`,
+          `pts=${frame.pts as number}`,
+          `color_primaries=${frame.color_primaries as number}`,
+          `color_trc=${frame.color_trc as number}`,
+          `color_space=${frame.color_space as number}`,
+          `color_range=${frame.color_range as number}`,
+          `resolved colorSpace=${JSON.stringify(colorSpace)}`,
+        );
+      }
 
       // iOS Safari's VideoFrame does not support I420P10. Downscale to 8-bit I420
       // so mediabunny can create a VideoFrame on all platforms.
