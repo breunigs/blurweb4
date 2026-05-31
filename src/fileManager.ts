@@ -71,7 +71,10 @@ export class FileManager {
   addFiles(files: FileList): void {
     for (const file of files) {
       if (file.type.startsWith('image/') || file.type.startsWith('video/')) {
-        this.addFile(file);
+        const alreadyLoaded = this.store.items.some(
+          (it) => it.file.name === file.name && it.file.size === file.size,
+        );
+        if (!alreadyLoaded) this.addFile(file);
       }
     }
   }
