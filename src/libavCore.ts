@@ -24,16 +24,52 @@ const AV_PIX_FMT_MAP: Record<number, VideoSamplePixelFormat> = {
   5: 'I444', // AV_PIX_FMT_YUV444P
   12: 'I420', // AV_PIX_FMT_YUVJ420P (full-range, same layout)
   23: 'NV12', // AV_PIX_FMT_NV12
-  63: 'I420P10', // AV_PIX_FMT_YUV420P10LE
+  62: 'I420P10', // AV_PIX_FMT_YUV420P10LE
 };
 
-const CHROMA_PLANES: Partial<Record<VideoSamplePixelFormat, 1 | 2>> = {
-  I420: 2,
-  I420P10: 2,
-  I422: 2,
-  I444: 2,
-  NV12: 1,
+// AVPixelFormats where the data is inherently full-range (JPEG variants).
+const AV_PIX_FMT_FULL_RANGE = new Set([12, 13, 14]); // YUVJ420P, YUVJ422P, YUVJ444P
+
+// ── Color space maps (FFmpeg enum → WebCodecs string) ────────────────────────
+
+const AV_COL_PRI: Record<number, string> = {
+  1: 'bt709',
+  4: 'bt470m',
+  5: 'bt470bg',
+  6: 'smpte170m',
+  7: 'smpte240m',
+  9: 'bt2020',
+  11: 'smpte431',
+  12: 'smpte432',
 };
+
+const AV_COL_TRC: Record<number, string> = {
+  1: 'bt709',
+  4: 'gamma22',
+  5: 'gamma28',
+  6: 'smpte170m',
+  7: 'smpte240m',
+  8: 'linear',
+  13: 'iec61966-2-1',
+  14: 'bt2020-10',
+  15: 'bt2020-12',
+  16: 'pq',
+  18: 'hlg',
+};
+
+const AV_COL_SPC: Record<number, string> = {
+  0: 'rgb',
+  1: 'bt709',
+  4: 'fcc',
+  5: 'bt470bg',
+  6: 'smpte170m',
+  7: 'smpte240m',
+  9: 'bt2020-ncl',
+  10: 'bt2020-cl',
+};
+
+// AVColorRange: 2 = full (JPEG/PC range)
+const AV_COL_RANGE_FULL = 2;
 
 // ── FFmpeg constants ───────────────────────────────────────────────────────
 
@@ -125,31 +161,22 @@ export class LibavAvcAv1Core {
   async decode(packet: EncodedPacket): Promise<void> {
     if (!this.libav) return;
     const pts = Math.round(packet.timestamp * 1_000_000);
-    const rawFrames: unknown[] = await this.libav.ff_decode_multi(
-      this.c,
-      this.pkt,
-      this.frame,
-      [
-        {
-          data: packet.data,
-          pts,
-          dts: pts,
-          flags: packet.type === 'key' ? 1 : 0,
-          time_base_num: 1,
-          time_base_den: 1_000_000,
-        },
-      ],
-      { copyoutFrame: 'video_packed' },
-    );
+    const rawFrames: unknown[] = await this.libav.ff_decode_multi(this.c, this.pkt, this.frame, [
+      {
+        data: packet.data,
+        pts,
+        dts: pts,
+        flags: packet.type === 'key' ? 1 : 0,
+        time_base_num: 1,
+        time_base_den: 1_000_000,
+      },
+    ]);
     this.emitFrames(rawFrames);
   }
 
   async flush(): Promise<void> {
     if (!this.libav) return;
-    const rawFrames: unknown[] = await this.libav.ff_decode_multi(this.c, this.pkt, this.frame, [], {
-      fin: true,
-      copyoutFrame: 'video_packed',
-    });
+    const rawFrames: unknown[] = await this.libav.ff_decode_multi(this.c, this.pkt, this.frame, [], true);
     this.emitFrames(rawFrames);
   }
 
@@ -160,10 +187,30 @@ export class LibavAvcAv1Core {
     this.c = this.pkt = this.frame = 0;
   }
 
+  private _loggedFirstFrame = false;
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private emitFrames(frames: any[]): void {
     for (const frame of frames) {
       const format = AV_PIX_FMT_MAP[frame.format as number];
+
+      if (!this._loggedFirstFrame) {
+        this._loggedFirstFrame = true;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const layoutSummary = (frame.layout as any[])?.map((p: { offset: number; stride: number }) => `${p.offset}+${p.stride}`).join(', ');
+        console.log(
+          `[libavCore] first frame: codec=${this.codec}`,
+          `pix_fmt=${frame.format as number}(${format ?? 'unknown'})`,
+          `w=${frame.width as number} h=${frame.height as number}`,
+          `dataType=${Object.prototype.toString.call(frame.data)}`,
+          `dataLen=${(frame.data as Uint8Array)?.length}`,
+          `layout=[${layoutSummary ?? 'none'}]`,
+          `sar=${JSON.stringify(frame.sample_aspect_ratio)}`,
+          `pts=${frame.pts as number}`,
+          `color_range=${frame.color_range as number}`,
+        );
+      }
+
       if (!format) {
         console.warn(`LibavAvcAv1Core: unsupported pixel format ${frame.format as number}; skipping`);
         continue;
@@ -171,7 +218,11 @@ export class LibavAvcAv1Core {
 
       const w = frame.width as number;
       const h = frame.height as number;
-      const layout = this.computeLayout(format, w, h);
+      // Use the layout returned by libav.js default copyout mode — it carries the
+      // actual AVFrame linesizes, which include alignment padding and are correct
+      // for all bit-depths (video_packed mode is broken for 10-bit planar formats).
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const layout = frame.layout as { offset: number; stride: number }[] | undefined;
 
       let displayWidth = w;
       let displayHeight = h;
@@ -182,48 +233,100 @@ export class LibavAvcAv1Core {
         else displayHeight = Math.round(h / aspect);
       }
 
-      this.onSample(
-        new VideoSample(frame.data as Uint8Array, {
-          format,
-          codedWidth: w,
-          codedHeight: h,
-          displayWidth,
-          displayHeight,
-          timestamp: ((frame.pts as number) ?? 0) / 1_000_000,
-          duration: 0,
-          layout,
-        }),
-      );
+      const pixelFmtIdx = frame.format as number;
+      const fullRange = AV_PIX_FMT_FULL_RANGE.has(pixelFmtIdx) || (frame.color_range as number) === AV_COL_RANGE_FULL;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const colorSpace: VideoColorSpaceInit = {
+        primaries: AV_COL_PRI[frame.color_primaries as number] as any,
+        transfer: AV_COL_TRC[frame.color_trc as number] as any,
+        matrix: AV_COL_SPC[frame.color_space as number] as any,
+        fullRange,
+      };
+
+      // iOS Safari's VideoFrame does not support I420P10. Downscale to 8-bit I420
+      // so mediabunny can create a VideoFrame on all platforms.
+      let sampleData = frame.data as Uint8Array;
+      let sampleLayout = layout;
+      let sampleFormat = format;
+      if (format === 'I420P10' && layout) {
+        const converted = this.downscaleI420P10ToI420(sampleData, layout, w, h);
+        sampleData = converted.data;
+        sampleLayout = converted.layout;
+        sampleFormat = 'I420';
+      }
+
+      const init = {
+        format: sampleFormat,
+        codedWidth: w,
+        codedHeight: h,
+        displayWidth,
+        displayHeight,
+        timestamp: ((frame.pts as number) ?? 0) / 1_000_000,
+        duration: 0,
+        layout: sampleLayout,
+        colorSpace,
+      };
+
+      try {
+        this.onSample(new VideoSample(sampleData, init));
+      } catch (err) {
+        console.error(
+          `[libavCore] VideoSample constructor threw for codec=${this.codec}:`,
+          String(err),
+          JSON.stringify({ ...init, layout: init.layout?.map((p) => `${p.offset}+${p.stride}`) }),
+          `dataLen=${sampleData.length}`,
+        );
+        throw err;
+      }
     }
   }
 
-  private computeLayout(format: VideoSamplePixelFormat, w: number, h: number): { offset: number; stride: number }[] {
-    const yStride = w;
-    const ySize = yStride * h;
-    const nChroma = CHROMA_PLANES[format] ?? 2;
+  // Convert I420P10LE (10-bit, 2 bytes/sample) → I420 (8-bit, 1 byte/sample).
+  // iOS Safari's VideoFrame does not support I420P10, so we drop the 2 LSBs.
+  // The layout from libav default copyout includes alignment padding between
+  // planes, so we must iterate row-by-row using the per-plane stride.
+  private downscaleI420P10ToI420(
+    data: Uint8Array,
+    layout: { offset: number; stride: number }[],
+    w: number,
+    h: number,
+  ): { data: Uint8Array; layout: { offset: number; stride: number }[] } {
+    const uvW = w >>> 1;
+    const uvH = h >>> 1;
+    const yDstStride = w;
+    const uvDstStride = uvW;
+    const uDstOffset = yDstStride * h;
+    const vDstOffset = uDstOffset + uvDstStride * uvH;
+    const out = new Uint8Array(vDstOffset + uvDstStride * uvH);
 
-    if (format === 'NV12') {
-      return [
-        { offset: 0, stride: w },
-        { offset: ySize, stride: w },
-      ];
-    }
+    // 10-bit LE samples: low byte holds bits 0-7, high byte holds bits 8-9.
+    // Shift the uint16 value right by 2 to obtain the top 8 bits.
+    const view16 = new Uint16Array(data.buffer, data.byteOffset, data.byteLength >>> 1);
 
-    const is422 = format.startsWith('I422');
-    const is444 = format.startsWith('I444');
-    const chromaW = is444 ? w : w >> 1;
-    const chromaH = is422 || is444 ? h : h >> 1;
-    const uvStride = chromaW;
-    const uvSize = uvStride * chromaH;
+    const copyPlane = (srcByteOffset: number, srcByteStride: number, dstByteOffset: number, planeW: number, planeH: number) => {
+      const srcBase16 = srcByteOffset >>> 1;
+      const srcStride16 = srcByteStride >>> 1;
+      for (let row = 0; row < planeH; row++) {
+        const s = srcBase16 + row * srcStride16;
+        const d = dstByteOffset + row * planeW;
+        for (let col = 0; col < planeW; col++) {
+          out[d + col] = view16[s + col] >>> 2;
+        }
+      }
+    };
 
-    if (nChroma === 2) {
-      return [
-        { offset: 0, stride: yStride },
-        { offset: ySize, stride: uvStride },
-        { offset: ySize + uvSize, stride: uvStride },
-      ];
-    }
+    const [y, u, v] = layout;
+    copyPlane(y.offset, y.stride, 0, w, h);
+    copyPlane(u.offset, u.stride, uDstOffset, uvW, uvH);
+    copyPlane(v.offset, v.stride, vDstOffset, uvW, uvH);
 
-    return [{ offset: 0, stride: yStride }];
+    return {
+      data: out,
+      layout: [
+        { offset: 0, stride: yDstStride },
+        { offset: uDstOffset, stride: uvDstStride },
+        { offset: vDstOffset, stride: uvDstStride },
+      ],
+    };
   }
 }
