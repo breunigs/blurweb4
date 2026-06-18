@@ -479,15 +479,9 @@ and `hash8` is the first 8 hex bytes of a SHA-256 over the file's first 8 KB
 with spinner while inference is pending, hidden on completion or cache hit.
 
 **Test reference detections** (from `detect_n_2024_04.onnx` on `jpeg.jpg`
-at display size 1536×2048, iPhone 12 mini photo):
-```typescript
-{ label: 'plate', conf_min: 0.80, x:  53, y: 1376, w:  40, h: 11 },
-{ label: 'plate', conf_min: 0.80, x: 478, y: 1589, w: 221, h: 53 },
-{ label: 'plate', conf_min: 0.75, x: 255, y: 1364, w:  27, h:  8 },
-{ label: 'person', conf_min: 0.35, x: 727, y: 1335, w:   9, h: 17 },
-{ label: 'person', conf_min: 0.10, x: 881, y: 1345, w:   7, h: 13 },
-```
-With `THRESHOLD_CONF=0.01` the model returns 3 plates + 2 low-confidence persons.
+at display size 1429×497, Hamburg street scene with GPS EXIF):
+With `THRESHOLD_CONF=0.01` the model returns 2 plates + 16 persons (18 total).
+See `JPEG_REF_DETECTIONS` in `media.test.ts` for the full list.
 Note: `jpeg.jpg` is a different scene from the three test videos — video first-frame
 detection tests have separate reference values in `VIDEO_REF_DETECTIONS` in `media.test.ts`.
 H.265 uses `H265_VIDEO_REF_DETECTIONS` (adds one marginal person; libav pixel values

@@ -67,11 +67,11 @@ function withinTolerance(actual: [number, number, number], expected: [number, nu
 
 // ── JPEG image ───────────────────────────────────────────────────────────────
 // Reference pixels extracted with PIL from examples/jpeg.jpg (Hamburg street scene, sRGB)
-//   (0,0)       → rgb(34, 43, 42)
-//   (706, 287)  → rgb(29, 38, 47)
-//   (1411, 574) → rgb(88, 91, 98)
-//   (353, 143)  → rgb(185, 173, 159)
-//   (1059, 143) → rgb(39, 55, 16)
+//   (0,0)       → rgb(40, 44, 47)
+//   (706, 287)  → rgb(155, 162, 155)
+//   (1411, 450) → rgb(222, 211, 207)
+//   (353, 143)  → rgb(109, 116, 124)
+//   (1059, 143) → rgb(255, 201, 177)
 
 test.describe('JPEG image decoding', () => {
   test('canvas dimensions and pixel values match reference', async ({ page }) => {
@@ -79,24 +79,24 @@ test.describe('JPEG image decoding', () => {
     await waitForCanvas(page);
 
     const refPixels: [number, number, number][] = [
-      [34, 43, 42],
-      [29, 38, 47],
-      [88, 91, 98],
-      [185, 173, 159],
-      [39, 55, 16],
+      [40, 44, 47],
+      [155, 162, 155],
+      [222, 211, 207],
+      [109, 116, 124],
+      [255, 201, 177],
     ];
     const sampleCoords: [number, number][] = [
       [0, 0],
       [706, 287],
-      [1411, 574],
+      [1411, 450],
       [353, 143],
       [1059, 143],
     ];
 
     const result = await sampleCanvas(page, sampleCoords);
 
-    expect(result.width).toBe(1412);
-    expect(result.height).toBe(575);
+    expect(result.width).toBe(1429);
+    expect(result.height).toBe(497);
 
     const TOLERANCE = 20; // allow ±20 per channel for colour-space differences
     for (let i = 0; i < refPixels.length; i++) {
@@ -563,31 +563,27 @@ interface RefDetection {
   h: number;
 }
 
-// Reference detections for examples/jpeg.jpg (Hamburg street scene, 1412×575).
-// With THRESHOLD_CONF=0.01 the model returns 1 plate + 21 persons.
+// Reference detections for examples/jpeg.jpg (Hamburg street scene with GPS, 1429×497).
+// With THRESHOLD_CONF=0.01 the model returns 2 plates + 16 persons (18 total).
 const JPEG_REF_DETECTIONS: RefDetection[] = [
-  { label: 'plate',  conf_min: 0.88, x: 1326, y: 364, w: 60, h: 16 },
-  { label: 'person', conf_min: 0.86, x:    7, y: 298, w: 17, h: 27 },
-  { label: 'person', conf_min: 0.78, x:  142, y: 296, w: 13, h: 24 },
-  { label: 'person', conf_min: 0.77, x:  395, y: 276, w: 12, h: 22 },
-  { label: 'person', conf_min: 0.77, x:  275, y: 308, w: 12, h: 20 },
-  { label: 'person', conf_min: 0.77, x:  114, y: 291, w: 14, h: 25 },
-  { label: 'person', conf_min: 0.75, x:  444, y: 276, w: 16, h: 25 },
-  { label: 'person', conf_min: 0.74, x:  419, y: 279, w: 11, h: 22 },
-  { label: 'person', conf_min: 0.73, x:  354, y: 291, w: 14, h: 27 },
-  { label: 'person', conf_min: 0.70, x:  511, y: 287, w: 10, h: 20 },
-  { label: 'person', conf_min: 0.70, x:  223, y: 285, w: 15, h: 26 },
-  { label: 'person', conf_min: 0.62, x:   40, y: 295, w: 14, h: 24 },
-  { label: 'person', conf_min: 0.58, x:  494, y: 296, w:  9, h: 17 },
-  { label: 'person', conf_min: 0.55, x:  334, y: 297, w: 12, h: 24 },
-  { label: 'person', conf_min: 0.50, x:  213, y: 308, w: 10, h: 20 },
-  { label: 'person', conf_min: 0.35, x:   36, y: 293, w: 14, h: 24 },
-  { label: 'person', conf_min: 0.26, x:  340, y: 298, w: 12, h: 25 },
-  { label: 'person', conf_min: 0.14, x:  813, y: 254, w: 18, h: 33 },
-  { label: 'person', conf_min: 0.13, x:  344, y: 301, w: 14, h: 30 },
-  { label: 'person', conf_min: 0.11, x: 1246, y: 257, w: 10, h: 17 },
-  { label: 'person', conf_min: 0.10, x:  216, y: 299, w: 14, h: 26 },
-  { label: 'person', conf_min: 0.10, x:   87, y: 296, w:  8, h: 15 },
+  { label: 'person', conf_min: 0.25, x:   13, y: 290, w: 24, h: 33 },
+  { label: 'person', conf_min: 0.38, x:  503, y: 268, w: 13, h: 23 },
+  { label: 'person', conf_min: 0.77, x:  525, y: 265, w: 10, h: 20 },
+  { label: 'person', conf_min: 0.12, x:  564, y: 260, w: 39, h: 21 },
+  { label: 'person', conf_min: 0.48, x:  565, y: 261, w: 13, h: 21 },
+  { label: 'person', conf_min: 0.65, x:  571, y: 259, w: 13, h: 23 },
+  { label: 'person', conf_min: 0.74, x:  596, y: 258, w: 12, h: 22 },
+  { label: 'person', conf_min: 0.69, x:  617, y: 268, w:  9, h: 16 },
+  { label: 'person', conf_min: 0.67, x:  631, y: 258, w: 11, h: 20 },
+  { label: 'person', conf_min: 0.15, x:  686, y: 263, w:  8, h: 14 },
+  { label: 'person', conf_min: 0.56, x:  728, y: 258, w:  9, h: 18 },
+  { label: 'person', conf_min: 0.72, x:  761, y: 256, w:  9, h: 17 },
+  { label: 'person', conf_min: 0.42, x:  774, y: 249, w:  9, h: 16 },
+  { label: 'person', conf_min: 0.27, x:  785, y: 248, w:  8, h: 16 },
+  { label: 'person', conf_min: 0.22, x:  947, y: 245, w:  9, h: 16 },
+  { label: 'person', conf_min: 0.34, x:  960, y: 246, w:  9, h: 16 },
+  { label: 'plate',  conf_min: 0.80, x: 1024, y: 331, w: 34, h: 10 },
+  { label: 'plate',  conf_min: 0.85, x: 1318, y: 322, w: 58, h: 15 },
 ];
 
 // Reference detections for the three test videos (Hamburg street scene, display 1920×1080).
@@ -691,24 +687,24 @@ test.describe('Object detection — JPEG first frame', () => {
     assertDetectionsMatch(detections, JPEG_REF_DETECTIONS);
   });
 
-  // Actual confidences: plate ~0.89; persons ranging from ~0.87 down to ~0.10.
-  // At 0.10 all 22 detections pass; at 0.80 only the plate and highest-conf person pass.
-  test('minConfidence=0.10 shows all 22 detections', async ({ page }) => {
+  // Actual confidences: 2 plates (~0.88, ~0.83); persons ranging from ~0.81 down to ~0.17.
+  // At 0.10 all 18 detections pass; at 0.80 only the highest-conf plate and person pass.
+  test('minConfidence=0.10 shows all 18 detections', async ({ page }) => {
     await loadFile(page, path.join(EXAMPLES, 'jpeg.jpg'));
     await waitForCanvas(page);
     await waitForDetections(page);
     await page.evaluate(() => (window as any).__setMinConfidence(0.1));
     const detections = await waitForDetections(page);
-    expect(detections.length).toBe(22);
+    expect(detections.length).toBe(18);
   });
 
-  test('minConfidence=0.80 shows 2 detections', async ({ page }) => {
+  test('minConfidence=0.80 shows 3 detections', async ({ page }) => {
     await loadFile(page, path.join(EXAMPLES, 'jpeg.jpg'));
     await waitForCanvas(page);
     await waitForDetections(page);
     await page.evaluate(() => (window as any).__setMinConfidence(0.8));
     const detections = await waitForDetections(page);
-    expect(detections.length).toBe(2);
+    expect(detections.length).toBe(3);
     expect(detections.every((d: any) => d.conf >= 0.8)).toBe(true);
   });
 });
