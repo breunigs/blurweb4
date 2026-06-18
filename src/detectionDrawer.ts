@@ -37,7 +37,7 @@ function drawOutline(ctx: AnyCtx, detections: Detection[]): void {
     const label = `${d.label} ${Math.round(d.conf * 100)}%`;
     const tw = ctx.measureText(label).width;
     ctx.fillStyle = 'rgba(0,0,0,0.72)';
-    ctx.fillRect(d.x, d.y - fontSize, tw + 4, fontSize);
+    ctx.fillRect(d.x, d.y - fontSize - 3, tw + 4, fontSize + 3);
     ctx.fillStyle = color;
     ctx.fillText(label, d.x + 2, d.y - 5);
   }
