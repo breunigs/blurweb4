@@ -268,7 +268,7 @@ const STRINGS = {
     explainer_detects_dt: 'Was erkannt wird',
     explainer_detects_dd:
       'Ein KI-Modell durchsucht jedes Bild bzw. jeden Videoframe nach Gesichtern und Kfz-Kennzeichen. Der Gro\u00dfteil der Trainingsdaten besteht aus Stra\u00dfenfotos aus Hamburg. Bei Aufnahmen aus anderen Regionen oder anderen Umgebungen kann die Erkennungsqualit\u00e4t schlechter ausfallen.',
-    explainer_wrong_dt: 'Warum Erkennungen fehlen oder falsch sein k\u00f6nnen',
+    explainer_wrong_dt: 'Warum Erkennungen fehlerhaft sein k\u00f6nnen',
     explainer_wrong_dd:
       'Vor der Analyse werden Bilder und Frames auf 1280 Pixel skaliert, sodass kleine Objekte m\u00f6glicherweise gar nicht erkannt werden. Das Modell kann au\u00dferdem Dinge bei ungew\u00f6hnlichen Blickwinkeln oder schlechtem Licht \u00fcbersehen und gelegentlich etwas als Gesicht oder Kennzeichen markieren, das keines ist. Das Ergebnis sollte immer vor dem Teilen gepr\u00fcft werden. Die Erkennungsqualit\u00e4t ist in allen Browsern gleich.',
     explainer_video_dt: 'Video wird nicht angezeigt?',
