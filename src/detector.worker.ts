@@ -95,10 +95,13 @@ async function createSession(modelSrc: string | ArrayBuffer): Promise<string> {
 
 // ── Preprocessing ─────────────────────────────────────────────────────────────
 
+// Reused across calls — worker handles one inference at a time (sequential protocol).
+const _tensorBuf = new Float32Array(3 * MODEL_W * MODEL_H);
+
 function buildTensor(data: Uint8ClampedArray): ort.Tensor {
   const t0 = performance.now();
   const pixels = MODEL_W * MODEL_H;
-  const tensor = new Float32Array(3 * pixels);
+  const tensor = _tensorBuf;
   for (let i = 0; i < pixels; i++) {
     tensor[i] = data[i * 4] / 255;
     tensor[pixels + i] = data[i * 4 + 1] / 255;
