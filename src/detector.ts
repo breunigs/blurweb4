@@ -417,6 +417,10 @@ export function setModel(model: ModelChoice, onProgress?: (done: number, total: 
 // YOLOv5 letterbox fill colour (matches PyTorch default: 114/255 ≈ 0.447).
 const LETTERBOX_FILL = 'rgb(114,114,114)';
 
+// Reused across calls — captureSnapshot runs serially inside onnxChain.
+const _snapshotCanvas = new OffscreenCanvas(MODEL_W, MODEL_H);
+const _snapshotCtx = _snapshotCanvas.getContext('2d')!;
+
 function captureSnapshot(source: HTMLCanvasElement | OffscreenCanvas): Snapshot {
   const t0 = performance.now();
   const srcW = source.width,
@@ -428,8 +432,7 @@ function captureSnapshot(source: HTMLCanvasElement | OffscreenCanvas): Snapshot 
   // Use floor to match PyTorch's letterbox convention (left/top gets the smaller half).
   const padX = Math.floor((MODEL_W - scaledW) / 2),
     padY = Math.floor((MODEL_H - scaledH) / 2);
-  const tmp = new OffscreenCanvas(MODEL_W, MODEL_H);
-  const ctx = tmp.getContext('2d')!;
+  const ctx = _snapshotCtx;
   ctx.fillStyle = LETTERBOX_FILL;
   ctx.fillRect(0, 0, MODEL_W, MODEL_H);
   ctx.drawImage(source as CanvasImageSource, padX, padY, scaledW, scaledH);
