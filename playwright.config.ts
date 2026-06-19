@@ -5,6 +5,7 @@ const TEST_PORT = 3100;
 
 export default defineConfig({
   testDir: './tests',
+  fullyParallel: true,
   timeout: 60_000,
   expect: { timeout: 30_000 },
 

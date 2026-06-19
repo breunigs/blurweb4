@@ -449,6 +449,16 @@ y = (cy - h/2 - padY) / scale
 ```
 Stretching (old behaviour) caused badly missed detections on portrait sources.
 
+`captureSnapshot` reuses a module-level `OffscreenCanvas(1280, 1280)` singleton
+(`_snapshotCanvas` / `_snapshotCtx`) instead of allocating a new one per call.
+Safe because `captureSnapshot` runs serially inside the `onnxChain` promise and
+pixels are extracted immediately via `getImageData` before the canvas is reused.
+
+**Tensor buffer pre-allocation:**
+`buildTensor` in `detector.worker.ts` reuses a module-level `Float32Array(3 * 1280 * 1280)`
+(`_tensorBuf`, ~15.7 MB) instead of allocating on every inference. Safe because the
+worker handles one inference at a time (sequential protocol).
+
 **Background inference queue (preview path):**
 - `scheduleInference(source, key, callback)` — yields the main thread before
   `captureSnapshot` (allows slider/pointer events), then snapshots pixels and sends
@@ -483,11 +493,20 @@ at display size 1429×497, Hamburg street scene with GPS EXIF):
 With `THRESHOLD_CONF=0.01` the model returns 2 plates + 16 persons (18 total).
 See `JPEG_REF_DETECTIONS` in `media.test.ts` for the full list.
 Note: `jpeg.jpg` is a different scene from the three test videos — video first-frame
-detection tests have separate reference values in `VIDEO_REF_DETECTIONS` in `media.test.ts`.
-H.265 uses `H265_VIDEO_REF_DETECTIONS` (adds one marginal person; libav pixel values
-differ slightly from WebCodecs, pushing a box just above the 0.01 threshold).
-Tolerance: ±5 pixels per coordinate. Cross-browser results are identical
-(deterministic WASM inference).
+detection tests have separate reference values in `media.test.ts`.
+
+Video detection tests use **subset matching**: each reference box must appear in the
+actual results, but extra browser-specific boxes are tolerated. This handles NMS
+differences between Chromium and Firefox (different codec implementations produce
+slightly different pixel values, shifting marginal-confidence boxes across the
+threshold). Two codec-specific reference sets are used:
+- `H264_VIDEO_REF_DETECTIONS` — excludes the `x≈435` box (scores ~0.508 on Firefox,
+  below the 0.52 threshold)
+- `AV1_H265_VIDEO_REF_DETECTIONS` — excludes the `x≈199` box (Firefox AV1 scores
+  ~0.485; libav H.265 doesn't detect it at all)
+
+Tolerance: ±5 pixels per coordinate. ONNX/WASM inference itself is deterministic;
+variance comes from decoder pixel differences, not ONNX.
 
 **Debug flag:** Set `window.__detectDebug = true` in the browser console before
 opening a file (with cold IDB cache) to log preprocessing params, per-channel
@@ -518,6 +537,9 @@ Language switch calls `setLang()` + page reload (stateless; no hydration needed)
 
 `extractImageMeta(file)` — raw EXIF TIFF parsing via `jpegUtils.findJpegApp1()`:
 extracts date/time, timezone offset, GPS latitude/longitude (ISO 6709 decimal).
+Only the first 64 KB of the file is read (`file.slice(0, 65536)`); the JPEG spec
+places the EXIF APP1 marker near the start of the file, so this covers all
+practical cases while avoiding loading large image data into memory.
 
 `extractVideoMeta(file)` — mediabunny `Input` for codec-agnostic metadata + duration.
 
