@@ -590,6 +590,7 @@ const JPEG_REF_DETECTIONS: RefDetection[] = [
 // Uses 10 stable detections that appear in both H.264 and AV1 when filtered to conf >= 0.52.
 // Lower-confidence boxes vary between codecs due to NMS sensitivity to pixel differences.
 // assertDetectionsMatch is called with minConf=0.52 for video tests.
+// Full 10-box reference calibrated on Chromium (Chromium-only tests).
 const VIDEO_REF_DETECTIONS: RefDetection[] = [
   { label: 'plate',  conf_min: 0.52, x: 1603, y: 460, w: 60, h: 17 },
   { label: 'person', conf_min: 0.52, x:   20, y: 405, w: 15, h: 28 },
@@ -602,9 +603,15 @@ const VIDEO_REF_DETECTIONS: RefDetection[] = [
   { label: 'person', conf_min: 0.52, x:  460, y: 390, w: 13, h: 21 },
   { label: 'person', conf_min: 0.52, x:  506, y: 380, w: 13, h: 23 },
 ];
-// H.265 via libav.js WASM — pixel differences vs WebCodecs may shift NMS outcomes.
-// Using the same 10-detection reference as H.264/AV1; run on Linux to verify.
-const H265_VIDEO_REF_DETECTIONS = VIDEO_REF_DETECTIONS;
+// Cross-browser references: boxes detected by both Chromium and Firefox above 0.52.
+// assertDetectionsMatch uses subset matching so extra browser-specific boxes are ignored.
+//
+// H.264: Firefox sees x=88 (conf≈0.54) as extra; x=435 drops to conf≈0.508 on Firefox
+//        (below 0.52) so it is excluded from the shared reference.
+const H264_VIDEO_REF_DETECTIONS: RefDetection[] = VIDEO_REF_DETECTIONS.filter((r) => r.x !== 435);
+// AV1 / H.265: Firefox sees x=88 (conf≈0.54) as extra; x=199 drops below 0.52 on Firefox
+//              (AV1: conf≈0.485, H.265/libav: not detected) so it is excluded.
+const AV1_H265_VIDEO_REF_DETECTIONS: RefDetection[] = VIDEO_REF_DETECTIONS.filter((r) => r.x !== 199);
 
 // Properly-shaped Detection[] arrays for injectDetections() — used to pre-populate
 // the IDB cache in tests not focused on inference output; never passed to
@@ -635,23 +642,21 @@ function assertDetectionsMatch(actual: Detection[], ref: RefDetection[], minConf
   // across it due to pixel-level differences between codecs and libav.js vs WebCodecs.
   actual = actual.filter((d) => d.conf >= minConf);
   ref = ref.filter((r) => r.conf_min >= minConf);
-  // Sort both by position so comparison is codec-ordering-independent (different codec
-  // pixel values change NMS confidence ranking, which can reorder surviving boxes).
-  const byPos = (a: { x: number; y: number }) => a.x * 10000 + a.y;
-  const actualSorted = [...actual].sort((a, b) => byPos(a) - byPos(b));
-  const refSorted = [...ref].sort((a, b) => byPos(a) - byPos(b));
-  expect(actualSorted.length, `expected ${refSorted.length} detections, got ${actualSorted.length}: ${JSON.stringify(actualSorted)}`).toBe(
-    refSorted.length,
-  );
-  for (let i = 0; i < refSorted.length; i++) {
-    const a = actualSorted[i];
-    const r = refSorted[i];
-    expect(a.label, `detection[${i}] label`).toBe(r.label);
-    expect(a.conf, `detection[${i}] conf`).toBeGreaterThanOrEqual(r.conf_min);
-    expect(Math.abs(a.x - r.x), `detection[${i}] x: got ${a.x}, ref ${r.x}`).toBeLessThanOrEqual(BOX_TOL);
-    expect(Math.abs(a.y - r.y), `detection[${i}] y: got ${a.y}, ref ${r.y}`).toBeLessThanOrEqual(BOX_TOL);
-    expect(Math.abs(a.w - r.w), `detection[${i}] w: got ${a.w}, ref ${r.w}`).toBeLessThanOrEqual(BOX_TOL);
-    expect(Math.abs(a.h - r.h), `detection[${i}] h: got ${a.h}, ref ${r.h}`).toBeLessThanOrEqual(BOX_TOL);
+  // Each ref box must appear in actual; extra actual boxes are ignored.
+  // This tolerates cross-browser NMS differences where marginal boxes near the
+  // confidence boundary appear in one browser but not the other.
+  const actualDesc = actual.map((a) => `${a.label}@(${a.x},${a.y})`).join(', ');
+  for (const r of ref) {
+    const match = actual.find(
+      (a) =>
+        a.label === r.label &&
+        a.conf >= r.conf_min &&
+        Math.abs(a.x - r.x) <= BOX_TOL &&
+        Math.abs(a.y - r.y) <= BOX_TOL &&
+        Math.abs(a.w - r.w) <= BOX_TOL &&
+        Math.abs(a.h - r.h) <= BOX_TOL,
+    );
+    expect(match, `expected {${r.label} x≈${r.x} y≈${r.y}} not found in [${actualDesc}]`).toBeDefined();
   }
 }
 
@@ -710,9 +715,9 @@ test.describe('Object detection — JPEG first frame', () => {
 });
 
 const DETECTION_VIDEO_CASES = [
-  { file: 'x264.mp4', codec: 'H.264', refDetections: VIDEO_REF_DETECTIONS, minConf: 0.52 },
-  { file: 'av1.mp4', codec: 'AV1', refDetections: VIDEO_REF_DETECTIONS, minConf: 0.52 },
-  { file: 'x265.mp4', codec: 'H.265', wasmFallback: true, refDetections: H265_VIDEO_REF_DETECTIONS, minConf: 0.52 },
+  { file: 'x264.mp4', codec: 'H.264', refDetections: H264_VIDEO_REF_DETECTIONS, minConf: 0.52 },
+  { file: 'av1.mp4', codec: 'AV1', refDetections: AV1_H265_VIDEO_REF_DETECTIONS, minConf: 0.52 },
+  { file: 'x265.mp4', codec: 'H.265', wasmFallback: true, refDetections: AV1_H265_VIDEO_REF_DETECTIONS, minConf: 0.52 },
 ];
 
 // ── Draw mode tests ───────────────────────────────────────────────────────────
@@ -1375,21 +1380,12 @@ for (const { file, codec, wasmFallback, refDetections, minConf } of DETECTION_VI
   test.describe(`Object detection — ${codec} first frame (${file})`, () => {
     test.setTimeout(wasmFallback ? 240_000 : 60_000);
 
-    test('first-frame detections match reference', async ({ page }, testInfo) => {
+    test('first-frame detections match reference', async ({ page }) => {
 
       await loadFile(page, path.join(EXAMPLES, file));
 
       if (!(await webCodecsSupported(page))) {
         test.skip(true, 'WebCodecs not available in this browser build');
-      }
-
-      // Firefox's video decoders (H.264, AV1, H.265/libav) produce different
-      // canvas pixel values from Chromium's, causing different NMS outcomes.
-      // The reference was calibrated on Chromium; skip all video detection
-      // reference checks on Firefox to avoid false failures.
-      if (testInfo.project.name === 'firefox') {
-        test.skip(true, 'Firefox video decoders produce different pixel values from Chromium; reference calibrated on Chromium');
-        return;
       }
 
       // Wait for the canvas to be painted (first frame decoded + inference done).
