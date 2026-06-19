@@ -35,11 +35,6 @@ jobs:
         if: steps.cache-wasm.outputs.cache-hit != 'true'
         run: npm run build:wasm
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: vendor-wasm
-          path: vendor/
-          retention-days: 1
 
   # ── Build Tauri app on all platforms ─────────────────────────────────────────
   build-tauri:
@@ -90,11 +85,18 @@ jobs:
 
       - run: npm ci
 
-      - name: Download vendor WASM
-        uses: actions/download-artifact@v4
+      - name: Restore vendor WASM from cache
+        id: cache-wasm
+        uses: actions/cache@v4
         with:
-          name: vendor-wasm
-          path: vendor/
+          path: |
+            vendor/libav-hevc
+            vendor/libav-avc-av1
+          key: vendor-wasm-${{ hashFiles('package-lock.json') }}
+
+      - name: Build WASM variants (cache miss fallback)
+        if: steps.cache-wasm.outputs.cache-hit != 'true'
+        run: npm run build:wasm
 
       - name: Build frontend
         run: npm run build
@@ -112,13 +114,3 @@ jobs:
       - name: Build Tauri app
         run: npx tauri build ${{ matrix.tauri-args }}
 
-      - name: Upload bundle artifacts
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: actions/upload-artifact@v4
-        with:
-          name: bundle-${{ matrix.platform }}-${{ matrix.rust-target || 'default' }}
-          path: |
-            src-tauri/target/release/bundle/
-            src-tauri/target/*/release/bundle/
-          if-no-files-found: ignore
-          retention-days: 1
