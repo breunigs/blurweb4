@@ -105,7 +105,7 @@ function parseExifMeta(jpeg: Uint8Array): FileMeta {
 /** Extract metadata from a JPEG image file. Non-JPEG files return {}. */
 export async function extractImageMeta(file: File): Promise<FileMeta> {
   if (file.type !== 'image/jpeg') return {};
-  const buf = await file.arrayBuffer();
+  const buf = await file.slice(0, 65536).arrayBuffer();
   return parseExifMeta(new Uint8Array(buf));
 }
 
