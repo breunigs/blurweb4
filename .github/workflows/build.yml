@@ -94,9 +94,13 @@ jobs:
             vendor/libav-avc-av1
           key: vendor-wasm-${{ hashFiles('package-lock.json') }}
 
-      - name: Build WASM variants (cache miss fallback)
-        if: steps.cache-wasm.outputs.cache-hit != 'true'
+      - name: Build WASM variants (cache miss fallback — Linux only)
+        if: steps.cache-wasm.outputs.cache-hit != 'true' && matrix.platform == 'ubuntu-22.04'
         run: npm run build:wasm
+
+      - name: Fail on unexpected WASM cache miss
+        if: steps.cache-wasm.outputs.cache-hit != 'true' && matrix.platform != 'ubuntu-22.04'
+        run: echo "::error::WASM cache miss on ${{ matrix.platform }} — build-wasm job should have populated the cache" && exit 1
 
       - name: Build frontend
         run: npm run build

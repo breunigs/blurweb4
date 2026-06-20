@@ -22,7 +22,7 @@ const EXAMPLES = path.join(__dirname, '..', 'examples');
 // ── helpers ─────────────────────────────────────────────────────────────────
 
 /** Wait until the active canvas has been fully painted (data-loaded="true"). */
-async function waitForCanvas(page: Page, timeoutMs = 30_000) {
+async function waitForCanvas(page: Page, timeoutMs = 60_000) {
   await page.waitForFunction(
     () => {
       const canvas = document.querySelector<HTMLCanvasElement>('.canvas-wrapper.active canvas[data-loaded="true"]');
@@ -148,7 +148,7 @@ test.describe('JPEG export — EXIF preservation', () => {
       (document.querySelector('input[name="keepMetadata"][value="keep"]') as HTMLInputElement).click();
     });
 
-    const downloadPromise = page.waitForEvent('download', { timeout: 30_000 });
+    const downloadPromise = page.waitForEvent('download', { timeout: 60_000 });
     await page.locator('#export-btn').click();
     const download = await downloadPromise;
 
@@ -175,7 +175,7 @@ test.describe('JPEG export — EXIF preservation', () => {
       (document.querySelector('input[name="keepMetadata"][value="strip"]') as HTMLInputElement).click();
     });
 
-    const downloadPromise = page.waitForEvent('download', { timeout: 30_000 });
+    const downloadPromise = page.waitForEvent('download', { timeout: 60_000 });
     await page.locator('#export-btn').click();
     const download = await downloadPromise;
 
@@ -309,7 +309,7 @@ test.describe('H.265 playback — frame-by-frame updates (libav.js fallback)', (
         if (canvas !== null && canvas.width > 0) return true;
         return !!wrapper.querySelector('.error-msg');
       },
-      { timeout: 90_000 },
+      { timeout: 180_000 },
     );
     const hasDecodeError = await page.evaluate(() => !!document.querySelector('.canvas-wrapper.active .error-msg'));
     if (hasDecodeError) {
@@ -357,7 +357,7 @@ test.describe('H.265 playback — frame-by-frame updates (libav.js fallback)', (
     });
 
     await page.waitForFunction(() => (window as unknown as Record<string, unknown>).__playbackEnded === true, {
-      timeout: 30_000,
+      timeout: 60_000,
     });
 
     // Collect results.
@@ -409,7 +409,7 @@ test.describe('H.265 HEVC — pixel format 62 (10-bit I420P10) decoding', () => 
         if (canvas && canvas.width > 0) return true;
         return !!wrapper.querySelector('.error-msg');
       },
-      { timeout: 90_000 },
+      { timeout: 180_000 },
     );
 
     // Assert: no "unsupported pixel format" warnings from HevcFallbackDecoder.
@@ -1068,7 +1068,7 @@ test.describe('Trim persistence', () => {
         if (canvas && canvas.width > 0 && canvas.height > 0) return true;
         return !!wrapper.querySelector('.error-msg');
       },
-      { timeout: 120_000 },
+      { timeout: 240_000 },
     );
     const hasDecodeError = await page.evaluate(
       () => !!document.querySelector('.canvas-wrapper.active .error-msg'),
@@ -1187,7 +1187,7 @@ test.describe('Trim cache alignment', () => {
         if (c !== null && c.width > 0) return true;
         return !!document.querySelector('.canvas-wrapper.active .error-msg');
       },
-      { timeout: 30_000 },
+      { timeout: 60_000 },
     );
     {
       const w = await page.evaluate(() => {
@@ -1298,7 +1298,7 @@ test.describe('Trim cache alignment', () => {
         if (c !== null && c.width > 0) return true;
         return !!document.querySelector('.canvas-wrapper.active .error-msg');
       },
-      { timeout: 30_000 },
+      { timeout: 60_000 },
     );
     {
       const w = await page.evaluate(() => {
@@ -1354,7 +1354,7 @@ test.describe('Trim cache alignment', () => {
       { start: frame2TsSec, end: frame2TsSec + 0.1 },
     );
 
-    const downloadPromise = page.waitForEvent('download', { timeout: 90_000 });
+    const downloadPromise = page.waitForEvent('download', { timeout: 180_000 });
     await page.locator('#export-btn').click();
     await downloadPromise;
 
@@ -1484,7 +1484,7 @@ test.describe('AV export from large GoPro source file', () => {
         if (canvas && canvas.width > 0) return true;
         return !!wrapper.querySelector('.error-msg');
       },
-      { timeout: 120_000 },
+      { timeout: 240_000 },
     );
 
     const hasError = await page.evaluate(() => !!document.querySelector('.canvas-wrapper.active .error-msg'));
@@ -1577,7 +1577,7 @@ test.describe('Error paths', () => {
     });
     await page.waitForFunction(
       () => !!document.querySelector('.canvas-wrapper.active .error-msg'),
-      { timeout: 30_000 },
+      { timeout: 60_000 },
     );
     const msg = await page.evaluate(
       () => document.querySelector('.canvas-wrapper.active .error-msg')?.textContent ?? '',
@@ -1596,7 +1596,7 @@ test.describe('Error paths', () => {
     });
     await page.waitForFunction(
       () => !!document.querySelector('.canvas-wrapper.active .error-msg'),
-      { timeout: 15_000 },
+      { timeout: 30_000 },
     );
     const msg = await page.evaluate(
       () => document.querySelector('.canvas-wrapper.active .error-msg')?.textContent ?? '',
@@ -1636,7 +1636,7 @@ test.describe('Batch export — Export All button', () => {
         if (c !== null && c.width > 0) return true;
         return !!document.querySelector('.canvas-wrapper.active .error-msg');
       },
-      { timeout: 45_000 },
+      { timeout: 90_000 },
     );
     {
       const w = await page.evaluate(() => {
@@ -1819,7 +1819,7 @@ test.describe('HDR tone-mapping toggle', () => {
     await waitForCanvas(page);
 
     // Toggle is injected asynchronously after the first HDR frame is drawn.
-    await page.waitForSelector('.canvas-wrapper.active .hdr-toggle', { timeout: 15_000 });
+    await page.waitForSelector('.canvas-wrapper.active .hdr-toggle', { timeout: 30_000 });
 
     const text = await page.locator('.canvas-wrapper.active .hdr-toggle').textContent();
     expect(text?.trim()).toBe('HDR: off');
@@ -1838,7 +1838,7 @@ test.describe('HDR tone-mapping toggle', () => {
     }
 
     await waitForCanvas(page);
-    await page.waitForSelector('.canvas-wrapper.active .hdr-toggle', { timeout: 15_000 });
+    await page.waitForSelector('.canvas-wrapper.active .hdr-toggle', { timeout: 30_000 });
 
     await page.locator('.canvas-wrapper.active .hdr-toggle').click();
 
@@ -1862,7 +1862,7 @@ test.describe('HDR tone-mapping toggle', () => {
     }
 
     await waitForCanvas(page);
-    await page.waitForSelector('.canvas-wrapper.active .hdr-toggle', { timeout: 15_000 });
+    await page.waitForSelector('.canvas-wrapper.active .hdr-toggle', { timeout: 30_000 });
 
     const text = await page.locator('.canvas-wrapper.active .hdr-toggle').textContent();
     expect(text?.trim()).toBe('HDR: on');

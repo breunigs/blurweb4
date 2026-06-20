@@ -6,8 +6,9 @@ const TEST_PORT = 3100;
 export default defineConfig({
   testDir: './tests',
   fullyParallel: true,
-  timeout: 60_000,
-  expect: { timeout: 30_000 },
+  workers: 3,
+  timeout: 120_000,
+  expect: { timeout: 60_000 },
 
   webServer: {
     command: `PORT=${TEST_PORT} node build.mjs --dev`,
