@@ -1,6 +1,7 @@
 export type DrawMode = 'outline' | 'solidcolor' | 'blur' | 'pixelate';
 export type ModelChoice = 'detect_n' | 'detect_x';
 export type MetadataMode = 'keep' | 'gps' | 'strip';
+export type ExportMode = 'quality' | 'filesize';
 
 export interface AppConfig {
   model: ModelChoice;
@@ -8,6 +9,7 @@ export interface AppConfig {
   solidColor: string;
   keepMetadata: MetadataMode;
   keepAudio: boolean;
+  exportMode: ExportMode;
   minConfidence: number;
   /** Fraction [0, 1] by which to expand each detection box on all sides. */
   expansionFraction: number;
@@ -23,6 +25,7 @@ export const DEFAULTS: AppConfig = {
   solidColor: '#000000',
   keepMetadata: 'keep',
   keepAudio: true,
+  exportMode: 'quality',
   minConfidence: 0.05,
   expansionFraction: 0,
   enabledLabels: ['plate', 'person'],

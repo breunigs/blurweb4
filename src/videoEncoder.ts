@@ -14,6 +14,7 @@ import { detectForExport, makeVideoKey, applyFilters } from './detector';
 import { applyDetections } from './detectionDrawer';
 import { drawSample } from './hdrToneMapper';
 import { getConfig } from './config';
+import { effectiveBitrateFor } from './exportUtils';
 
 export interface EncodeResult {
   buffer: ArrayBuffer;
@@ -48,6 +49,7 @@ export async function encodeVideo(
   outputStem?: string,
   isCancelled?: () => boolean,
   applyToneMapping = false,
+  exportMode: 'quality' | 'filesize' = 'quality',
 ): Promise<EncodeResult> {
   const input = new Input({ formats: ALL_FORMATS, source: new BlobSource(file) });
   try {
@@ -75,10 +77,12 @@ export async function encodeVideo(
       console.log(`[videoEncoder] bitrate from metadata: ${(sourceBitrate / 1_000_000).toFixed(2)} Mbps`);
     }
 
+    const effectiveBitrate = effectiveBitrateFor(exportMode, sourceBitrate);
+
     const enc = await detectEncoder(width, height);
     if (!enc) throw new Error('No encodable video codec available in this browser');
     console.log(
-      `[videoEncoder] encoding ${enc.codec} / ${enc.hardwareAcceleration} bitrate=${sourceBitrate ? `${(sourceBitrate / 1_000_000).toFixed(2)} Mbps` : 'mediabunny-default'}`,
+      `[videoEncoder] encoding ${enc.codec} / ${enc.hardwareAcceleration} bitrate=${effectiveBitrate ? `${(effectiveBitrate / 1_000_000).toFixed(2)} Mbps` : 'mediabunny-default'} exportMode=${exportMode}`,
     );
 
     const format = enc.ext === '.webm' ? new WebMOutputFormat() : new Mp4OutputFormat();
@@ -167,7 +171,7 @@ export async function encodeVideo(
       video: {
         codec: enc.codec,
         hardwareAcceleration: enc.hardwareAcceleration,
-        ...(sourceBitrate !== null ? { bitrate: sourceBitrate } : {}),
+        ...(effectiveBitrate !== null ? { bitrate: effectiveBitrate } : {}),
         process: async (sample: VideoSample): Promise<OffscreenCanvas> => {
           if (isCancelled?.()) throw new DOMException('Export cancelled', 'AbortError');
           if (!offscreen || offscreen.width !== sample.displayWidth || offscreen.height !== sample.displayHeight) {

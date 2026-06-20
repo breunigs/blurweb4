@@ -19,11 +19,18 @@ export default defineConfig({
 
   projects: [
     {
+      name: 'unit',
+      testDir: './tests/unit',
+      // No browser — pure Node execution for unit tests.
+    },
+    {
       name: 'chromium',
+      testDir: './tests',
       use: { ...devices['Desktop Chrome'], acceptDownloads: true },
     },
     {
       name: 'firefox',
+      testDir: './tests',
       use: { ...devices['Desktop Firefox'], acceptDownloads: true },
     },
   ],

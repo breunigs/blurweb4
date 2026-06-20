@@ -212,6 +212,15 @@
       <!-- Metadata + Audio settings -->
       <div class="settings-grid">
         <div class="setting-row">
+          <span class="setting-row-label" data-i18n="setting_export_mode">Optimize for</span>
+          <div class="pill-group" id="export-mode-radio-group">
+            <label><input type="radio" name="exportMode" value="quality" checked><span
+                data-i18n="export_mode_quality">Quality</span></label>
+            <label><input type="radio" name="exportMode" value="filesize"><span
+                data-i18n="export_mode_filesize">File size</span></label>
+          </div>
+        </div>
+        <div class="setting-row">
           <span class="setting-row-label" data-i18n="setting_metadata">Metadata</span>
           <div class="pill-group" id="metadata-radio-group">
             <label><input type="radio" name="keepMetadata" value="keep" checked><span

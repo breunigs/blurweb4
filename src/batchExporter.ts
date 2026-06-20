@@ -1,6 +1,8 @@
 import { encodeVideo } from './videoEncoder';
 import { exportAsJpeg } from './imageExporter';
 import { applyPattern } from './naming';
+import { getConfig } from './config';
+import { jpegQualityFor } from './exportUtils';
 import type { FileMeta } from './fileMeta';
 
 export interface ExportItem {
@@ -40,6 +42,8 @@ export async function runBatch(
 ): Promise<void> {
   const total = items.length;
   let completed = 0;
+  const { exportMode } = getConfig();
+  const jpegQuality = jpegQualityFor(exportMode);
 
   for (let i = 0; i < items.length; i++) {
     if (isCancelled?.()) break;
@@ -52,12 +56,12 @@ export async function runBatch(
     try {
       if (!item.isVideo) {
         cb.onFileProgress(i, 1);
-        const { blob, filename } = await exportAsJpeg(item.canvas!, item.name, item.file, item.keepMetadata, 0.92, outputStem);
+        const { blob, filename } = await exportAsJpeg(item.canvas!, item.name, item.file, item.keepMetadata, jpegQuality, outputStem);
         triggerDownload(blob, filename);
       } else if (item.singleFrame && item.canvas) {
         // Single-frame selection → export JPEG from current canvas
         cb.onFileProgress(i, 1);
-        const { blob, filename } = await exportAsJpeg(item.canvas, item.name, undefined, item.keepMetadata, 0.92, outputStem);
+        const { blob, filename } = await exportAsJpeg(item.canvas, item.name, undefined, item.keepMetadata, jpegQuality, outputStem);
         triggerDownload(blob, filename.replace(/\.[^.]+$/, '.jpg'));
       } else {
         const { buffer, filename } = await encodeVideo(
@@ -73,6 +77,7 @@ export async function runBatch(
           outputStem,
           isCancelled,
           item.toneMappingEnabled ?? false,
+          exportMode,
         );
         cb.onFileProgress(i, 1);
         triggerDownload(buffer, filename);

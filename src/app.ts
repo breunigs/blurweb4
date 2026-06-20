@@ -177,6 +177,10 @@ export class App {
     if (mr) mr.checked = true;
     const dr = document.querySelector<HTMLInputElement>(`input[name="drawMode"][value="${cfg.drawMode}"]`);
     if (dr) dr.checked = true;
+    const exportModeEl = document.querySelector<HTMLInputElement>(
+      `input[name="exportMode"][value="${cfg.exportMode}"]`,
+    );
+    if (exportModeEl) exportModeEl.checked = true;
     const meta = document.querySelector<HTMLInputElement>(
       `input[name="keepMetadata"][value="${cfg.keepMetadata}"]`,
     );
@@ -389,6 +393,10 @@ export class App {
     document.getElementById('solidcolor-color-picker')?.addEventListener('input', (e) => {
       setConfig({ solidColor: (e.target as HTMLInputElement).value });
     });
+    document.getElementById('export-mode-radio-group')!.addEventListener('change', (e) => {
+      const t = e.target as HTMLInputElement;
+      if (t.name === 'exportMode') setConfig({ exportMode: t.value as AppConfig['exportMode'] });
+    });
     document.getElementById('metadata-radio-group')!.addEventListener('change', (e) => {
       const t = e.target as HTMLInputElement;
       if (t.name === 'keepMetadata') setConfig({ keepMetadata: t.value as AppConfig['keepMetadata'] });
@@ -434,7 +442,7 @@ export class App {
     });
   }
 
-  private static readonly EXPORT_ONLY_KEYS: ReadonlySet<keyof AppConfig> = new Set(['keepMetadata', 'keepAudio', 'namingPattern']);
+  private static readonly EXPORT_ONLY_KEYS: ReadonlySet<keyof AppConfig> = new Set(['keepMetadata', 'keepAudio', 'exportMode', 'namingPattern']);
 
   private async onConfigChange(cfg: AppConfig, changedKeys: (keyof AppConfig)[]): Promise<void> {
     this.exportManager.markAllDirty();
