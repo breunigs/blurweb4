@@ -9,7 +9,7 @@ on:
 jobs:
   # ── Build WASM artifacts on Linux (requires Docker) ──────────────────────────
   # These are gitignored and not available in the checkout. We build once here
-  # and share to all platform jobs via artifact.
+  # and share to all platform jobs via artifact upload.
   build-wasm:
     runs-on: ubuntu-22.04
     steps:
@@ -34,6 +34,14 @@ jobs:
       - name: Build WASM variants
         if: steps.cache-wasm.outputs.cache-hit != 'true'
         run: npm run build:wasm
+
+      - name: Upload WASM artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: vendor-wasm
+          path: |
+            vendor/libav-hevc/
+            vendor/libav-avc-av1/
 
 
   # ── Build Tauri app on all platforms ─────────────────────────────────────────
@@ -85,22 +93,11 @@ jobs:
 
       - run: npm ci
 
-      - name: Restore vendor WASM from cache
-        id: cache-wasm
-        uses: actions/cache@v4
+      - name: Download WASM artifacts
+        uses: actions/download-artifact@v4
         with:
-          path: |
-            vendor/libav-hevc
-            vendor/libav-avc-av1
-          key: vendor-wasm-${{ hashFiles('package-lock.json') }}
-
-      - name: Build WASM variants (cache miss fallback — Linux only)
-        if: steps.cache-wasm.outputs.cache-hit != 'true' && matrix.platform == 'ubuntu-22.04'
-        run: npm run build:wasm
-
-      - name: Fail on unexpected WASM cache miss
-        if: steps.cache-wasm.outputs.cache-hit != 'true' && matrix.platform != 'ubuntu-22.04'
-        run: echo "::error::WASM cache miss on ${{ matrix.platform }} — build-wasm job should have populated the cache" && exit 1
+          name: vendor-wasm
+          path: vendor/
 
       - name: Build frontend
         run: npm run build
@@ -117,4 +114,3 @@ jobs:
 
       - name: Build Tauri app
         run: npx tauri build ${{ matrix.tauri-args }}
-
