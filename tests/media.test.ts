@@ -1623,13 +1623,16 @@ test.describe('Batch export — Export All button', () => {
       test.skip(true, 'WebCodecs not available');
     }
 
-    // Load two files — jpeg first so it renders before the video switch.
+    // Load two files. jpeg.jpg is added first and becomes the active file.
     await page.locator('#file-input').setInputFiles([
       path.join(EXAMPLES, 'jpeg.jpg'),
       videoPath,
     ]);
 
-    // Active file is x264.mp4 (last added). Wait for first frame.
+    // Switch to the video — jpeg.jpg is active after load (first-file-selected behaviour).
+    await page.locator('.file-list-row').nth(1).click();
+
+    // Active file is now x264.mp4. Wait for first frame.
     await page.waitForFunction(
       () => {
         const c = document.querySelector<HTMLCanvasElement>('.canvas-wrapper.active canvas[data-loaded="true"]');
@@ -1797,6 +1800,34 @@ test.describe('Label filtering', () => {
     ).toBe(true);
   });
 });
+
+// ── Batch load: first file selected ──────────────────────────────────────────
+// When multiple files are opened in one batch, the FIRST file must become the
+// active item so a preview appears immediately.  Previously the LAST file was
+// selected, forcing users to wait for the slowest file (e.g. a large video) to
+// decode before any preview was shown.
+
+test.describe('Batch file loading — first file selected', () => {
+  test('first file in batch is active, not the last', async ({ page }) => {
+    await page.goto('http://localhost:3100');
+    // Load a JPEG (fast) first and a video (slow) second in one batch.
+    await page.locator('#file-input').setInputFiles([
+      path.join(EXAMPLES, 'jpeg.jpg'),
+      path.join(EXAMPLES, 'x264.mp4'),
+    ]);
+    // jpeg.jpg loads almost instantly — waitForCanvas resolves as soon as the
+    // active item's canvas has data-loaded="true" and a non-zero width.
+    await waitForCanvas(page);
+    const width = await page.evaluate(() => {
+      const c = document.querySelector<HTMLCanvasElement>('.canvas-wrapper.active canvas')!;
+      return c.width;
+    });
+    // jpeg.jpg is 1429 px wide; x264.mp4 decodes to 1920 px.
+    // Seeing 1429 here confirms jpeg.jpg (the first file) is active.
+    expect(width).toBe(1429);
+  });
+});
+
 
 // ── HDR tone-mapping toggle ──────────────────────────────────────────────────
 // av1.mp4 encodes bt2020+hlg content — confirmed to surface transfer='hlg' in

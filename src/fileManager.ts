@@ -96,12 +96,16 @@ export class FileManager {
   ) {}
 
   addFiles(files: FileList): void {
+    let switchedToFirst = false;
     for (const file of files) {
       if (file.type.startsWith('image/') || file.type.startsWith('video/')) {
         const alreadyLoaded = this.store.items.some(
           (it) => it.file.name === file.name && it.file.size === file.size,
         );
-        if (!alreadyLoaded) this.addFile(file);
+        if (!alreadyLoaded) {
+          this.addFile(file, !switchedToFirst);
+          switchedToFirst = true;
+        }
       }
     }
   }
@@ -291,13 +295,17 @@ export class FileManager {
           if (cached !== null) {
             const filtered = applyFilters(cached, getConfig().minConfidence, getConfig().enabledLabels);
             await applyDetections(ctx, filtered, getConfig().drawMode, getConfig().solidColor, getConfig().expansionFraction);
+            item.detectionsDone = true;
             if (this.store.items[this.store.activeIndex] === item) {
               this.onShowDetectionResult(filtered);
               (window as unknown as Record<string, unknown>).__lastDetections = filtered;
             } else {
               this.clearExamplesLoading();
             }
-          } else {
+          } else if (this.store.items[this.store.activeIndex] === item) {
+            // Only schedule preview inference for the currently-active image.
+            // Non-active images stay as raw canvas; inference runs when the user
+            // clicks on them (onRerenderActive) or at export time (detectForExport).
             this.onShowDetecting(true);
             scheduleInference(
               canvas,
@@ -307,6 +315,7 @@ export class FileManager {
                 const filtered = applyFilters(dets, getConfig().minConfidence, getConfig().enabledLabels);
                 applyDetections(ctx, filtered, getConfig().drawMode, getConfig().solidColor, getConfig().expansionFraction)
                   .then(() => {
+                    item.detectionsDone = true;
                     if (this.store.items[this.store.activeIndex] === item) {
                       this.onShowDetectionResult(filtered);
                     } else {

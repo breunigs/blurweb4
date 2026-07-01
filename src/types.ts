@@ -20,6 +20,7 @@ export interface MediaItem {
   fileListDimsEl: HTMLElement;
   fileListSizeEl: HTMLElement;
   usesLibav: boolean;
+  detectionsDone?: boolean;  // true once applyDetections has been painted on this canvas
   metaPromise: Promise<FileMeta>;
   meta?: FileMeta;
   singleFrame?: boolean;
