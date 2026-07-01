@@ -1828,6 +1828,82 @@ test.describe('Batch file loading — first file selected', () => {
   });
 });
 
+// ── Export-time detection for uncached images ─────────────────────────────────
+// When "Export All" is clicked, images whose canvases have not yet had
+// applyDetections() called (e.g. non-active images in a batch load) must have
+// detection run via detectForExport() before the JPEG is encoded.
+// Previously the raw unredacted canvas was exported for such images.
+
+test.describe('Export-time detection for uncached images', () => {
+  test.setTimeout(120_000);
+
+  test('non-active image gets detections applied during Export All', async ({ page }) => {
+    // Detection box sized to fit inside a 200×200 canvas.
+    // Box: x=50, y=50, w=60, h=60 → interior centre at (80, 80).
+    const EXPORT_INJECT: Detection[] = [
+      { label: 'plate', conf: 0.95, x: 50, y: 50, w: 60, h: 60 },
+    ];
+    await injectDetections(page, EXPORT_INJECT);
+    await page.goto('http://localhost:3100');
+
+    // Create a 200×200 grey synthetic JPEG in the browser context.
+    const syntheticJpegBytes = await page.evaluate(async () => {
+      const c = document.createElement('canvas');
+      c.width = c.height = 200;
+      c.getContext('2d')!.fillStyle = '#808080';
+      c.getContext('2d')!.fillRect(0, 0, 200, 200);
+      const blob = await new Promise<Blob>((resolve) =>
+        (c as HTMLCanvasElement).toBlob(resolve as BlobCallback, 'image/jpeg', 0.95),
+      );
+      return Array.from(new Uint8Array(await blob!.arrayBuffer()));
+    });
+    const syntheticBuffer = Buffer.from(syntheticJpegBytes);
+
+    // Load jpeg.jpg first — it becomes the active file and gets inference.
+    await page.locator('#file-input').setInputFiles(path.join(EXAMPLES, 'jpeg.jpg'));
+    await waitForCanvas(page);
+    await waitForDetections(page, 30_000);
+
+    // Load synthetic.jpg as a second file (non-active; no preview inference
+    // is scheduled for it, so detectionsDone remains false).
+    await page.locator('#file-input').setInputFiles({
+      name: 'synthetic.jpg',
+      mimeType: 'image/jpeg',
+      buffer: syntheticBuffer,
+    });
+    // Allow the image renderer to finish painting the canvas.
+    await page.waitForTimeout(500);
+
+    // Switch to solidcolor so redacted pixels are deterministically near-black.
+    await page.evaluate(() => { (window as any).__lastDetections = undefined; });
+    await page.evaluate(() => (window as any).__setDrawMode('solidcolor'));
+    // Wait for jpeg.jpg (the active file) to re-render with the new draw mode.
+    await waitForDetections(page, 30_000);
+
+    // Collect both downloads before clicking so we don't miss the fast JPEG one.
+    const downloads: import('@playwright/test').Download[] = [];
+    let resolveBoth!: () => void;
+    const bothDone = new Promise<void>((res) => { resolveBoth = res; });
+    page.on('download', (dl) => { downloads.push(dl); if (downloads.length >= 2) resolveBoth(); });
+
+    await page.locator('#export-all-btn').click();
+    await bothDone;
+
+    // After export, batchExporter has called applyDetections() on synthetic.jpg's
+    // canvas (canvas index 1 — jpeg.jpg is index 0 as the first-loaded file).
+    // Point (80, 80) lies at the centre of the detection box; solidcolor fills
+    // it with the default color (#000000), so all channels must be near-black.
+    const pixel = await page.evaluate(() => {
+      const canvases = document.querySelectorAll<HTMLCanvasElement>('.canvas-wrapper canvas');
+      const d = canvases[1].getContext('2d')!.getImageData(80, 80, 1, 1).data;
+      return [d[0], d[1], d[2]];
+    });
+    expect(pixel[0], `R at detection centre of synthetic.jpg: ${pixel}`).toBeLessThan(10);
+    expect(pixel[1], `G at detection centre of synthetic.jpg: ${pixel}`).toBeLessThan(10);
+    expect(pixel[2], `B at detection centre of synthetic.jpg: ${pixel}`).toBeLessThan(10);
+  });
+});
+
 
 // ── HDR tone-mapping toggle ──────────────────────────────────────────────────
 // av1.mp4 encodes bt2020+hlg content — confirmed to surface transfer='hlg' in

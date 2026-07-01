@@ -3,6 +3,8 @@ import { exportAsJpeg } from './imageExporter';
 import { applyPattern } from './naming';
 import { getConfig } from './config';
 import { jpegQualityFor } from './exportUtils';
+import { detectForExport, makeImageKey, applyFilters } from './detector';
+import { applyDetections } from './detectionDrawer';
 import type { FileMeta } from './fileMeta';
 
 export interface ExportItem {
@@ -17,6 +19,8 @@ export interface ExportItem {
   meta?: FileMeta;
   singleFrame?: boolean;
   toneMappingEnabled?: boolean;
+  /** True once applyDetections has been painted on the canvas during preview. */
+  detectionsDone?: boolean;
 }
 
 export interface BatchCallbacks {
@@ -55,6 +59,18 @@ export async function runBatch(
 
     try {
       if (!item.isVideo) {
+        // Ensure detections are applied to the canvas before exporting.
+        // This covers the case where preview inference was never scheduled (queue
+        // thrashing) or is still in-flight. detectForExport checks IDB/memory cache
+        // first, so cached results are free; only uncached images run ONNX here.
+        if (!item.detectionsDone && item.canvas && item.file) {
+          const key = await makeImageKey(item.file, item.canvas.width, item.canvas.height);
+          const cfg = getConfig();
+          const allDets = await detectForExport(item.canvas, key);
+          const filtered = applyFilters(allDets, cfg.minConfidence, cfg.enabledLabels);
+          const ctx = item.canvas.getContext('2d')!;
+          await applyDetections(ctx, filtered, cfg.drawMode, cfg.solidColor, cfg.expansionFraction);
+        }
         cb.onFileProgress(i, 1);
         const { blob, filename } = await exportAsJpeg(item.canvas!, item.name, item.file, item.keepMetadata, jpegQuality, outputStem);
         triggerDownload(blob, filename);

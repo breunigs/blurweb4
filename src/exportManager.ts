@@ -128,6 +128,7 @@ export class ExportManager {
       meta: it.meta,
       singleFrame: it.singleFrame,
       toneMappingEnabled: it.toneMappingEnabled,
+      detectionsDone: it.detectionsDone,
     }));
 
     const _nav = navigator as unknown as { wakeLock?: { request(t: string): Promise<{ release(): Promise<void> }> } };
