@@ -609,6 +609,43 @@ html[data-theme^='windows'] .file-list-row {
   filter: blur(3px) brightness(0.55);
 }
 
+/* Navigation chevron overlays */
+.preview-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 10;
+  width: 36px;
+  height: 50%;
+  border: none;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+  font-size: 32px;
+  font-weight: 900;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.2s;
+  pointer-events: none;
+}
+
+#preview-area:hover .preview-nav {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.preview-nav:hover {
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.preview-nav-prev { left: 8px; }
+.preview-nav-next { right: 8px; }
+
+@media (hover: none) {
+  .preview-nav { display: none; }
+}
+
 #libav-warning {
   font-size: 12px;
   color: #b45309;

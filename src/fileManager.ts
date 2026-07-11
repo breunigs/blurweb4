@@ -93,7 +93,10 @@ export class FileManager {
     private readonly onRerenderActive: () => Promise<void>,
     // Called after store.activeIndex is updated, for App to coordinate
     private readonly onAfterSwitchTo: (index: number) => void,
-  ) {}
+  ) {
+    this.initNavigation();
+    this.initSwipeNavigation();
+  }
 
   addFiles(files: FileList): void {
     let switchedToFirst = false;
@@ -239,6 +242,7 @@ export class FileManager {
 
     this.updateLoadedSummary();
     this.updateFileNav();
+    this.updateNavChevrons();
 
     if (isVideo) {
       const player = new VideoPlayer(canvas, this.detectStatusInline);
@@ -375,6 +379,7 @@ export class FileManager {
       this.updateAudioSettingVisibility();
       this.updateLoadedSummary();
       this.updateFileNav();
+      this.updateNavChevrons();
       this.exportManager.updateBtnState();
       return;
     }
@@ -412,6 +417,7 @@ export class FileManager {
     this.libavWarningEl.hidden = !item.usesLibav;
 
     this.updateFileNav();
+    this.updateNavChevrons();
     this.exportManager.updateBtnState();
     this.updatePreviewAspectRatio();
     this.onAfterSwitchTo(index);
@@ -422,6 +428,13 @@ export class FileManager {
     const n = this.store.items.length;
     const i = this.store.activeIndex;
     this.stepPreviewSubtitle.textContent = n > 0 ? (this.store.items[i]?.name ?? '') : '';
+  }
+
+  private updateNavChevrons(): void {
+    const n = this.store.items.length;
+    const i = this.store.activeIndex;
+    this.prevBtn.hidden = i <= 0;
+    this.nextBtn.hidden = i >= n - 1;
   }
 
   updateLoadedSummary(): void {
@@ -459,6 +472,88 @@ export class FileManager {
       player.setToneMapping(item.toneMappingEnabled);
     });
     return btn;
+  }
+
+  private prevBtn!: HTMLButtonElement;
+  private nextBtn!: HTMLButtonElement;
+
+  private initNavigation(): void {
+    // Chevron overlays
+    this.prevBtn = document.createElement('button');
+    this.nextBtn = document.createElement('button');
+    this.prevBtn.className = 'preview-nav preview-nav-prev';
+    this.nextBtn.className = 'preview-nav preview-nav-next';
+    this.prevBtn.textContent = '\u2039';
+    this.nextBtn.textContent = '\u203A';
+    this.prevBtn.title = t('aria_prev');
+    this.nextBtn.title = t('aria_next');
+    this.prevBtn.addEventListener('click', () => this.navigatePrev());
+    this.nextBtn.addEventListener('click', () => this.navigateNext());
+    this.previewArea.appendChild(this.prevBtn);
+    this.previewArea.appendChild(this.nextBtn);
+
+    // Keyboard arrows
+    document.addEventListener('keydown', (e) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.key === 'ArrowLeft') this.navigatePrev();
+      else if (e.key === 'ArrowRight') this.navigateNext();
+    });
+  }
+
+  private navigateNext(): void {
+    const n = this.store.items.length;
+    const current = this.store.activeIndex;
+    if (n > 1 && current < n - 1) this.switchTo(current + 1);
+  }
+
+  private navigatePrev(): void {
+    const n = this.store.items.length;
+    const current = this.store.activeIndex;
+    if (n > 1 && current > 0) this.switchTo(current - 1);
+  }
+
+  private initSwipeNavigation(): void {
+    let startX = 0;
+    let startY = 0;
+    let tracking = false;
+    let directionLocked: 'horizontal' | 'vertical' | null = null;
+
+    const SWIPE_THRESHOLD = 50;
+    const LOCK_THRESHOLD = 10;
+
+    this.previewArea.addEventListener('touchstart', (e: TouchEvent) => {
+      if (e.touches.length !== 1) return;
+      startX = e.touches[0].clientX;
+      startY = e.touches[0].clientY;
+      tracking = true;
+      directionLocked = null;
+    }, { passive: true });
+
+    this.previewArea.addEventListener('touchmove', (e: TouchEvent) => {
+      if (!tracking || e.touches.length !== 1) return;
+      const dx = e.touches[0].clientX - startX;
+      const dy = e.touches[0].clientY - startY;
+      if (directionLocked === null) {
+        if (Math.abs(dx) > LOCK_THRESHOLD) {
+          directionLocked = 'horizontal';
+        } else if (Math.abs(dy) > LOCK_THRESHOLD) {
+          directionLocked = 'vertical';
+          tracking = false;
+          return;
+        }
+      }
+      if (directionLocked === 'horizontal') e.preventDefault();
+    }, { passive: false });
+
+    this.previewArea.addEventListener('touchend', (e: TouchEvent) => {
+      if (!tracking) return;
+      tracking = false;
+      if (directionLocked !== 'horizontal') return;
+      const dx = e.changedTouches[0].clientX - startX;
+      if (Math.abs(dx) < SWIPE_THRESHOLD) return;
+      if (dx < 0) this.navigateNext();
+      else this.navigatePrev();
+    }, { passive: true });
   }
 
   showError(wrapper: HTMLDivElement, canvas: HTMLCanvasElement, msg: string): void {
