@@ -510,7 +510,7 @@ export class App {
   }
 
   private async applyOcrFilterAndDraw(
-    ctx: CanvasRenderingContext2D,
+    ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
     dets: import('./detector').Detection[],
     file: File,
     frameRef: string,
@@ -573,6 +573,10 @@ export class App {
   private async showOcrSuggestions(): Promise<void> {
     const suggestionsEl = document.getElementById('keep-plates-suggestions');
     if (!suggestionsEl) return;
+
+    // If suggestions are already showing, nothing to do.
+    if (suggestionsEl.children.length > 0) return;
+
     const item = this.store.items[this.store.activeIndex];
     if (!item || item.isVideo) return;
 
@@ -582,19 +586,17 @@ export class App {
     const plates = dets.filter((d) => d.label === 'plate');
     if (plates.length === 0) return;
 
-    // If suggestions are already showing, don't re-run OCR
-    if (suggestionsEl.children.length > 0) return;
-
     suggestionsEl.innerHTML = '<span class="ocr-suggestions-loading">\u2026</span>';
 
     try {
-      // Re-render raw image to get un-blurred pixels for OCR
-      await renderImage(item.file, item.canvas);
-      const ctx = item.canvas.getContext('2d')!;
+      // Render to an offscreen canvas so the visible preview doesn't flash
+      const bitmap = await createImageBitmap(item.file, { imageOrientation: 'from-image' as ImageOrientation });
+      const offscreen = new OffscreenCanvas(bitmap.width, bitmap.height);
+      const offCtx = offscreen.getContext('2d')!;
+      offCtx.drawImage(bitmap, 0, 0);
+      bitmap.close();
       const mod = await import('./plateOcr');
-      const results = await mod.recognizePlates(ctx, plates, item.file, 'img');
-      // Re-apply detections after OCR
-      await this.applyOcrFilterAndDraw(ctx, dets, item.file, 'img');
+      const results = await mod.recognizePlates(offCtx, plates, item.file, 'img');
       this.renderSuggestionChips(results, mod);
     } catch (err) {
       console.error('[app] OCR suggestions failed:', err);
@@ -609,12 +611,21 @@ export class App {
       const key = await makeImageKey(item.file, item.canvas.width, item.canvas.height);
       const cached = await getCachedDetections(key);
       if (cached !== null) {
-        // Fast path: re-decode the image then overlay cached detections.
+        // Fast path: compose on an offscreen canvas, then copy to visible canvas
+        // in one step to avoid the raw→blurred flash.
         this.showDetecting(true, 'loading-image');
-        await renderImage(item.file, item.canvas);
-        const ctx = item.canvas.getContext('2d')!;
+        const bitmap = await createImageBitmap(item.file, { imageOrientation: 'from-image' as ImageOrientation });
+        const offscreen = new OffscreenCanvas(bitmap.width, bitmap.height);
+        const offCtx = offscreen.getContext('2d')!;
+        offCtx.drawImage(bitmap, 0, 0);
+        bitmap.close();
         this.showDetecting(false);
-        const result = await this.applyOcrFilterAndDraw(ctx, cached, item.file, 'img');
+        const result = await this.applyOcrFilterAndDraw(offCtx, cached, item.file, 'img');
+        // Blit final composited result to visible canvas
+        item.canvas.width = offscreen.width;
+        item.canvas.height = offscreen.height;
+        const visCtx = item.canvas.getContext('2d')!;
+        visCtx.drawImage(offscreen, 0, 0);
         this.showDetectionResult(result.detections);
         (window as unknown as Record<string, unknown>).__lastDetections = result.detections;
         void this.showCachedOcrSuggestions(result.ocrTexts);
