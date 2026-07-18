@@ -5,7 +5,7 @@
  * user enters a plate string in the "Keep plates" field or focuses it.
  */
 
-import { getFileHash, type Detection } from './detector';
+import { getFileHash, idbGet, idbPut, type Detection } from './detector';
 import { LruMap } from './lruMap';
 
 declare const BUILD_VERSION: string;
@@ -27,9 +27,27 @@ const MAX_REC_WIDTH = 320;
 const MIN_PLATE_WIDTH = 45;
 const MIN_PLATE_HEIGHT = 10;
 
-// ── OCR cache ────────────────────────────────────────────────────────────────
+// ── OCR cache (in-memory + IndexedDB) ────────────────────────────────────────
 
 const ocrCache = new LruMap<string, string>(500);
+
+async function ocrCacheGet(key: string): Promise<string | undefined> {
+  const mem = ocrCache.get(key);
+  if (mem !== undefined) return mem;
+  const rec = await idbGet<{ key: string; text: string }>('ocr', key);
+  if (rec !== undefined) {
+    ocrCache.set(key, rec.text);
+    return rec.text;
+  }
+  return undefined;
+}
+
+function ocrCacheSet(key: string, text: string): void {
+  ocrCache.set(key, text);
+  idbPut('ocr', { key, text }).catch((err) =>
+    console.warn('[plateOcr] idbPut ocr failed:', err),
+  );
+}
 
 /** Build an OCR cache key. Single model, so no model variant in key. */
 function makeOcrKey(
@@ -279,6 +297,11 @@ function platePassesMinSize(
   return sourceBoxW >= MIN_PLATE_WIDTH && sourceBoxH >= MIN_PLATE_HEIGHT;
 }
 
+/** Clear the in-memory OCR cache (IDB is cleared separately by detector). */
+export function clearOcrCache(): void {
+  ocrCache.clear();
+}
+
 // ── Public API ───────────────────────────────────────────────────────────────
 
 /**
@@ -307,10 +330,10 @@ export async function recognizePlates(
   const results: OcrResult[] = [];
   for (const d of plates) {
     const key = makeOcrKey(fileHash, file.size, canvasW, canvasH, frameRef, d);
-    let text = ocrCache.get(key);
+    let text = await ocrCacheGet(key);
     if (text === undefined) {
       text = await recognizeOne(ctx, d, file, canvasW, canvasH);
-      ocrCache.set(key, text);
+      ocrCacheSet(key, text);
       console.log(`[plateOcr] recognized: "${text}" key="${key}"`);
     } else {
       console.log(`[plateOcr] cache hit: "${text}" key="${key}"`);
@@ -383,10 +406,10 @@ export async function filterByOcr(
   // Run OCR on all plate detections
   for (const d of plates) {
     const cacheKey = makeOcrKey(fileHash, file.size, canvasW, canvasH, frameRef, d);
-    let text = ocrCache.get(cacheKey);
+    let text = await ocrCacheGet(cacheKey);
     if (text === undefined) {
       text = await recognizeOne(ctx, d, file, canvasW, canvasH);
-      ocrCache.set(cacheKey, text);
+      ocrCacheSet(cacheKey, text);
       console.log(`[plateOcr] recognized: "${text}" key="${cacheKey}"`);
     }
     const bk = boxKey(d);

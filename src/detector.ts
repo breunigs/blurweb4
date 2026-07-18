@@ -117,7 +117,7 @@ export async function makeVideoKey(file: File, width: number, height: number, mi
 // ── IndexedDB ─────────────────────────────────────────────────────────────────
 
 const DB_NAME = 'blurweb4-detections';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 // Opened once and reused — IDBDatabase connections are long-lived and safe to share.
 const dbPromise: Promise<IDBDatabase> = new Promise((resolve, reject) => {
@@ -127,12 +127,13 @@ const dbPromise: Promise<IDBDatabase> = new Promise((resolve, reject) => {
     if (!db.objectStoreNames.contains('frames')) db.createObjectStore('frames', { keyPath: 'key' });
     if (!db.objectStoreNames.contains('stats')) db.createObjectStore('stats', { keyPath: 'id' });
     if (!db.objectStoreNames.contains('trims')) db.createObjectStore('trims', { keyPath: 'key' });
+    if (!db.objectStoreNames.contains('ocr')) db.createObjectStore('ocr', { keyPath: 'key' });
   };
   req.onsuccess = () => resolve(req.result);
   req.onerror = () => reject(req.error);
 });
 
-function idbGet<T>(store: string, key: string): Promise<T | undefined> {
+export function idbGet<T>(store: string, key: string): Promise<T | undefined> {
   return dbPromise.then(
     (db) =>
       new Promise((resolve, reject) => {
@@ -143,7 +144,7 @@ function idbGet<T>(store: string, key: string): Promise<T | undefined> {
   );
 }
 
-function idbPut(store: string, value: unknown): Promise<void> {
+export function idbPut(store: string, value: unknown): Promise<void> {
   return dbPromise.then(
     (db) =>
       new Promise((resolve, reject) => {
@@ -306,10 +307,11 @@ export async function applyFiltersWithOcr(
 /** All detection labels the current model family supports. */
 export const ALL_LABELS = ['plate', 'person'] as const;
 
-/** Clear the in-memory cache and all cached detections from IndexedDB. */
-export function clearDetectionCache(): Promise<void> {
+/** Clear the in-memory cache and all cached detections + OCR from IndexedDB. */
+export async function clearDetectionCache(): Promise<void> {
   memCache.clear();
-  return idbClear('frames');
+  if (_plateOcrModule) _plateOcrModule.clearOcrCache();
+  await Promise.all([idbClear('frames'), idbClear('ocr')]);
 }
 
 // ── Model loading ─────────────────────────────────────────────────────────────
