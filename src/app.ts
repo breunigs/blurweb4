@@ -111,6 +111,7 @@ export class App {
       (dets) => this.showDetectionResult(dets),
       (err) => this.showInferenceError(err),
       () => this.rerenderActive(),
+      (ocrTexts) => this.showCachedOcrSuggestions(ocrTexts),
       (index) => {
         this.detectStatusInline.classList.remove('visible');
         void this.updateNamingInfoPanel();
@@ -551,6 +552,23 @@ export class App {
     }
   }
 
+  /** Show suggestion chips from already-cached OCR texts (no OCR triggered). */
+  private async showCachedOcrSuggestions(ocrTexts: Map<string, string>): Promise<void> {
+    if (ocrTexts.size === 0) return;
+    const mod = await import('./plateOcr');
+    // Deduplicate texts (multiple boxes may have the same plate)
+    const seen = new Set<string>();
+    const results: Array<{ text: string }> = [];
+    for (const text of ocrTexts.values()) {
+      const norm = mod.normalizePlate(text);
+      if (norm.length > 0 && !seen.has(norm)) {
+        seen.add(norm);
+        results.push({ text });
+      }
+    }
+    this.renderSuggestionChips(results, mod);
+  }
+
   /** Trigger OCR on focus if not yet run for the current image. */
   private async showOcrSuggestions(): Promise<void> {
     const suggestionsEl = document.getElementById('keep-plates-suggestions');
@@ -599,6 +617,7 @@ export class App {
         const result = await this.applyOcrFilterAndDraw(ctx, cached, item.file, 'img');
         this.showDetectionResult(result.detections);
         (window as unknown as Record<string, unknown>).__lastDetections = result.detections;
+        void this.showCachedOcrSuggestions(result.ocrTexts);
       } else {
         // No cache yet — render and schedule inference.
         this.showDetecting(true, 'loading-image');
@@ -611,7 +630,10 @@ export class App {
           (dets) => {
             this.showDetecting(false);
             this.applyOcrFilterAndDraw(ctx, dets, item.file, 'img')
-              .then((result) => this.showDetectionResult(result.detections))
+              .then((result) => {
+                this.showDetectionResult(result.detections);
+                void this.showCachedOcrSuggestions(result.ocrTexts);
+              })
               .catch((err) => console.error('[app] applyDetections failed:', err));
           },
           (err) => this.showInferenceError(err),
