@@ -88,6 +88,12 @@ const STRINGS = {
     strip: 'Strip',
     setting_confidence: 'Min. confidence',
     setting_expansion: 'Area expansion',
+    setting_keep_plates: 'Keep plates',
+    keep_plates_placeholder: 'e.g. HH AB 1234',
+    keep_plates_help:
+      'Enter one or more license plates (comma-separated) to keep them visible instead of blurring. Use * as a wildcard to match any characters, e.g. HH*1234 matches HHAB1234. Focus this field to see recognized plates from the current image.',
+    info_btn_show_help: 'Show help',
+    info_btn_show_variables: 'Show variables',
     setting_labels: 'Detect',
     label_plate: 'Plates',
     label_person: 'Faces',
@@ -222,6 +228,12 @@ const STRINGS = {
     strip: 'Entfernen',
     setting_confidence: 'Min. Konfidenz',
     setting_expansion: 'Bereichserweiterung',
+    setting_keep_plates: 'Kennzeichen sichtbar lassen',
+    keep_plates_placeholder: 'z.B. HH AB 1234',
+    keep_plates_help:
+      'Ein oder mehrere Kennzeichen eingeben (kommagetrennt), um sie sichtbar zu lassen. * als Platzhalter verwenden, z.\u00A0B. HH*1234 passt auf HHAB1234. Feld fokussieren, um erkannte Kennzeichen aus dem aktuellen Bild anzuzeigen.',
+    info_btn_show_help: 'Hilfe anzeigen',
+    info_btn_show_variables: 'Variablen anzeigen',
     setting_labels: 'Erkennen',
     label_plate: 'Kennzeichen',
     label_person: 'Gesichter',
@@ -343,5 +355,8 @@ export function applyTranslations(): void {
   }
   for (const el of document.querySelectorAll<HTMLElement>('[data-i18n-label]')) {
     el.setAttribute('aria-label', t(el.dataset.i18nLabel as StringKey));
+  }
+  for (const el of document.querySelectorAll<HTMLElement>('[data-i18n-title]')) {
+    el.title = t(el.dataset.i18nTitle as StringKey);
   }
 }

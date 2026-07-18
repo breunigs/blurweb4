@@ -3,8 +3,9 @@ import { exportAsJpeg } from './imageExporter';
 import { applyPattern } from './naming';
 import { getConfig } from './config';
 import { jpegQualityFor } from './exportUtils';
-import { detectForExport, makeImageKey, applyFilters } from './detector';
+import { detectForExport, makeImageKey, applyFiltersWithOcr } from './detector';
 import { applyDetections } from './detectionDrawer';
+import { parseKeepPlates } from './config';
 import type { FileMeta } from './fileMeta';
 
 export interface ExportItem {
@@ -66,10 +67,15 @@ export async function runBatch(
         if (!item.detectionsDone && item.canvas && item.file) {
           const key = await makeImageKey(item.file, item.canvas.width, item.canvas.height);
           const cfg = getConfig();
+          const keepPlates = parseKeepPlates(cfg);
           const allDets = await detectForExport(item.canvas, key);
-          const filtered = applyFilters(allDets, cfg.minConfidence, cfg.enabledLabels);
           const ctx = item.canvas.getContext('2d')!;
-          await applyDetections(ctx, filtered, cfg.drawMode, cfg.solidColor, cfg.expansionFraction);
+          const result = await applyFiltersWithOcr(allDets, cfg.minConfidence, cfg.enabledLabels, keepPlates, ctx, item.file, 'img');
+          if (cfg.drawMode === 'outline') {
+            await applyDetections(ctx, result.allDetections, cfg.drawMode, cfg.solidColor, cfg.expansionFraction, result.ocrTexts, result.excludedKeys);
+          } else {
+            await applyDetections(ctx, result.detections, cfg.drawMode, cfg.solidColor, cfg.expansionFraction);
+          }
         }
         cb.onFileProgress(i, 1);
         const { blob, filename } = await exportAsJpeg(item.canvas!, item.name, item.file, item.keepMetadata, jpegQuality, outputStem);

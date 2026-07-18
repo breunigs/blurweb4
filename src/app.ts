@@ -5,10 +5,11 @@ import {
   getAverageInferenceMs,
   setModel,
   clearDetectionCache,
-  applyFilters,
+  applyFiltersWithOcr,
+  type OcrFilterResult,
 } from './detector';
 import { applyDetections } from './detectionDrawer';
-import { getConfig, setConfig, confirmLargeModelOk, DEFAULTS, type AppConfig, type ModelChoice } from './config';
+import { getConfig, setConfig, confirmLargeModelOk, parseKeepPlates, DEFAULTS, type AppConfig, type ModelChoice } from './config';
 import { applyPattern } from './naming';
 import { t, tpl, applyTranslations } from './i18n';
 import { getEntries, clearEntries, setOnUpdate, copyToClipboard } from './debugLog';
@@ -169,6 +170,23 @@ export class App {
         this.playback.updateTrimLabels(item);
       }
     };
+    w.__setKeepPlates = (val: string) => {
+      setConfig({ keepPlates: val });
+    };
+    w.__runOcr = async () => {
+      const item = this.store.items[this.store.activeIndex];
+      if (!item || item.isVideo) return [];
+      // Re-render raw image to get un-blurred pixels
+      await renderImage(item.file, item.canvas);
+      const ctx = item.canvas.getContext('2d')!;
+      const dets = w.__lastDetections as import('./detector').Detection[] | undefined;
+      if (!dets) return [];
+      const mod = await import('./plateOcr');
+      const results = await mod.recognizePlates(ctx, dets, item.file, 'img');
+      // Re-apply detections after OCR
+      await this.applyOcrFilterAndDraw(ctx, dets, item.file, 'img');
+      return results.map((r) => ({ text: mod.normalizePlate(r.text), raw: r.text }));
+    };
   }
 
   private syncConfigUI(): void {
@@ -211,6 +229,8 @@ export class App {
     if (cp) cp.value = cfg.solidColor;
     const bl = document.getElementById('solidcolor-label') as HTMLElement | null;
     if (bl) bl.style.setProperty('--solidcolor-swatch', cfg.solidColor);
+    const kp = document.getElementById('keep-plates-input') as HTMLInputElement | null;
+    if (kp) kp.value = cfg.keepPlates;
   }
 
   private async updateNamingInfoPanel(): Promise<void> {
@@ -440,6 +460,19 @@ export class App {
       panel.hidden = !panel.hidden;
       if (!panel.hidden) void this.updateNamingInfoPanel();
     });
+
+    // Keep-plates input
+    const keepPlatesInput = document.getElementById('keep-plates-input') as HTMLInputElement | null;
+    const debouncedKeepPlatesChange = debounce((value: string) => {
+      setConfig({ keepPlates: value.toUpperCase() });
+    }, 500);
+    keepPlatesInput?.addEventListener('input', () => debouncedKeepPlatesChange(keepPlatesInput.value));
+    keepPlatesInput?.addEventListener('focus', () => void this.showOcrSuggestions());
+
+    document.getElementById('keep-plates-info-btn')?.addEventListener('click', () => {
+      const panel = document.getElementById('keep-plates-info-panel');
+      if (panel) panel.hidden = !panel.hidden;
+    });
   }
 
   private static readonly EXPORT_ONLY_KEYS: ReadonlySet<keyof AppConfig> = new Set(['keepMetadata', 'keepAudio', 'exportMode', 'namingPattern']);
@@ -475,6 +508,82 @@ export class App {
     await this.rerenderActive();
   }
 
+  private async applyOcrFilterAndDraw(
+    ctx: CanvasRenderingContext2D,
+    dets: import('./detector').Detection[],
+    file: File,
+    frameRef: string,
+  ): Promise<OcrFilterResult> {
+    const cfg = getConfig();
+    const keepPlates = parseKeepPlates(cfg);
+    const result = await applyFiltersWithOcr(dets, cfg.minConfidence, cfg.enabledLabels, keepPlates, ctx, file, frameRef);
+    if (cfg.drawMode === 'outline') {
+      await applyDetections(ctx, result.allDetections, cfg.drawMode, cfg.solidColor, cfg.expansionFraction, result.ocrTexts, result.excludedKeys);
+    } else {
+      await applyDetections(ctx, result.detections, cfg.drawMode, cfg.solidColor, cfg.expansionFraction);
+    }
+    return result;
+  }
+
+  /** Populate suggestion chips from OCR results, excluding already-entered plates. */
+  private renderSuggestionChips(results: Array<{ text: string }>, mod: typeof import('./plateOcr')): void {
+    const suggestionsEl = document.getElementById('keep-plates-suggestions');
+    if (!suggestionsEl) return;
+    suggestionsEl.innerHTML = '';
+    const currentInput = (document.getElementById('keep-plates-input') as HTMLInputElement)?.value ?? '';
+    const currentPlates = new Set(currentInput.split(',').map((s) => mod.normalizePlate(s.trim())));
+
+    for (const r of results) {
+      const norm = mod.normalizePlate(r.text);
+      if (currentPlates.has(norm)) continue;
+      const btn = document.createElement('button');
+      btn.className = 'ocr-suggestion';
+      btn.textContent = r.text.toUpperCase();
+      btn.addEventListener('click', () => {
+        const input = document.getElementById('keep-plates-input') as HTMLInputElement;
+        const val = input.value.trim();
+        const newVal = val ? `${val}, ${r.text.toUpperCase()}` : r.text.toUpperCase();
+        input.value = newVal;
+        setConfig({ keepPlates: newVal.toUpperCase() });
+        btn.remove();
+      });
+      suggestionsEl.appendChild(btn);
+    }
+  }
+
+  /** Trigger OCR on focus if not yet run for the current image. */
+  private async showOcrSuggestions(): Promise<void> {
+    const suggestionsEl = document.getElementById('keep-plates-suggestions');
+    if (!suggestionsEl) return;
+    const item = this.store.items[this.store.activeIndex];
+    if (!item || item.isVideo) return;
+
+    const dets = (window as unknown as Record<string, unknown>).__lastDetections as import('./detector').Detection[] | undefined;
+    if (!dets || dets.length === 0) return;
+
+    const plates = dets.filter((d) => d.label === 'plate');
+    if (plates.length === 0) return;
+
+    // If suggestions are already showing, don't re-run OCR
+    if (suggestionsEl.children.length > 0) return;
+
+    suggestionsEl.innerHTML = '<span class="ocr-suggestions-loading">\u2026</span>';
+
+    try {
+      // Re-render raw image to get un-blurred pixels for OCR
+      await renderImage(item.file, item.canvas);
+      const ctx = item.canvas.getContext('2d')!;
+      const mod = await import('./plateOcr');
+      const results = await mod.recognizePlates(ctx, plates, item.file, 'img');
+      // Re-apply detections after OCR
+      await this.applyOcrFilterAndDraw(ctx, dets, item.file, 'img');
+      this.renderSuggestionChips(results, mod);
+    } catch (err) {
+      console.error('[app] OCR suggestions failed:', err);
+      suggestionsEl.innerHTML = '';
+    }
+  }
+
   private async rerenderActive(): Promise<void> {
     const item = this.store.items[this.store.activeIndex];
     if (!item) return;
@@ -487,10 +596,9 @@ export class App {
         await renderImage(item.file, item.canvas);
         const ctx = item.canvas.getContext('2d')!;
         this.showDetecting(false);
-        const filtered = applyFilters(cached, getConfig().minConfidence, getConfig().enabledLabels);
-        await applyDetections(ctx, filtered, getConfig().drawMode, getConfig().solidColor, getConfig().expansionFraction);
-        this.showDetectionResult(filtered);
-        (window as unknown as Record<string, unknown>).__lastDetections = filtered;
+        const result = await this.applyOcrFilterAndDraw(ctx, cached, item.file, 'img');
+        this.showDetectionResult(result.detections);
+        (window as unknown as Record<string, unknown>).__lastDetections = result.detections;
       } else {
         // No cache yet — render and schedule inference.
         this.showDetecting(true, 'loading-image');
@@ -502,9 +610,8 @@ export class App {
           key,
           (dets) => {
             this.showDetecting(false);
-            const filtered = applyFilters(dets, getConfig().minConfidence, getConfig().enabledLabels);
-            applyDetections(ctx, filtered, getConfig().drawMode, getConfig().solidColor, getConfig().expansionFraction)
-              .then(() => this.showDetectionResult(filtered))
+            this.applyOcrFilterAndDraw(ctx, dets, item.file, 'img')
+              .then((result) => this.showDetectionResult(result.detections))
               .catch((err) => console.error('[app] applyDetections failed:', err));
           },
           (err) => this.showInferenceError(err),

@@ -5,12 +5,12 @@ import {
   scheduleInference,
   makeVideoKey,
   getAverageInferenceMs,
-  applyFilters,
+  applyFiltersWithOcr,
   type Detection,
 } from './detector';
 import { applyDetections } from './detectionDrawer';
 import { drawSample, isHdrSample } from './hdrToneMapper';
-import { getConfig } from './config';
+import { getConfig, parseKeepPlates } from './config';
 import { t, tpl } from './i18n';
 
 function detStatusText(): string {
@@ -75,10 +75,19 @@ export class VideoPlayer {
     drawSample(sample, this.ctx, this.toneMappingEnabled);
   }
 
-  private applyAndNotify(dets: Detection[]): void {
-    const filtered = applyFilters(dets, getConfig().minConfidence, getConfig().enabledLabels);
-    applyDetections(this.ctx, filtered, getConfig().drawMode, getConfig().solidColor, getConfig().expansionFraction)
-      .then(() => this.onDetection?.(filtered))
+  private applyAndNotify(dets: Detection[], microsecondTimestamp: number): void {
+    const cfg = getConfig();
+    const keepPlates = parseKeepPlates(cfg);
+    const frameRef = `t${Math.round(microsecondTimestamp)}`;
+    applyFiltersWithOcr(dets, cfg.minConfidence, cfg.enabledLabels, keepPlates, this.ctx, this.file, frameRef)
+      .then(async (result) => {
+        if (cfg.drawMode === 'outline') {
+          await applyDetections(this.ctx, result.allDetections, cfg.drawMode, cfg.solidColor, cfg.expansionFraction, result.ocrTexts, result.excludedKeys);
+        } else {
+          await applyDetections(this.ctx, result.detections, cfg.drawMode, cfg.solidColor, cfg.expansionFraction);
+        }
+        this.onDetection?.(result.detections);
+      })
       .catch((err) => console.error('[videoPlayer] applyDetections failed:', err));
   }
 
@@ -108,20 +117,21 @@ export class VideoPlayer {
       const gen = this.inferenceGen;
       this.statusEl.classList.remove('visible');
 
-      const key = await makeVideoKey(this.file, this.canvas.width, this.canvas.height, firstSample.microsecondTimestamp);
+      const usTs = firstSample.microsecondTimestamp;
+      const key = await makeVideoKey(this.file, this.canvas.width, this.canvas.height, usTs);
       firstSample.close();
 
       const cached = await getCachedDetections(key);
       if (gen !== this.inferenceGen) return;
       if (cached !== null) {
-        this.applyAndNotify(cached);
+        this.applyAndNotify(cached, usTs);
       } else {
         this.statusEl.textContent = detStatusText();
         this.statusEl.classList.add('visible');
         scheduleInference(this.canvas, key, (dets) => {
           if (this.inferenceGen !== gen) return;
           this.statusEl.classList.remove('visible');
-          this.applyAndNotify(dets);
+          this.applyAndNotify(dets, usTs);
         });
       }
     }
@@ -160,7 +170,8 @@ export class VideoPlayer {
       const gen = this.inferenceGen;
       this.statusEl.classList.remove('visible');
 
-      const key = await makeVideoKey(this.file, this.canvas.width, this.canvas.height, sample.microsecondTimestamp);
+      const usTs = sample.microsecondTimestamp;
+      const key = await makeVideoKey(this.file, this.canvas.width, this.canvas.height, usTs);
       sample.close();
 
       const tCacheStart = performance.now();
@@ -170,7 +181,7 @@ export class VideoPlayer {
       );
       if (gen !== this.inferenceGen) return true; // frame was drawn even if inference skipped
       if (cached !== null) {
-        this.applyAndNotify(cached);
+        this.applyAndNotify(cached, usTs);
       } else {
         this.statusEl.textContent = detStatusText();
         this.statusEl.classList.add('visible');
@@ -178,7 +189,7 @@ export class VideoPlayer {
         scheduleInference(this.canvas, key, (dets) => {
           if (this.inferenceGen !== gen) return;
           this.statusEl.classList.remove('visible');
-          this.applyAndNotify(dets);
+          this.applyAndNotify(dets, usTs);
         });
       }
     }
@@ -218,20 +229,21 @@ export class VideoPlayer {
       const gen = this.inferenceGen;
       this.statusEl.classList.remove('visible');
 
-      const key = await makeVideoKey(this.file, this.canvas.width, this.canvas.height, sample.microsecondTimestamp);
+      const usTs = sample.microsecondTimestamp;
+      const key = await makeVideoKey(this.file, this.canvas.width, this.canvas.height, usTs);
       sample.close();
 
       const cached = await getCachedDetections(key);
       if (gen !== this.inferenceGen || !this.playing) continue;
       if (cached !== null) {
-        this.applyAndNotify(cached);
+        this.applyAndNotify(cached, usTs);
       } else {
         this.statusEl.textContent = detStatusText();
         this.statusEl.classList.add('visible');
         scheduleInference(this.canvas, key, (dets) => {
           if (this.inferenceGen !== gen) return;
           this.statusEl.classList.remove('visible');
-          this.applyAndNotify(dets);
+          this.applyAndNotify(dets, usTs);
         });
       }
     }

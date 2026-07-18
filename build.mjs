@@ -19,6 +19,16 @@ if (!existsSync(HEVC_WASM) || !existsSync(AVC_WASM)) {
   }
 }
 
+// ── OCR model artifacts ──────────────────────────────────────────────────────
+if (!existsSync('models/ocr/rec.onnx') || !existsSync('models/ocr/dict.txt')) {
+  console.log('OCR model missing — downloading…');
+  const result = spawnSync(process.execPath, ['scripts/download-ocr-model.mjs'], { stdio: 'inherit' });
+  if (result.status !== 0) {
+    console.error('OCR model download failed.');
+    process.exit(result.status ?? 1);
+  }
+}
+
 // ── onnxruntime-web WASM artifacts ───────────────────────────────────────────
 // Copy ort WASM files into dist/ort/ so the browser can fetch them.
 function copyOrtWasm() {
@@ -43,7 +53,7 @@ function generateServiceWorker() {
 const CACHE = 'blurweb-${version}';
 
 // Precache the core app shell so the UI loads offline.
-const PRECACHE = ['/', '/src/style.css', '/dist/bundle.js', '/dist/hevcWorker.js', '/dist/detectorWorker.js', '/dist/blurWorker.js'];
+const PRECACHE = ['/', '/src/style.css', '/dist/bundle.js', '/dist/hevcWorker.js', '/dist/detectorWorker.js', '/dist/blurWorker.js', '/dist/ocrWorker.js'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(PRECACHE)));
@@ -88,6 +98,7 @@ const buildConfig = {
     hevcWorker: 'src/hevcWorker.ts',
     detectorWorker: 'src/detector.worker.ts',
     blurWorker: 'src/blurWorker.ts',
+    ocrWorker: 'src/ocr.worker.ts',
   },
   bundle: true,
   outdir: 'dist',
@@ -111,5 +122,5 @@ if (dev) {
   console.log('Press Ctrl+C to stop.');
 } else {
   await esbuild.build(buildConfig);
-  console.log('Build complete → dist/bundle.js + dist/hevcWorker.js + dist/detectorWorker.js + dist/blurWorker.js');
+  console.log('Build complete → dist/bundle.js + dist/hevcWorker.js + dist/detectorWorker.js + dist/blurWorker.js + dist/ocrWorker.js');
 }

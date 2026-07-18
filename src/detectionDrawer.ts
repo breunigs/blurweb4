@@ -16,7 +16,12 @@ const LABEL_COLORS: Record<string, string[]> = {
   person: ['#0a84ff', '#5ac8fa', '#30d158', '#64d2ff'],
 };
 
-function drawOutline(ctx: AnyCtx, detections: Detection[]): void {
+function drawOutline(
+  ctx: AnyCtx,
+  detections: Detection[],
+  ocrTexts?: Map<string, string>,
+  excludedKeys?: Set<string>,
+): void {
   if (detections.length === 0) return;
   ctx.save();
   // Scale font to the shorter canvas dimension so labels are readable regardless
@@ -40,6 +45,30 @@ function drawOutline(ctx: AnyCtx, detections: Detection[]): void {
     ctx.fillRect(d.x, d.y - fontSize - 3, tw + 4, fontSize + 3);
     ctx.fillStyle = color;
     ctx.fillText(label, d.x + 2, d.y - 5);
+
+    // OCR text (if cached) — shown below the detection box
+    const bk = `${Math.round(d.x)},${Math.round(d.y)},${Math.round(d.w)},${Math.round(d.h)}`;
+    const ocrText = ocrTexts?.get(bk);
+    if (ocrText) {
+      const ocrLabel = `OCR: ${ocrText}`;
+      const otw = ctx.measureText(ocrLabel).width;
+      ctx.fillStyle = 'rgba(0,0,0,0.72)';
+      ctx.fillRect(d.x, d.y + d.h, otw + 4, fontSize + 3);
+      ctx.fillStyle = '#00ff88';
+      ctx.fillText(ocrLabel, d.x + 2, d.y + d.h + fontSize - 2);
+    }
+
+    // Exclusion cross — diagonal X over plates that will be kept unblurred
+    if (excludedKeys?.has(bk)) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(d.x, d.y);
+      ctx.lineTo(d.x + d.w, d.y + d.h);
+      ctx.moveTo(d.x + d.w, d.y);
+      ctx.lineTo(d.x, d.y + d.h);
+      ctx.stroke();
+    }
   }
   ctx.restore();
 }
@@ -69,13 +98,15 @@ export async function applyDetections(
   mode: DrawMode,
   color = '#000000',
   expansionFraction = 0,
+  ocrTexts?: Map<string, string>,
+  excludedKeys?: Set<string>,
 ): Promise<void> {
   if (detections.length === 0) return;
   const cw = (ctx as CanvasRenderingContext2D).canvas.width;
   const ch = (ctx as CanvasRenderingContext2D).canvas.height;
   const expanded = expandDetections(detections, expansionFraction, cw, ch);
   if (mode === 'outline') {
-    drawOutline(ctx, expanded);
+    drawOutline(ctx, expanded, ocrTexts, excludedKeys);
   } else {
     await blurrer.apply(ctx, expanded, mode, color);
   }

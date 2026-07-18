@@ -1271,6 +1271,97 @@ input[name="drawMode"][value="solidcolor"]:checked~#solidcolor-color-picker {
   overflow-x: auto;
 }
 
+/* ── Keep plates (OCR) ───────────────────────────────────────────────────── */
+
+.keep-plates-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+#keep-plates-input {
+  font-family: var(--mono);
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  background: var(--card2);
+  color: var(--text);
+  border-radius: 6px;
+  font-size: 13px;
+  min-width: 140px;
+  flex: 1;
+  max-width: 240px;
+  outline: none;
+}
+
+#keep-plates-info-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--card2);
+  color: var(--dim);
+  cursor: pointer;
+  font-size: 13px;
+  font-style: italic;
+  font-family: Georgia, serif;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+#keep-plates-info-panel {
+  margin-top: -8px;
+  margin-bottom: 4px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  background: var(--card2);
+  font-size: 13px;
+  color: var(--dim);
+  line-height: 1.5;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+}
+
+#keep-plates-info-panel p {
+  margin: 0;
+}
+
+#keep-plates-suggestions {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  align-items: center;
+  overflow: hidden;
+}
+
+.ocr-suggestion {
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  background: var(--card2);
+  color: var(--text);
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.ocr-suggestion:hover {
+  background: var(--accent);
+  color: #fff;
+}
+
+.ocr-suggestions-loading {
+  font-size: 12px;
+  color: var(--dim);
+}
+
 #naming-vars-table {
   border-collapse: collapse;
   width: 100%;

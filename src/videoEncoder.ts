@@ -10,8 +10,9 @@ import {
 } from 'mediabunny';
 import type { VideoSample } from 'mediabunny';
 import { detectEncoder } from './encoderConfig';
-import { detectForExport, makeVideoKey, applyFilters } from './detector';
+import { detectForExport, makeVideoKey, applyFiltersWithOcr } from './detector';
 import { applyDetections } from './detectionDrawer';
+import { parseKeepPlates } from './config';
 import { drawSample } from './hdrToneMapper';
 import { getConfig } from './config';
 import { effectiveBitrateFor } from './exportUtils';
@@ -184,13 +185,21 @@ export async function encodeVideo(
           // absolute container timestamp so the cache key matches the preview path.
           const tsAbsolute = sample.microsecondTimestamp + (trimStart ?? 0) * 1_000_000;
           const key = await makeVideoKey(file, offscreen.width, offscreen.height, tsAbsolute);
-          const detections = applyFilters(await detectForExport(offscreen, key), getConfig().minConfidence, getConfig().enabledLabels);
+          const cfg = getConfig();
+          const keepPlates = parseKeepPlates(cfg);
+          const allDets = await detectForExport(offscreen, key);
+          const frameRef = `t${Math.round(tsAbsolute)}`;
+          const result = await applyFiltersWithOcr(allDets, cfg.minConfidence, cfg.enabledLabels, keepPlates, offCtx!, file, frameRef);
           if (isCancelled?.()) throw new DOMException('Export cancelled', 'AbortError');
-          await applyDetections(offCtx!, detections, drawMode, solidColor, getConfig().expansionFraction);
+          if (drawMode === 'outline') {
+            await applyDetections(offCtx!, result.allDetections, drawMode, solidColor, cfg.expansionFraction, result.ocrTexts, result.excludedKeys);
+          } else {
+            await applyDetections(offCtx!, result.detections, drawMode, solidColor, cfg.expansionFraction);
+          }
           // Expose for integration tests — populate only when the test has armed the collector.
           const _g = window as unknown as Record<string, unknown>;
           if (Array.isArray(_g.__exportedFrameDetections)) {
-            (_g.__exportedFrameDetections as unknown[]).push(detections);
+            (_g.__exportedFrameDetections as unknown[]).push(result.detections);
           }
           return offscreen;
         },

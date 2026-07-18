@@ -85,7 +85,7 @@ interface PendingItem {
 // keys, while the same file loaded across sessions always hits the IDB cache.
 const fileHashes = new WeakMap<File, string>();
 
-async function getFileHash(file: File): Promise<string> {
+export async function getFileHash(file: File): Promise<string> {
   let hash = fileHashes.get(file);
   if (!hash) {
     if (crypto.subtle) {
@@ -246,6 +246,59 @@ export function filterByLabel(dets: Detection[], enabledLabels: string[]): Detec
 /** Apply both confidence and label filters from config. */
 export function applyFilters(dets: Detection[], minConf: number, enabledLabels: string[]): Detection[] {
   return filterByLabel(filterByConf(dets, minConf), enabledLabels);
+}
+
+// ── OCR integration ──────────────────────────────────────────────────────────
+
+type AnyCtx = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
+
+export interface OcrFilterResult {
+  /** Detections with excluded plates removed (for non-outline rendering). */
+  detections: Detection[];
+  /** All detections after confidence+label filtering, NOT OCR-excluded (for outline mode). */
+  allDetections: Detection[];
+  /** Box keys of plates excluded by OCR match. */
+  excludedKeys: Set<string>;
+  /** All recognized plate texts keyed by box coordinates. */
+  ocrTexts: Map<string, string>;
+}
+
+// Module-level cached import — resolved once, reused forever.
+let _plateOcrModule: typeof import('./plateOcr') | null = null;
+
+async function getPlateOcr() {
+  if (!_plateOcrModule) _plateOcrModule = await import('./plateOcr');
+  return _plateOcrModule;
+}
+
+/**
+ * Apply confidence + label filters, then optionally run OCR to exclude kept plates.
+ * Returns both the filtered array and debug metadata for outline mode.
+ */
+export async function applyFiltersWithOcr(
+  dets: Detection[],
+  minConf: number,
+  enabledLabels: string[],
+  keepPlates: string[],
+  ctx: AnyCtx | null,
+  file: File | null,
+  frameRef: string,
+): Promise<OcrFilterResult> {
+  const allDetections = applyFilters(dets, minConf, enabledLabels);
+  if (keepPlates.length === 0 || !ctx || !file) {
+    // Even without active keepPlates, return cached OCR texts for debug/outline display.
+    let ocrTexts = new Map<string, string>();
+    if (_plateOcrModule && file && ctx) {
+      const canvasW = (ctx as CanvasRenderingContext2D).canvas.width;
+      const canvasH = (ctx as CanvasRenderingContext2D).canvas.height;
+      const hash = fileHashes.get(file) ?? null;
+      ocrTexts = _plateOcrModule.getLoadedOcrTexts(file, hash, canvasW, canvasH, frameRef, allDetections) ?? new Map();
+    }
+    return { detections: allDetections, allDetections, excludedKeys: new Set(), ocrTexts };
+  }
+  const mod = await getPlateOcr();
+  const { filtered, excludedKeys, ocrTexts } = await mod.filterByOcr(ctx, allDetections, keepPlates, file, frameRef);
+  return { detections: filtered, allDetections, excludedKeys, ocrTexts };
 }
 
 /** All detection labels the current model family supports. */

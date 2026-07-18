@@ -7,6 +7,7 @@
     "dev": "node build.mjs --dev",
     "build": "node build.mjs",
     "build:wasm": "node scripts/build-wasm.mjs",
+    "build:ocr": "node scripts/download-ocr-model.mjs",
     "prepare-tauri-dist": "node scripts/prepare-tauri-dist.mjs",
     "tauri": "tauri",
     "test": "playwright test"

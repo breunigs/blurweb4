@@ -16,6 +16,8 @@ export interface AppConfig {
   /** Which detection labels to redact. */
   enabledLabels: string[];
   namingPattern: string;
+  /** Comma-separated plate strings to keep unblurred. Empty = OCR disabled. */
+  keepPlates: string;
 }
 
 const STORAGE_KEY = 'blurweb4-config';
@@ -30,6 +32,7 @@ export const DEFAULTS: AppConfig = {
   expansionFraction: 0,
   enabledLabels: ['plate', 'person'],
   namingPattern: '{input}',
+  keepPlates: '',
 };
 
 function load(): AppConfig {
@@ -77,6 +80,12 @@ export function confirmLargeModelOk(): void {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(current));
     } catch { /* ok */ }
   }
+}
+
+/** Parse the keepPlates config string into an array of non-empty trimmed entries. */
+export function parseKeepPlates(cfg: AppConfig): string[] {
+  if (!cfg.keepPlates) return [];
+  return cfg.keepPlates.split(',').map((s) => s.trim()).filter(Boolean);
 }
 
 export function setConfig(patch: Partial<AppConfig>): void {

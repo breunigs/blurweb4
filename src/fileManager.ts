@@ -4,12 +4,12 @@ import {
   getCachedDetections,
   scheduleInference,
   makeImageKey,
-  applyFilters,
+  applyFiltersWithOcr,
 } from './detector';
 import { loadTrim } from './trimStorage';
 import { applyDetections } from './detectionDrawer';
 import { renderImage } from './imageRenderer';
-import { getConfig } from './config';
+import { getConfig, parseKeepPlates } from './config';
 import { t, tpl } from './i18n';
 import { type MediaItem, type ItemStore } from './types';
 import type { Detection } from './detector';
@@ -297,12 +297,18 @@ export class FileManager {
           const key = await makeImageKey(file, canvas.width, canvas.height);
           const cached = await getCachedDetections(key);
           if (cached !== null) {
-            const filtered = applyFilters(cached, getConfig().minConfidence, getConfig().enabledLabels);
-            await applyDetections(ctx, filtered, getConfig().drawMode, getConfig().solidColor, getConfig().expansionFraction);
+            const cfg = getConfig();
+            const keepPlates = parseKeepPlates(cfg);
+            const result = await applyFiltersWithOcr(cached, cfg.minConfidence, cfg.enabledLabels, keepPlates, ctx, file, 'img');
+            if (cfg.drawMode === 'outline') {
+              await applyDetections(ctx, result.allDetections, cfg.drawMode, cfg.solidColor, cfg.expansionFraction, result.ocrTexts, result.excludedKeys);
+            } else {
+              await applyDetections(ctx, result.detections, cfg.drawMode, cfg.solidColor, cfg.expansionFraction);
+            }
             item.detectionsDone = true;
             if (this.store.items[this.store.activeIndex] === item) {
-              this.onShowDetectionResult(filtered);
-              (window as unknown as Record<string, unknown>).__lastDetections = filtered;
+              this.onShowDetectionResult(result.detections);
+              (window as unknown as Record<string, unknown>).__lastDetections = result.detections;
             } else {
               this.clearExamplesLoading();
             }
@@ -316,12 +322,18 @@ export class FileManager {
               key,
               (dets) => {
                 this.onShowDetecting(false);
-                const filtered = applyFilters(dets, getConfig().minConfidence, getConfig().enabledLabels);
-                applyDetections(ctx, filtered, getConfig().drawMode, getConfig().solidColor, getConfig().expansionFraction)
-                  .then(() => {
+                const cfg2 = getConfig();
+                const keepPlates2 = parseKeepPlates(cfg2);
+                applyFiltersWithOcr(dets, cfg2.minConfidence, cfg2.enabledLabels, keepPlates2, ctx, file, 'img')
+                  .then(async (result) => {
+                    if (cfg2.drawMode === 'outline') {
+                      await applyDetections(ctx, result.allDetections, cfg2.drawMode, cfg2.solidColor, cfg2.expansionFraction, result.ocrTexts, result.excludedKeys);
+                    } else {
+                      await applyDetections(ctx, result.detections, cfg2.drawMode, cfg2.solidColor, cfg2.expansionFraction);
+                    }
                     item.detectionsDone = true;
                     if (this.store.items[this.store.activeIndex] === item) {
-                      this.onShowDetectionResult(filtered);
+                      this.onShowDetectionResult(result.detections);
                     } else {
                       this.clearExamplesLoading();
                     }

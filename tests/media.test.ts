@@ -2032,3 +2032,113 @@ test.describe('Step 2 header title updates on file switch', () => {
     expect(titleBackToVideo?.trim().toLowerCase(), 'Title should mention trim again after switching back to video').toContain('trim');
   });
 });
+
+// ── OCR — license plate recognition ────────────────────────────────────────
+// examples/jpeg.jpg has a visible license plate "HH MD 821" near x=1318, y=322.
+// The real detect_n detection box is only 58px wide (below the 60px OCR threshold),
+// so we inject a wider detection box at the real plate location.
+
+const OCR_PLATE_DETECTION: Detection = {
+  label: 'plate', conf: 0.88, x: 1310, y: 318, w: 75, h: 22,
+};
+
+test.describe('OCR — plate recognition', () => {
+  test('OCR recognizes plate text from jpeg.jpg', async ({ page }) => {
+    // Inject a plate detection covering the real plate location (wider than 60px for OCR)
+    await injectDetections(page, [OCR_PLATE_DETECTION]);
+    await loadFile(page, path.join(EXAMPLES, 'jpeg.jpg'));
+    await waitForCanvas(page);
+    await waitForDetections(page);
+
+    // Run OCR on the detected plate via test helper (may download OCR model — allow 2 min)
+    test.setTimeout(180_000);
+    const ocrResults = await page.evaluate(() => (window as any).__runOcr()) as Array<{ text: string; raw: string }>;
+
+    const texts = ocrResults.map((r) => r.text);
+    // The model reliably recognizes "821" but letter prefixes vary across browsers
+    // (Chromium: "HHRMD821", Firefox: "MO821") due to canvas resize quality differences.
+    expect(texts.some((t) => t.includes('821')),
+      `Expected OCR to recognize *821 pattern, got: ${JSON.stringify(texts)}`).toBe(true);
+  });
+});
+
+test.describe('OCR — selective unblurring', () => {
+  test('keepPlates excludes matched plate from solidcolor redaction', async ({ page }) => {
+    test.setTimeout(180_000); // OCR model download may be slow
+    // Use solidcolor mode so blurred pixels are near-black (easy to test)
+    await injectDetections(page, [OCR_PLATE_DETECTION]);
+    await page.goto('http://localhost:3100');
+    await page.evaluate(() => (window as any).__setDrawMode?.('solidcolor'));
+    await page.locator('#file-input').setInputFiles(path.join(EXAMPLES, 'jpeg.jpg'));
+    await waitForCanvas(page);
+    await waitForDetections(page);
+
+    // Sample a pixel inside the plate box — should be near-black (redacted)
+    const pxBefore = await page.evaluate(() => {
+      const canvas = document.querySelector<HTMLCanvasElement>('.canvas-wrapper.active canvas')!;
+      const d = canvas.getContext('2d')!.getImageData(1340, 325, 1, 1).data;
+      return [d[0], d[1], d[2]];
+    });
+    expect(pxBefore[0] + pxBefore[1] + pxBefore[2], 'plate pixel should be near-black before keepPlates').toBeLessThan(30);
+
+    // Set keepPlates to match the plate — OCR will recognize it and exclude it.
+    // Use *821 wildcard since letter prefixes vary by browser.
+    await page.evaluate(() => (window as any).__lastDetections = undefined);
+    await page.evaluate(() => (window as any).__setKeepPlates?.('*821'));
+    await waitForDetections(page, 120_000); // OCR model loading may take time
+
+    // Sample same pixel — should no longer be black (plate is visible/unblurred)
+    const pxAfter = await page.evaluate(() => {
+      const canvas = document.querySelector<HTMLCanvasElement>('.canvas-wrapper.active canvas')!;
+      const d = canvas.getContext('2d')!.getImageData(1340, 325, 1, 1).data;
+      return [d[0], d[1], d[2]];
+    });
+    expect(pxAfter[0] + pxAfter[1] + pxAfter[2], 'plate pixel should NOT be black after keepPlates match').toBeGreaterThan(30);
+
+    // Clear keepPlates — plate should be redacted again
+    await page.evaluate(() => (window as any).__lastDetections = undefined);
+    await page.evaluate(() => (window as any).__setKeepPlates?.(''));
+    await waitForDetections(page);
+
+    const pxCleared = await page.evaluate(() => {
+      const canvas = document.querySelector<HTMLCanvasElement>('.canvas-wrapper.active canvas')!;
+      const d = canvas.getContext('2d')!.getImageData(1340, 325, 1, 1).data;
+      return [d[0], d[1], d[2]];
+    });
+    expect(pxCleared[0] + pxCleared[1] + pxCleared[2], 'plate pixel should be black again after clearing keepPlates').toBeLessThan(30);
+  });
+
+  test('wildcard matching: *821 matches, XX*999 does not', async ({ page }) => {
+    test.setTimeout(180_000);
+    await injectDetections(page, [OCR_PLATE_DETECTION]);
+    await page.goto('http://localhost:3100');
+    await page.evaluate(() => (window as any).__setDrawMode?.('solidcolor'));
+    await page.locator('#file-input').setInputFiles(path.join(EXAMPLES, 'jpeg.jpg'));
+    await waitForCanvas(page);
+    await waitForDetections(page);
+
+    // *821 should match — plate stays visible
+    await page.evaluate(() => (window as any).__lastDetections = undefined);
+    await page.evaluate(() => (window as any).__setKeepPlates?.('*821'));
+    await waitForDetections(page, 120_000);
+
+    const pxMatch = await page.evaluate(() => {
+      const canvas = document.querySelector<HTMLCanvasElement>('.canvas-wrapper.active canvas')!;
+      const d = canvas.getContext('2d')!.getImageData(1340, 325, 1, 1).data;
+      return [d[0], d[1], d[2]];
+    });
+    expect(pxMatch[0] + pxMatch[1] + pxMatch[2], '*821 should match — pixel should not be black').toBeGreaterThan(30);
+
+    // XX*999 should NOT match — plate is blurred
+    await page.evaluate(() => (window as any).__lastDetections = undefined);
+    await page.evaluate(() => (window as any).__setKeepPlates?.('XX*999'));
+    await waitForDetections(page);
+
+    const pxNoMatch = await page.evaluate(() => {
+      const canvas = document.querySelector<HTMLCanvasElement>('.canvas-wrapper.active canvas')!;
+      const d = canvas.getContext('2d')!.getImageData(1340, 325, 1, 1).data;
+      return [d[0], d[1], d[2]];
+    });
+    expect(pxNoMatch[0] + pxNoMatch[1] + pxNoMatch[2], 'XX*999 should not match — pixel should be black').toBeLessThan(30);
+  });
+});
