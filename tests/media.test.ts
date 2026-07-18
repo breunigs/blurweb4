@@ -2062,6 +2062,33 @@ test.describe('OCR — plate recognition', () => {
   });
 });
 
+test.describe('OCR — initial load', () => {
+  test('__lastDetections contains filtered detections after initial inference', async ({ page }) => {
+    // On initial load (no IDB cache), __lastDetections should be set to the
+    // confidence/label-filtered detections — NOT the raw YOLO output.
+    await loadFile(page, path.join(EXAMPLES, 'jpeg.jpg'));
+    await waitForCanvas(page);
+    const dets = await waitForDetections(page);
+
+    // Raw YOLO output has ~43 detections; filtered should be ~18 at default config.
+    expect(dets.length, '__lastDetections should have filtered detections, not raw').toBeLessThan(30);
+  });
+
+  test('OCR recognizes plate on first load without needing reload', async ({ page }) => {
+    test.setTimeout(180_000);
+    await injectDetections(page, [OCR_PLATE_DETECTION]);
+    await loadFile(page, path.join(EXAMPLES, 'jpeg.jpg'));
+    await waitForCanvas(page);
+    await waitForDetections(page);
+
+    // Run OCR immediately after first inference (no page reload)
+    const ocrResults = await page.evaluate(() => (window as any).__runOcr()) as Array<{ text: string; raw: string }>;
+    const texts = ocrResults.map((r) => r.text);
+    expect(texts.some((t) => t.includes('821')),
+      `OCR should work on first load, got: ${JSON.stringify(texts)}`).toBe(true);
+  });
+});
+
 test.describe('OCR — selective unblurring', () => {
   test('keepPlates excludes matched plate from solidcolor redaction', async ({ page }) => {
     test.setTimeout(180_000); // OCR model download may be slow

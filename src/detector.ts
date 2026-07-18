@@ -613,7 +613,6 @@ async function drainQueue(): Promise<void> {
       req.onError?.(error);
       continue;
     }
-    (window as unknown as Record<string, unknown>).__lastDetections = detections;
     (window as unknown as Record<string, unknown>).__lastInferenceKey = req.key;
     req.callback(detections);
   }

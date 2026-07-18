@@ -101,6 +101,25 @@ function ensureWorker(): Promise<void> {
 let workerReadyResolve: (() => void) | null = null;
 let workerReadyReject: ((e: Error) => void) | null = null;
 
+// ── Source dimensions ────────────────────────────────────────────────────────
+
+/** Get source image dimensions. Falls back to canvas dimensions for video files. */
+async function getSourceDims(
+  file: File,
+  canvasW: number,
+  canvasH: number,
+): Promise<{ sourceW: number; sourceH: number }> {
+  if (file.type.startsWith('image/')) {
+    const bitmap = await createImageBitmap(file);
+    const sourceW = bitmap.width;
+    const sourceH = bitmap.height;
+    bitmap.close();
+    return { sourceW, sourceH };
+  }
+  // Video files: canvas already has the frame at display resolution
+  return { sourceW: canvasW, sourceH: canvasH };
+}
+
 // ── Plate cropping ───────────────────────────────────────────────────────────
 
 /** Reusable OffscreenCanvas for resizing plate crops to 48×W. */
@@ -216,17 +235,16 @@ async function recognizeOne(
 
   if (!crop) {
     // Preview plate is too small — try extracting from full-resolution source
-    // Map detection coords to source dimensions and check if it meets the threshold
-    const bitmap = await createImageBitmap(sourceFile);
-    const srcW = bitmap.width;
-    const srcH = bitmap.height;
-    bitmap.close();
+    const { sourceW: srcW, sourceH: srcH } = await getSourceDims(sourceFile, canvasW, canvasH);
 
     const sourceBoxW = Math.round(d.w * srcW / canvasW);
     const sourceBoxH = Math.round(d.h * srcH / canvasH);
     if (sourceBoxW < MIN_PLATE_WIDTH || sourceBoxH < MIN_PLATE_HEIGHT) return '';
 
-    crop = await cropPlateFromSource(sourceFile, d, canvasW, canvasH);
+    // Only attempt source crop for images (video frames are already on canvas)
+    if (sourceFile.type.startsWith('image/')) {
+      crop = await cropPlateFromSource(sourceFile, d, canvasW, canvasH);
+    }
   }
 
   if (!crop) return '';
@@ -276,11 +294,7 @@ export async function recognizePlates(
   const canvasW = (ctx as CanvasRenderingContext2D).canvas.width;
   const canvasH = (ctx as CanvasRenderingContext2D).canvas.height;
 
-  // Get source dimensions for min-size check
-  const bitmap = await createImageBitmap(file);
-  const sourceW = bitmap.width;
-  const sourceH = bitmap.height;
-  bitmap.close();
+  const { sourceW, sourceH } = await getSourceDims(file, canvasW, canvasH);
 
   const plates = detections
     .filter((d) => d.label === 'plate' && platePassesMinSize(d, canvasW, canvasH, sourceW, sourceH))
@@ -357,11 +371,7 @@ export async function filterByOcr(
   const canvasW = (ctx as CanvasRenderingContext2D).canvas.width;
   const canvasH = (ctx as CanvasRenderingContext2D).canvas.height;
 
-  // Get source dimensions for min-size check
-  const bitmap = await createImageBitmap(file);
-  const sourceW = bitmap.width;
-  const sourceH = bitmap.height;
-  bitmap.close();
+  const { sourceW, sourceH } = await getSourceDims(file, canvasW, canvasH);
 
   const plates = detections.filter((d) =>
     d.label === 'plate' && platePassesMinSize(d, canvasW, canvasH, sourceW, sourceH),

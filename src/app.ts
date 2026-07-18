@@ -589,11 +589,11 @@ export class App {
     suggestionsEl.innerHTML = '<span class="ocr-suggestions-loading">\u2026</span>';
 
     try {
-      // Render to an offscreen canvas so the visible preview doesn't flash
+      // Render to an offscreen canvas at preview dimensions (detection coords are in this space)
       const bitmap = await createImageBitmap(item.file, { imageOrientation: 'from-image' as ImageOrientation });
-      const offscreen = new OffscreenCanvas(bitmap.width, bitmap.height);
+      const offscreen = new OffscreenCanvas(item.canvas.width, item.canvas.height);
       const offCtx = offscreen.getContext('2d')!;
-      offCtx.drawImage(bitmap, 0, 0);
+      offCtx.drawImage(bitmap, 0, 0, item.canvas.width, item.canvas.height);
       bitmap.close();
       const mod = await import('./plateOcr');
       const results = await mod.recognizePlates(offCtx, plates, item.file, 'img');
@@ -643,6 +643,7 @@ export class App {
             this.applyOcrFilterAndDraw(ctx, dets, item.file, 'img')
               .then((result) => {
                 this.showDetectionResult(result.detections);
+                (window as unknown as Record<string, unknown>).__lastDetections = result.detections;
                 void this.showCachedOcrSuggestions(result.ocrTexts);
               })
               .catch((err) => console.error('[app] applyDetections failed:', err));
