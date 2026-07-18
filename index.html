@@ -150,17 +150,21 @@
 
         <!-- Keep plates unblurred (OCR) -->
         <div class="setting-row" id="keep-plates-row">
-          <span class="setting-row-label" data-i18n="setting_keep_plates">Keep some plates</span>
+          <span class="setting-row-label" data-i18n="setting_keep_plates">Keep plates</span>
           <label class="toggle-label">
             <input type="checkbox" id="keep-plates-toggle">
+            <span data-i18n="keep_plates_enable">enable detection</span>
           </label>
         </div>
         <div id="keep-plates-details" hidden>
-          <div class="keep-plates-wrap">
-            <input type="text" id="keep-plates-input" placeholder="e.g. HH AB 1234"
-                   data-i18n-placeholder="keep_plates_placeholder">
-            <button id="keep-plates-info-btn" title="Show help" data-i18n-title="info_btn_show_help">i</button>
-            <div id="keep-plates-suggestions"></div>
+          <div class="setting-row">
+            <span class="setting-row-label"></span>
+            <div class="keep-plates-wrap">
+              <input type="text" id="keep-plates-input" placeholder="e.g. HH AB 1234"
+                     data-i18n-placeholder="keep_plates_placeholder">
+              <button id="keep-plates-info-btn" title="Show help" data-i18n-title="info_btn_show_help">i</button>
+              <div id="keep-plates-suggestions"></div>
+            </div>
           </div>
         </div>
         <div id="keep-plates-info-panel" hidden>

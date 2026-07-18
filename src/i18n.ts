@@ -88,7 +88,8 @@ const STRINGS = {
     strip: 'Strip',
     setting_confidence: 'Min. confidence',
     setting_expansion: 'Area expansion',
-    setting_keep_plates: 'Keep some plates',
+    setting_keep_plates: 'Keep plates',
+    keep_plates_enable: 'enable detection',
     keep_plates_placeholder: 'e.g. HH AB 1234',
     keep_plates_help:
       'Enter one or more license plates (comma-separated) to keep them visible instead of blurring. Use * as a wildcard to match any characters, e.g. HH*1234 matches HHAB1234.',
@@ -228,7 +229,8 @@ const STRINGS = {
     strip: 'Entfernen',
     setting_confidence: 'Min. Konfidenz',
     setting_expansion: 'Bereichserweiterung',
-    setting_keep_plates: 'Einige Kennzeichen behalten',
+    setting_keep_plates: 'Kennzeichen behalten',
+    keep_plates_enable: 'Erkennung aktivieren',
     keep_plates_placeholder: 'z.B. HH AB 1234',
     keep_plates_help:
       'Ein oder mehrere Kennzeichen eingeben (kommagetrennt), um sie sichtbar zu lassen. * als Platzhalter verwenden, z.\u00A0B. HH*1234 passt auf HHAB1234.',

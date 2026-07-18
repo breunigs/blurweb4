@@ -12,6 +12,7 @@
  */
 
 import { getConfig, type ModelChoice } from './config';
+import { idbGet, idbPut, idbClear } from './db';
 import { LruMap } from './lruMap';
 
 declare const BUILD_VERSION: string;
@@ -114,59 +115,9 @@ export async function makeVideoKey(file: File, width: number, height: number, mi
   return `${getModelName()}|${await getFileHash(file)}|${file.name}|${file.size}|${width}x${height}|t${Math.round(microsecondTimestamp)}`;
 }
 
-// ── IndexedDB ─────────────────────────────────────────────────────────────────
-
-const DB_NAME = 'blurweb4-detections';
-const DB_VERSION = 3;
-
-// Opened once and reused — IDBDatabase connections are long-lived and safe to share.
-const dbPromise: Promise<IDBDatabase> = new Promise((resolve, reject) => {
-  const req = indexedDB.open(DB_NAME, DB_VERSION);
-  req.onupgradeneeded = () => {
-    const db = req.result;
-    if (!db.objectStoreNames.contains('frames')) db.createObjectStore('frames', { keyPath: 'key' });
-    if (!db.objectStoreNames.contains('stats')) db.createObjectStore('stats', { keyPath: 'id' });
-    if (!db.objectStoreNames.contains('trims')) db.createObjectStore('trims', { keyPath: 'key' });
-    if (!db.objectStoreNames.contains('ocr')) db.createObjectStore('ocr', { keyPath: 'key' });
-  };
-  req.onsuccess = () => resolve(req.result);
-  req.onerror = () => reject(req.error);
-});
-
-export function idbGet<T>(store: string, key: string): Promise<T | undefined> {
-  return dbPromise.then(
-    (db) =>
-      new Promise((resolve, reject) => {
-        const req = db.transaction(store, 'readonly').objectStore(store).get(key);
-        req.onsuccess = () => resolve(req.result as T | undefined);
-        req.onerror = () => reject(req.error);
-      }),
-  );
-}
-
-export function idbPut(store: string, value: unknown): Promise<void> {
-  return dbPromise.then(
-    (db) =>
-      new Promise((resolve, reject) => {
-        const tx = db.transaction(store, 'readwrite');
-        tx.objectStore(store).put(value);
-        tx.oncomplete = () => resolve();
-        tx.onerror = () => reject(tx.error);
-      }),
-  );
-}
-
-function idbClear(store: string): Promise<void> {
-  return dbPromise.then(
-    (db) =>
-      new Promise((resolve, reject) => {
-        const tx = db.transaction(store, 'readwrite');
-        tx.objectStore(store).clear();
-        tx.oncomplete = () => resolve();
-        tx.onerror = () => reject(tx.error);
-      }),
-  );
-}
+// ── IndexedDB (shared connection from db.ts) ─────────────────────────────────
+// Re-export for consumers that import from detector.ts (e.g. plateOcr.ts)
+export { idbGet, idbPut };
 
 // ── Statistics (per-model) ────────────────────────────────────────────────────
 
@@ -272,6 +223,11 @@ let _plateOcrModule: typeof import('./plateOcr') | null = null;
 async function getPlateOcr() {
   if (!_plateOcrModule) _plateOcrModule = await import('./plateOcr');
   return _plateOcrModule;
+}
+
+/** Allow external code to register the plateOcr module once loaded. */
+export function registerPlateOcrModule(mod: typeof import('./plateOcr')): void {
+  _plateOcrModule = mod;
 }
 
 /**

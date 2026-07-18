@@ -6,6 +6,7 @@ import {
   setModel,
   clearDetectionCache,
   applyFiltersWithOcr,
+  registerPlateOcrModule,
   type OcrFilterResult,
 } from './detector';
 import { applyDetections } from './detectionDrawer';
@@ -172,7 +173,7 @@ export class App {
       }
     };
     w.__setKeepPlates = (val: string) => {
-      setConfig({ keepPlates: val });
+      setConfig({ keepPlatesEnabled: val.length > 0, keepPlates: val });
     };
     w.__runOcr = async () => {
       const item = this.store.items[this.store.activeIndex];
@@ -612,8 +613,13 @@ export class App {
       offCtx.drawImage(bitmap, 0, 0, item.canvas.width, item.canvas.height);
       bitmap.close();
       const mod = await import('./plateOcr');
+      registerPlateOcrModule(mod);
       const results = await mod.recognizePlates(offCtx, plates, item.file, 'img');
       this.renderSuggestionChips(results, mod);
+      // Re-render so outline mode shows the newly-cached OCR texts.
+      if (results.length > 0 && getConfig().drawMode === 'outline') {
+        void this.rerenderActive();
+      }
     } catch (err) {
       console.error('[app] OCR suggestions failed:', err);
       suggestionsEl.innerHTML = '';

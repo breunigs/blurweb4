@@ -310,7 +310,7 @@ export class FileManager {
             if (this.store.items[this.store.activeIndex] === item) {
               this.onShowDetectionResult(result.detections);
               (window as unknown as Record<string, unknown>).__lastDetections = result.detections;
-              if (result.ocrTexts.size > 0) this.onOcrTextsAvailable(result.ocrTexts);
+              this.onOcrTextsAvailable(result.ocrTexts);
             } else {
               this.clearExamplesLoading();
             }
@@ -337,7 +337,7 @@ export class FileManager {
                     if (this.store.items[this.store.activeIndex] === item) {
                       this.onShowDetectionResult(result.detections);
                       (window as unknown as Record<string, unknown>).__lastDetections = result.detections;
-                      if (result.ocrTexts.size > 0) this.onOcrTextsAvailable(result.ocrTexts);
+                      this.onOcrTextsAvailable(result.ocrTexts);
                     } else {
                       this.clearExamplesLoading();
                     }
