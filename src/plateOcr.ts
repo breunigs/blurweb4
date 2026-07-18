@@ -8,6 +8,8 @@
 import { getFileHash, type Detection } from './detector';
 import { LruMap } from './lruMap';
 
+declare const BUILD_VERSION: string;
+
 // ── Types ────────────────────────────────────────────────────────────────────
 
 export interface OcrResult {
@@ -59,7 +61,9 @@ function getDictUrl(): string {
 function ensureWorker(): Promise<void> {
   if (workerReady) return workerReady;
 
-  worker = new Worker(new URL('./ocrWorker.js', import.meta.url), { type: 'module' });
+  const workerUrl = new URL('./ocrWorker.js', import.meta.url);
+  workerUrl.searchParams.set('v', BUILD_VERSION);
+  worker = new Worker(workerUrl, { type: 'module' });
   worker.onmessage = (e: MessageEvent) => {
     const msg = e.data as { type: string; id?: number; text?: string; message?: string };
     if (msg.type === 'ready') {

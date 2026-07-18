@@ -17,6 +17,8 @@
 
 import type { Detection } from './detector';
 
+declare const BUILD_VERSION: string;
+
 // ── Corner ratios ─────────────────────────────────────────────────────────────
 
 const CORNER_RATIOS: Record<'plate' | 'person', number> = { plate: 0.5, person: 0.8 };
@@ -130,7 +132,9 @@ let _poolRoundRobin = 0;
 const _blurWorkerPending = new Map<number, (result: ArrayBuffer | null, error?: string) => void>();
 
 function makeBlurWorker(): Worker {
-  const w = new Worker(new URL('./blurWorker.js', import.meta.url), { type: 'module' });
+  const url = new URL('./blurWorker.js', import.meta.url);
+  url.searchParams.set('v', BUILD_VERSION);
+  const w = new Worker(url, { type: 'module' });
   w.onmessage = (e: MessageEvent) => {
     const { id, blurred, error } = e.data as { id: number; blurred?: ArrayBuffer; error?: string };
     const resolve = _blurWorkerPending.get(id);

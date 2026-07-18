@@ -14,6 +14,8 @@
 import { getConfig, type ModelChoice } from './config';
 import { LruMap } from './lruMap';
 
+declare const BUILD_VERSION: string;
+
 // ── Config ────────────────────────────────────────────────────────────────────
 
 const MODEL_W = 1280;
@@ -398,7 +400,9 @@ function handleWorkerMessage(e: MessageEvent): void {
 
 function sendToWorker(msgType: 'init' | 'changeModel', modelSrc: string | ArrayBuffer): Promise<void> {
   if (!worker) {
-    worker = new Worker(new URL('./detectorWorker.js', import.meta.url), { type: 'module' });
+    const workerUrl = new URL('./detectorWorker.js', import.meta.url);
+    workerUrl.searchParams.set('v', BUILD_VERSION);
+    worker = new Worker(workerUrl, { type: 'module' });
     worker.onmessage = handleWorkerMessage;
     worker.onerror = (e) => {
       // e.message is often empty/undefined for module-level worker failures
