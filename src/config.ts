@@ -16,7 +16,9 @@ export interface AppConfig {
   /** Which detection labels to redact. */
   enabledLabels: string[];
   namingPattern: string;
-  /** Comma-separated plate strings to keep unblurred. Empty = OCR disabled. */
+  /** Whether the keep-plates feature is enabled (persisted). */
+  keepPlatesEnabled: boolean;
+  /** Comma-separated plate strings to keep unblurred (NOT persisted — session only). */
   keepPlates: string;
 }
 
@@ -32,6 +34,7 @@ export const DEFAULTS: AppConfig = {
   expansionFraction: 0,
   enabledLabels: ['plate', 'person'],
   namingPattern: '{input}',
+  keepPlatesEnabled: false,
   keepPlates: '',
 };
 
@@ -84,7 +87,7 @@ export function confirmLargeModelOk(): void {
 
 /** Parse the keepPlates config string into an array of non-empty trimmed entries. */
 export function parseKeepPlates(cfg: AppConfig): string[] {
-  if (!cfg.keepPlates) return [];
+  if (!cfg.keepPlatesEnabled || !cfg.keepPlates) return [];
   return cfg.keepPlates.split(',').map((s) => s.trim()).filter(Boolean);
 }
 
@@ -92,10 +95,11 @@ export function setConfig(patch: Partial<AppConfig>): void {
   current = { ...current, ...patch };
   try {
     // Don't persist detect_x until we've confirmed it works (iOS OOM guard).
-    const toSave: AppConfig =
-      current.model === 'detect_x' && !largeModelConfirmed
-        ? { ...current, model: 'detect_n' }
-        : current;
+    const toSave: Partial<AppConfig> & Record<string, unknown> = { ...current };
+    // Don't persist detect_x until we've confirmed it works (iOS OOM guard).
+    if (current.model === 'detect_x' && !largeModelConfirmed) toSave.model = 'detect_n';
+    // keepPlates text is session-only (not persisted).
+    delete toSave.keepPlates;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
   } catch {
     /* ok */

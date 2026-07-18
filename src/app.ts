@@ -232,6 +232,10 @@ export class App {
     if (bl) bl.style.setProperty('--solidcolor-swatch', cfg.solidColor);
     const kp = document.getElementById('keep-plates-input') as HTMLInputElement | null;
     if (kp) kp.value = cfg.keepPlates;
+    const kpToggle = document.getElementById('keep-plates-toggle') as HTMLInputElement | null;
+    if (kpToggle) kpToggle.checked = cfg.keepPlatesEnabled;
+    const kpDetails = document.getElementById('keep-plates-details');
+    if (kpDetails) kpDetails.hidden = !cfg.keepPlatesEnabled;
   }
 
   private async updateNamingInfoPanel(): Promise<void> {
@@ -462,13 +466,21 @@ export class App {
       if (!panel.hidden) void this.updateNamingInfoPanel();
     });
 
-    // Keep-plates input
+    // Keep-plates checkbox + input
+    const keepPlatesToggle = document.getElementById('keep-plates-toggle') as HTMLInputElement | null;
+    const keepPlatesDetails = document.getElementById('keep-plates-details');
+    keepPlatesToggle?.addEventListener('change', () => {
+      const enabled = keepPlatesToggle.checked;
+      setConfig({ keepPlatesEnabled: enabled });
+      if (keepPlatesDetails) keepPlatesDetails.hidden = !enabled;
+      if (enabled) void this.triggerOcr();
+    });
+
     const keepPlatesInput = document.getElementById('keep-plates-input') as HTMLInputElement | null;
     const debouncedKeepPlatesChange = debounce((value: string) => {
       setConfig({ keepPlates: value.toUpperCase() });
     }, 500);
     keepPlatesInput?.addEventListener('input', () => debouncedKeepPlatesChange(keepPlatesInput.value));
-    keepPlatesInput?.addEventListener('focus', () => void this.showOcrSuggestions());
 
     document.getElementById('keep-plates-info-btn')?.addEventListener('click', () => {
       const panel = document.getElementById('keep-plates-info-panel');
@@ -552,9 +564,13 @@ export class App {
     }
   }
 
-  /** Show suggestion chips from already-cached OCR texts (no OCR triggered). */
+  /** Show suggestion chips from already-cached OCR texts, or trigger OCR if checkbox is on. */
   private async showCachedOcrSuggestions(ocrTexts: Map<string, string>): Promise<void> {
-    if (ocrTexts.size === 0) return;
+    if (ocrTexts.size === 0) {
+      // No cached results — trigger OCR if the checkbox is enabled
+      if (getConfig().keepPlatesEnabled) void this.triggerOcr();
+      return;
+    }
     const mod = await import('./plateOcr');
     // Deduplicate texts (multiple boxes may have the same plate)
     const seen = new Set<string>();
@@ -569,8 +585,8 @@ export class App {
     this.renderSuggestionChips(results, mod);
   }
 
-  /** Trigger OCR on focus if not yet run for the current image. */
-  private async showOcrSuggestions(): Promise<void> {
+  /** Trigger OCR when the keep-plates checkbox is enabled. */
+  private async triggerOcr(): Promise<void> {
     const suggestionsEl = document.getElementById('keep-plates-suggestions');
     if (!suggestionsEl) return;
 

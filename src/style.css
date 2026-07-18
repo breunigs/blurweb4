@@ -1273,6 +1273,12 @@ input[name="drawMode"][value="solidcolor"]:checked~#solidcolor-color-picker {
 
 /* ── Keep plates (OCR) ───────────────────────────────────────────────────── */
 
+#keep-plates-details {
+  grid-column: 1 / -1;
+  margin-top: -4px;
+  margin-bottom: 4px;
+}
+
 .keep-plates-wrap {
   display: flex;
   align-items: center;

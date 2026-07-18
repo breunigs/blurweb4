@@ -150,7 +150,12 @@
 
         <!-- Keep plates unblurred (OCR) -->
         <div class="setting-row" id="keep-plates-row">
-          <span class="setting-row-label" data-i18n="setting_keep_plates">Keep plates</span>
+          <span class="setting-row-label" data-i18n="setting_keep_plates">Keep some plates</span>
+          <label class="toggle-label">
+            <input type="checkbox" id="keep-plates-toggle">
+          </label>
+        </div>
+        <div id="keep-plates-details" hidden>
           <div class="keep-plates-wrap">
             <input type="text" id="keep-plates-input" placeholder="e.g. HH AB 1234"
                    data-i18n-placeholder="keep_plates_placeholder">
@@ -159,7 +164,7 @@
           </div>
         </div>
         <div id="keep-plates-info-panel" hidden>
-          <p data-i18n="keep_plates_help">Enter one or more license plates (comma-separated) to keep them visible instead of blurring. Use * as a wildcard to match any characters, e.g. HH*1234 matches HHAB1234. Focus this field to see recognized plates from the current image.</p>
+          <p data-i18n="keep_plates_help">Enter one or more license plates (comma-separated) to keep them visible instead of blurring. Use * as a wildcard to match any characters, e.g. HH*1234 matches HHAB1234.</p>
         </div>
       </div>
     </div>
