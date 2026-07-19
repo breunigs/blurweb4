@@ -115,6 +115,8 @@ export class App {
       (ocrTexts) => this.showCachedOcrSuggestions(ocrTexts),
       (index) => {
         this.detectStatusInline.classList.remove('visible');
+        const suggestionsEl = document.getElementById('keep-plates-suggestions');
+        if (suggestionsEl) suggestionsEl.innerHTML = '';
         void this.updateNamingInfoPanel();
         void index;
       },

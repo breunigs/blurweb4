@@ -19,6 +19,7 @@ const LABEL_COLORS: Record<string, string[]> = {
 function drawOutline(
   ctx: AnyCtx,
   detections: Detection[],
+  origDetections: Detection[],
   ocrTexts?: Map<string, string>,
   excludedKeys?: Set<string>,
 ): void {
@@ -31,7 +32,9 @@ function drawOutline(
   ctx.font = `${fontSize}px monospace`;
   // Track per-label index so consecutive detections of the same label cycle through hues.
   const labelIdx: Record<string, number> = {};
-  for (const d of detections) {
+  for (let i = 0; i < detections.length; i++) {
+    const d = detections[i];
+    const orig = origDetections[i];
     const palette = LABEL_COLORS[d.label] ?? ['#ffffff'];
     const idx = labelIdx[d.label] ?? 0;
     labelIdx[d.label] = idx + 1;
@@ -46,8 +49,8 @@ function drawOutline(
     ctx.fillStyle = color;
     ctx.fillText(label, d.x + 2, d.y - 5);
 
-    // OCR text (if cached) — shown below the detection box
-    const bk = `${Math.round(d.x)},${Math.round(d.y)},${Math.round(d.w)},${Math.round(d.h)}`;
+    // OCR/exclusion keys use original (pre-expansion) coordinates to match the OCR cache
+    const bk = `${Math.round(orig.x)},${Math.round(orig.y)},${Math.round(orig.w)},${Math.round(orig.h)}`;
     const ocrText = ocrTexts?.get(bk);
     if (ocrText) {
       const ocrLabel = `OCR: ${ocrText}`;
@@ -106,7 +109,7 @@ export async function applyDetections(
   const ch = (ctx as CanvasRenderingContext2D).canvas.height;
   const expanded = expandDetections(detections, expansionFraction, cw, ch);
   if (mode === 'outline') {
-    drawOutline(ctx, expanded, ocrTexts, excludedKeys);
+    drawOutline(ctx, expanded, detections, ocrTexts, excludedKeys);
   } else {
     await blurrer.apply(ctx, expanded, mode, color);
   }
@@ -114,3 +117,4 @@ export async function applyDetections(
 
 // Expose for Playwright unit tests.
 (window as unknown as Record<string, unknown>).__expandDetections = { expandDetections };
+(window as unknown as Record<string, unknown>).__applyDetections = applyDetections;

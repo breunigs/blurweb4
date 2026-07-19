@@ -2169,3 +2169,264 @@ test.describe('OCR — selective unblurring', () => {
     expect(pxNoMatch[0] + pxNoMatch[1] + pxNoMatch[2], 'XX*999 should not match — pixel should be black').toBeLessThan(30);
   });
 });
+
+// ── OCR outline rendering with expansion ─────────────────────────────────────
+// Bug: drawOutline used expanded detection coordinates for the OCR text key
+// lookup, but OCR texts are keyed by original (pre-expansion) coordinates.
+// With expansionFraction > 0 the keys never matched, so OCR text was never
+// rendered in outline mode.
+
+test.describe('OCR outline rendering with area expansion', () => {
+  test('OCR text is rendered when expansionFraction > 0', async ({ page }) => {
+    await page.goto('http://localhost:3100');
+
+    // Use applyDetections directly on an OffscreenCanvas with a pre-populated ocrTexts map.
+    const hasOcrText = await page.evaluate(async () => {
+      const applyDetections = (window as any).__applyDetections as (
+        ctx: OffscreenCanvasRenderingContext2D,
+        detections: any[],
+        mode: string,
+        color: string,
+        expansionFraction: number,
+        ocrTexts?: Map<string, string>,
+        excludedKeys?: Set<string>,
+      ) => Promise<void>;
+
+      const canvas = new OffscreenCanvas(800, 600);
+      const ctx = canvas.getContext('2d')!;
+      // Fill with white background
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, 800, 600);
+
+      const det = { label: 'plate', conf: 0.9, x: 200, y: 200, w: 100, h: 30 };
+      // The OCR key must match the ORIGINAL (pre-expansion) coordinates
+      const ocrKey = `${Math.round(det.x)},${Math.round(det.y)},${Math.round(det.w)},${Math.round(det.h)}`;
+      const ocrTexts = new Map<string, string>([[ocrKey, 'AB1234']]);
+
+      // Apply with non-zero expansion — this is the scenario that was broken
+      await applyDetections(ctx, [det], 'outline', '#000000', 0.5, ocrTexts);
+
+      // Check for OCR text pixels below the expanded detection box.
+      // With expansion=0.5: padX=25, padY=7.5 → expanded box ends at y ≈ 237.5.
+      // OCR text is drawn just below the expanded box bottom.
+      // The text color is #00ff88 (green), so we scan for green pixels below the box.
+      const scanY = 242; // just below expanded box bottom
+      let greenPixels = 0;
+      for (let x = 170; x < 340; x++) {
+        const d = ctx.getImageData(x, scanY, 1, 1).data;
+        if (d[1] > 200 && d[0] < 50 && d[2] < 150) greenPixels++;
+      }
+      return greenPixels;
+    });
+
+    expect(hasOcrText, 'OCR text (#00ff88) should be rendered below the expanded detection box').toBeGreaterThan(5);
+  });
+
+  test('OCR text is NOT rendered when ocrTexts key uses expanded coordinates', async ({ page }) => {
+    // This verifies the bug scenario: if we used expanded coords as key, nothing matches.
+    await page.goto('http://localhost:3100');
+
+    const hasOcrText = await page.evaluate(async () => {
+      const applyDetections = (window as any).__applyDetections as (
+        ctx: OffscreenCanvasRenderingContext2D,
+        detections: any[],
+        mode: string,
+        color: string,
+        expansionFraction: number,
+        ocrTexts?: Map<string, string>,
+        excludedKeys?: Set<string>,
+      ) => Promise<void>;
+
+      const canvas = new OffscreenCanvas(800, 600);
+      const ctx = canvas.getContext('2d')!;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, 800, 600);
+
+      const det = { label: 'plate', conf: 0.9, x: 200, y: 200, w: 100, h: 30 };
+      // Use EXPANDED coordinates as key (this is what the old buggy code used)
+      const padX = det.w * 0.5 * 0.5;
+      const padY = det.h * 0.5 * 0.5;
+      const wrongKey = `${Math.round(det.x - padX)},${Math.round(det.y - padY)},${Math.round(det.w + 2 * padX)},${Math.round(det.h + 2 * padY)}`;
+      const ocrTexts = new Map<string, string>([[wrongKey, 'AB1234']]);
+
+      await applyDetections(ctx, [det], 'outline', '#000000', 0.5, ocrTexts);
+
+      // Scan for green OCR text pixels — should NOT be present with wrong key
+      const scanY = 242;
+      let greenPixels = 0;
+      for (let x = 170; x < 340; x++) {
+        const d = ctx.getImageData(x, scanY, 1, 1).data;
+        if (d[1] > 200 && d[0] < 50 && d[2] < 150) greenPixels++;
+      }
+      return greenPixels;
+    });
+
+    expect(hasOcrText, 'OCR text should NOT appear when keyed by expanded coordinates').toBe(0);
+  });
+
+  test('exclusion cross uses original coordinates for key matching', async ({ page }) => {
+    await page.goto('http://localhost:3100');
+
+    const hasCross = await page.evaluate(async () => {
+      const applyDetections = (window as any).__applyDetections as (
+        ctx: OffscreenCanvasRenderingContext2D,
+        detections: any[],
+        mode: string,
+        color: string,
+        expansionFraction: number,
+        ocrTexts?: Map<string, string>,
+        excludedKeys?: Set<string>,
+      ) => Promise<void>;
+
+      const canvas = new OffscreenCanvas(800, 600);
+      const ctx = canvas.getContext('2d')!;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, 800, 600);
+
+      const det = { label: 'plate', conf: 0.9, x: 200, y: 200, w: 100, h: 30 };
+      // Use original coordinates for the exclusion key
+      const origKey = `${Math.round(det.x)},${Math.round(det.y)},${Math.round(det.w)},${Math.round(det.h)}`;
+      const excludedKeys = new Set<string>([origKey]);
+
+      await applyDetections(ctx, [det], 'outline', '#000000', 0.5, new Map(), excludedKeys);
+
+      // The exclusion cross draws diagonal lines across the expanded box.
+      // Check the centre of the expanded box for non-white pixels (the cross stroke).
+      const cx = 200 + 100 / 2; // centre x of original box
+      const cy = 200 + 30 / 2;  // centre y of original box
+      const d = ctx.getImageData(cx, cy, 1, 1).data;
+      // Non-white = cross was drawn (stroke color is one of LABEL_COLORS)
+      return d[0] < 250 || d[1] < 250 || d[2] < 250;
+    });
+
+    expect(hasCross, 'Exclusion cross should be drawn when excludedKeys uses original coordinates').toBe(true);
+  });
+});
+
+// ── OCR suggestion chips: cleared on file switch ──────────────────────────────
+// Bug: when switching preview files, OCR suggestion chips from the previous file
+// remained visible. The old triggerOcr() checked suggestionsEl.children.length > 0
+// and returned early, preventing OCR from running for the new file.
+
+test.describe('OCR suggestion chips cleared on file switch', () => {
+  test('switching files clears stale suggestion chips', async ({ page }) => {
+    await injectDetections(page, JPEG_INJECT_DETECTIONS);
+    await page.goto('http://localhost:3100');
+
+    // Load two JPEG files (using synthetic second file to avoid duplicate detection)
+    await page.locator('#file-input').setInputFiles(path.join(EXAMPLES, 'jpeg.jpg'));
+    await waitForCanvas(page);
+    await waitForDetections(page);
+
+    // Manually inject a fake suggestion chip into the container
+    await page.evaluate(() => {
+      const el = document.getElementById('keep-plates-suggestions')!;
+      const btn = document.createElement('button');
+      btn.className = 'ocr-suggestion';
+      btn.textContent = 'FAKE123';
+      el.appendChild(btn);
+    });
+    const chipsBefore = await page.evaluate(
+      () => document.getElementById('keep-plates-suggestions')!.children.length,
+    );
+    expect(chipsBefore).toBe(1);
+
+    // Create and load a synthetic second image
+    const syntheticJpegBytes = await page.evaluate(async () => {
+      const c = document.createElement('canvas');
+      c.width = c.height = 200;
+      c.getContext('2d')!.fillStyle = '#808080';
+      c.getContext('2d')!.fillRect(0, 0, 200, 200);
+      const blob = await new Promise<Blob>((resolve) =>
+        (c as HTMLCanvasElement).toBlob(resolve as BlobCallback, 'image/jpeg', 0.95),
+      );
+      return Array.from(new Uint8Array(await blob!.arrayBuffer()));
+    });
+    await page.locator('#file-input').setInputFiles({
+      name: 'synthetic.jpg',
+      mimeType: 'image/jpeg',
+      buffer: Buffer.from(syntheticJpegBytes),
+    });
+    await page.waitForTimeout(500);
+
+    // Switch to file 1 (synthetic.jpg) via file list click
+    await page.locator('.file-list-row').nth(1).click();
+    await page.waitForTimeout(300);
+
+    // Suggestion chips must be cleared
+    const chipsAfter = await page.evaluate(
+      () => document.getElementById('keep-plates-suggestions')!.children.length,
+    );
+    expect(chipsAfter, 'Suggestion chips should be cleared when switching files').toBe(0);
+  });
+});
+
+// ── Video OCR suggestions propagated ──────────────────────────────────────────
+// Bug: VideoPlayer.applyAndNotify() computed OCR texts via applyFiltersWithOcr()
+// but only called onDetection — the ocrTexts result was discarded, so suggestion
+// chips never appeared for videos.
+
+test.describe('Video OCR suggestions', () => {
+  test.setTimeout(180_000);
+
+  test('OCR suggestion chips appear for video when keep-plates is enabled', async ({ page }) => {
+    // Use the real plate detection from the video reference (plate at x≈1603)
+    const VIDEO_PLATE: Detection = {
+      label: 'plate', conf: 0.87, x: 1603, y: 460, w: 60, h: 17,
+    };
+    await injectDetections(page, [VIDEO_PLATE]);
+    await page.goto('http://localhost:3100');
+
+    if (!(await webCodecsSupported(page))) {
+      test.skip(true, 'WebCodecs not available');
+    }
+
+    // Enable keep-plates with a wildcard so OCR runs but nothing is excluded
+    await page.evaluate(() => (window as any).__setKeepPlates?.('NOMATCH999'));
+
+    await page.locator('#file-input').setInputFiles(path.join(EXAMPLES, 'x264.mp4'));
+
+    // Wait for video to decode
+    await page.waitForFunction(
+      () => {
+        const c = document.querySelector<HTMLCanvasElement>('.canvas-wrapper.active canvas[data-loaded="true"]');
+        if (c !== null && c.width > 0) return true;
+        return !!document.querySelector('.canvas-wrapper.active .error-msg');
+      },
+      { timeout: 60_000 },
+    );
+    const hasError = await page.evaluate(() => !!document.querySelector('.canvas-wrapper.active .error-msg'));
+    if (hasError) {
+      test.skip(true, 'Video decode failed');
+      return;
+    }
+    const canvasWidth = await page.evaluate(() => {
+      const c = document.querySelector<HTMLCanvasElement>('.canvas-wrapper.active canvas[data-loaded="true"]');
+      return c?.width ?? 0;
+    });
+    if (canvasWidth > 0 && canvasWidth !== 1920) {
+      test.skip(true, `Unexpected canvas width ${canvasWidth}`);
+      return;
+    }
+
+    // Wait for OCR suggestion chips to appear (OCR model may need to download)
+    await page.waitForFunction(
+      () => {
+        const el = document.getElementById('keep-plates-suggestions');
+        return el && el.querySelectorAll('.ocr-suggestion').length > 0;
+      },
+      { timeout: 120_000 },
+    );
+
+    const chipTexts = await page.evaluate(() => {
+      const el = document.getElementById('keep-plates-suggestions')!;
+      return Array.from(el.querySelectorAll('.ocr-suggestion')).map((b) => b.textContent ?? '');
+    });
+    expect(chipTexts.length, 'At least one OCR suggestion chip should appear for the video').toBeGreaterThan(0);
+    // The plate text should contain digits (it's a license plate)
+    expect(
+      chipTexts.some((t) => /\d/.test(t)),
+      `Suggestion chips should contain plate text with digits, got: ${chipTexts}`,
+    ).toBe(true);
+  });
+});

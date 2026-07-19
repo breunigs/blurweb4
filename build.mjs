@@ -19,16 +19,6 @@ if (!existsSync(HEVC_WASM) || !existsSync(AVC_WASM)) {
   }
 }
 
-// ── OCR model artifacts ──────────────────────────────────────────────────────
-if (!existsSync('models/ocr/rec.onnx') || !existsSync('models/ocr/dict.txt')) {
-  console.log('OCR model missing — downloading…');
-  const result = spawnSync(process.execPath, ['scripts/download-ocr-model.mjs'], { stdio: 'inherit' });
-  if (result.status !== 0) {
-    console.error('OCR model download failed.');
-    process.exit(result.status ?? 1);
-  }
-}
-
 // ── onnxruntime-web WASM artifacts ───────────────────────────────────────────
 // Copy ort WASM files into dist/ort/ so the browser can fetch them.
 function copyOrtWasm() {

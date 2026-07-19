@@ -47,6 +47,7 @@ export class VideoPlayer {
   onTimeUpdate: ((time: number) => void) | null = null;
   onEnd: (() => void) | null = null;
   onDetection: ((dets: Detection[]) => void) | null = null;
+  onOcrTexts: ((ocrTexts: Map<string, string>) => void) | null = null;
   onLibavFallback: ((codec: string) => void) | null = null;
 
   private readonly libavHandler = (e: Event) => {
@@ -87,6 +88,7 @@ export class VideoPlayer {
           await applyDetections(this.ctx, result.detections, cfg.drawMode, cfg.solidColor, cfg.expansionFraction);
         }
         this.onDetection?.(result.detections);
+        this.onOcrTexts?.(result.ocrTexts);
       })
       .catch((err) => console.error('[videoPlayer] applyDetections failed:', err));
   }

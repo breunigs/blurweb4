@@ -244,10 +244,15 @@ export async function applyFiltersWithOcr(
   frameRef: string,
 ): Promise<OcrFilterResult> {
   const allDetections = applyFilters(dets, minConf, enabledLabels);
-  if (keepPlates.length === 0 || !ctx || !file) {
-    // Even without active keepPlates, return cached OCR texts for debug/outline display.
+  if (!ctx || !file) {
+    return { detections: allDetections, allDetections, excludedKeys: new Set(), ocrTexts: new Map() };
+  }
+  // Run OCR when keep-plates has entries OR when the feature is enabled (for suggestion chips).
+  const shouldRunOcr = keepPlates.length > 0 || getConfig().keepPlatesEnabled;
+  if (!shouldRunOcr) {
+    // Return cached OCR texts for debug/outline display without triggering OCR.
     let ocrTexts = new Map<string, string>();
-    if (_plateOcrModule && file && ctx) {
+    if (_plateOcrModule) {
       const canvasW = (ctx as CanvasRenderingContext2D).canvas.width;
       const canvasH = (ctx as CanvasRenderingContext2D).canvas.height;
       const hash = fileHashes.get(file) ?? null;
