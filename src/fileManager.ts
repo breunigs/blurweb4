@@ -267,6 +267,9 @@ export class FileManager {
       player.onDetection = (dets) => {
         if (this.store.items[this.store.activeIndex] === item) this.onShowDetectionResult(dets);
       };
+      player.onOcrTexts = (ocrTexts) => {
+        if (this.store.items[this.store.activeIndex] === item) this.onOcrTextsAvailable(ocrTexts);
+      };
 
       player
         .load(file)
@@ -448,9 +451,8 @@ export class FileManager {
 
   private updateNavChevrons(): void {
     const n = this.store.items.length;
-    const i = this.store.activeIndex;
-    this.prevBtn.hidden = i <= 0;
-    this.nextBtn.hidden = i >= n - 1;
+    this.prevBtn.hidden = n <= 1;
+    this.nextBtn.hidden = n <= 1;
   }
 
   updateLoadedSummary(): void {
@@ -499,8 +501,6 @@ export class FileManager {
     this.nextBtn = document.createElement('button');
     this.prevBtn.className = 'preview-nav preview-nav-prev';
     this.nextBtn.className = 'preview-nav preview-nav-next';
-    this.prevBtn.textContent = '\u2039';
-    this.nextBtn.textContent = '\u203A';
     this.prevBtn.title = t('aria_prev');
     this.nextBtn.title = t('aria_next');
     this.prevBtn.addEventListener('click', () => this.navigatePrev());
@@ -519,13 +519,13 @@ export class FileManager {
   private navigateNext(): void {
     const n = this.store.items.length;
     const current = this.store.activeIndex;
-    if (n > 1 && current < n - 1) this.switchTo(current + 1);
+    if (n > 1) this.switchTo((current + 1) % n);
   }
 
   private navigatePrev(): void {
     const n = this.store.items.length;
     const current = this.store.activeIndex;
-    if (n > 1 && current > 0) this.switchTo(current - 1);
+    if (n > 1) this.switchTo((current - 1 + n) % n);
   }
 
   private initSwipeNavigation(): void {
