@@ -140,6 +140,63 @@ function extractGpsOnlyExif(jpeg: Uint8Array): Uint8Array | null {
 }
 
 /**
+ * Strip the EXIF orientation tag (0x0112) from an APP1 segment.
+ * The canvas pixels are already rotated by createImageBitmap, so keeping the
+ * tag would cause viewers to double-rotate the exported image.
+ * Returns a new APP1 segment without the orientation entry in IFD0.
+ */
+function stripOrientationTag(app1: Uint8Array): Uint8Array {
+  // APP1 layout: FF E1 (2) + length (2) + "Exif\0\0" (6) + TIFF data
+  if (app1.length < 18) return app1;
+  const tiff = app1.subarray(10);
+  const isLE = tiff[0] === 0x49;
+
+  const r16 = (o: number) =>
+    isLE ? tiff[o] | (tiff[o + 1] << 8) : (tiff[o] << 8) | tiff[o + 1];
+  const r32 = (o: number) =>
+    isLE
+      ? (tiff[o] | (tiff[o + 1] << 8) | (tiff[o + 2] << 16) | (tiff[o + 3] << 24)) >>> 0
+      : ((tiff[o] << 24) | (tiff[o + 1] << 16) | (tiff[o + 2] << 8) | tiff[o + 3]) >>> 0;
+
+  if (r16(2) !== 0x002a) return app1;
+  const ifd0Off = r32(4);
+  if (ifd0Off + 2 > tiff.length) return app1;
+  const count = r16(ifd0Off);
+
+  // Find the orientation entry index
+  let orientIdx = -1;
+  for (let i = 0; i < count; i++) {
+    if (r16(ifd0Off + 2 + i * 12) === 0x0112) { orientIdx = i; break; }
+  }
+  if (orientIdx === -1) return app1; // no orientation tag present
+
+  // Build new TIFF with the orientation entry removed from IFD0.
+  // IFD entries are contiguous 12-byte blocks; remove one and fix the count.
+  const entryStart = 10 + ifd0Off + 2 + orientIdx * 12; // offset in app1
+  const newApp1 = new Uint8Array(app1.length - 12);
+  newApp1.set(app1.subarray(0, entryStart));
+  newApp1.set(app1.subarray(entryStart + 12), entryStart);
+
+  // Fix IFD0 entry count (at offset 10 + ifd0Off in app1)
+  const countOff = 10 + ifd0Off;
+  const newCount = count - 1;
+  if (isLE) {
+    newApp1[countOff] = newCount & 0xff;
+    newApp1[countOff + 1] = (newCount >> 8) & 0xff;
+  } else {
+    newApp1[countOff] = (newCount >> 8) & 0xff;
+    newApp1[countOff + 1] = newCount & 0xff;
+  }
+
+  // Fix APP1 segment length (bytes 2-3, big-endian, includes itself)
+  const newSegLen = newApp1.length - 2; // subtract FF E1 marker
+  newApp1[2] = (newSegLen >> 8) & 0xff;
+  newApp1[3] = newSegLen & 0xff;
+
+  return newApp1;
+}
+
+/**
  * Return a new JPEG buffer with all APPn segments from the canvas-produced
  * JPEG replaced by the given EXIF APP1 segment.
  */
@@ -183,9 +240,12 @@ export async function exportAsJpeg(
 
   let finalBlob = canvasBlob;
   if (sourceBytes) {
-    const exifSegment =
+    let exifSegment =
       keepMetadata === 'gps' ? extractGpsOnlyExif(sourceBytes) : findJpegApp1(sourceBytes);
     if (exifSegment) {
+      // Canvas pixels are already rotated by createImageBitmap — strip the
+      // orientation tag so viewers don't double-rotate the export.
+      exifSegment = stripOrientationTag(exifSegment);
       const canvasBytes = new Uint8Array(await canvasBlob.arrayBuffer());
       finalBlob = new Blob([injectExif(canvasBytes, exifSegment)], { type: 'image/jpeg' });
     }

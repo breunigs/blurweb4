@@ -114,6 +114,47 @@ test.describe('JPEG image decoding', () => {
 // Verify that the exported JPEG retains the EXIF APP1 segment (GPS present),
 // and that stripping metadata produces a JPEG without it.
 
+/** Read the EXIF orientation tag from a JPEG buffer. Returns 0 if not found. */
+function readExifOrientation(bytes: Buffer): number {
+  let pos = 2; // skip SOI
+  while (pos + 4 <= bytes.length) {
+    if (bytes[pos] !== 0xff) break;
+    const marker = bytes[pos + 1];
+    if (marker === 0xda) break;
+    const segLen = (bytes[pos + 2] << 8) | bytes[pos + 3];
+    if (
+      marker === 0xe1 &&
+      pos + 10 <= bytes.length &&
+      bytes[pos + 4] === 0x45 && bytes[pos + 5] === 0x78 &&
+      bytes[pos + 6] === 0x69 && bytes[pos + 7] === 0x66
+    ) {
+      const tiffStart = pos + 10;
+      const tiff = bytes.subarray(tiffStart);
+      if (tiff.length < 8) return 0;
+      const isLE = tiff[0] === 0x49;
+      const r16 = (o: number) =>
+        isLE ? tiff[o] | (tiff[o + 1] << 8) : (tiff[o] << 8) | tiff[o + 1];
+      const r32 = (o: number) =>
+        isLE
+          ? (tiff[o] | (tiff[o + 1] << 8) | (tiff[o + 2] << 16) | (tiff[o + 3] << 24)) >>> 0
+          : ((tiff[o] << 24) | (tiff[o + 1] << 16) | (tiff[o + 2] << 8) | tiff[o + 3]) >>> 0;
+      if (r16(2) !== 0x002a) return 0;
+      const ifd0Off = r32(4);
+      const count = r16(ifd0Off);
+      for (let i = 0; i < count; i++) {
+        const e = ifd0Off + 2 + i * 12;
+        if (r16(e) === 0x0112) {
+          // Orientation tag — type SHORT(3), value is at offset e+8
+          return r16(e + 8);
+        }
+      }
+      return 0; // EXIF present but no orientation tag
+    }
+    pos += 2 + segLen;
+  }
+  return 0;
+}
+
 function hasExifGps(bytes: Buffer): boolean {
   // Walk JPEG segments looking for APP1 (FF E1) with Exif\0\0 marker.
   let pos = 2; // skip SOI
@@ -189,6 +230,84 @@ test.describe('JPEG export — EXIF preservation', () => {
       import('fs').then((fs) => fs.unlinkSync(tmpPath)).catch(() => {});
     }
     expect(hasExif, 'Exported JPEG should NOT contain EXIF when strip is selected').toBe(false);
+  });
+});
+
+// ── EXIF orientation handling ─────────────────────────────────────────────────
+// examples/rotated.jpg is a 16×8 coded JPEG with EXIF orientation=6 (90° CW).
+// After rotation it should display as 8×16, with top half red and bottom half blue.
+// Exported JPEGs must have the orientation tag stripped (pixels are already rotated).
+
+const ROTATED_INJECT_DETECTIONS: Detection[] = [
+  { label: 'plate', conf: 0.90, x: 1, y: 1, w: 3, h: 3 },
+];
+
+test.describe('EXIF orientation — rotated JPEG', () => {
+  test('canvas dimensions reflect EXIF rotation', async ({ page }) => {
+    await injectDetections(page, ROTATED_INJECT_DETECTIONS);
+    await loadFile(page, path.join(EXAMPLES, 'rotated.jpg'));
+    await waitForCanvas(page);
+
+    const dims = await page.evaluate(() => {
+      const canvas = document.querySelector<HTMLCanvasElement>('.canvas-wrapper.active canvas')!;
+      return { width: canvas.width, height: canvas.height };
+    });
+
+    // Coded 16×8 with orientation=6 → displayed as 8×16
+    expect(dims.width, 'rotated width should be original height').toBe(8);
+    expect(dims.height, 'rotated height should be original width').toBe(16);
+  });
+
+  test('pixel colors confirm rotation applied correctly', async ({ page }) => {
+    await injectDetections(page, ROTATED_INJECT_DETECTIONS);
+    await loadFile(page, path.join(EXAMPLES, 'rotated.jpg'));
+    await waitForCanvas(page);
+
+    // After 90° CW rotation of left-red/right-blue coded image:
+    // top half = red, bottom half = blue
+    const result = await sampleCanvas(page, [
+      [4, 2],   // top half → red
+      [4, 12],  // bottom half → blue
+    ]);
+
+    const TOL = 40; // JPEG compression tolerance
+    expect(
+      withinTolerance(result.pixels[0], [255, 0, 0], TOL),
+      `top pixel should be red, got rgb(${result.pixels[0]})`,
+    ).toBe(true);
+    expect(
+      withinTolerance(result.pixels[1], [0, 0, 255], TOL),
+      `bottom pixel should be blue, got rgb(${result.pixels[1]})`,
+    ).toBe(true);
+  });
+
+  test('exported JPEG has orientation tag stripped', async ({ page }) => {
+    await injectDetections(page, ROTATED_INJECT_DETECTIONS);
+    await loadFile(page, path.join(EXAMPLES, 'rotated.jpg'));
+    await waitForCanvas(page);
+    await waitForDetections(page);
+
+    // Use keepMetadata=keep — the bug: original EXIF with orientation=6 is re-injected
+    await page.evaluate(() => {
+      (document.querySelector('input[name="keepMetadata"][value="keep"]') as HTMLInputElement).click();
+    });
+
+    const downloadPromise = page.waitForEvent('download', { timeout: 60_000 });
+    await page.locator('#export-btn').click();
+    const download = await downloadPromise;
+
+    const tmpPath = path.join(__dirname, '../.tmp-rotated-export.jpg');
+    await download.saveAs(tmpPath);
+    try {
+      const bytes = (await import('fs')).readFileSync(tmpPath);
+      const orientation = readExifOrientation(bytes);
+      expect(
+        orientation === 0 || orientation === 1,
+        `Exported JPEG orientation tag should be absent or 1, got ${orientation}`,
+      ).toBe(true);
+    } finally {
+      import('fs').then((fs) => fs.unlinkSync(tmpPath)).catch(() => {});
+    }
   });
 });
 
