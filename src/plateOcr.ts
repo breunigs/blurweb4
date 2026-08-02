@@ -66,7 +66,7 @@ function makeOcrKey(
 let worker: Worker | null = null;
 let workerReady: Promise<void> | null = null;
 let nextId = 0;
-const pendingResults = new Map<number, (text: string) => void>();
+const pendingResults = new Map<number, { resolve: (text: string) => void; reject: (err: Error) => void }>();
 
 function getModelUrl(): string {
   return new URL('../models/ocr/rec.onnx', import.meta.url).href;
@@ -88,15 +88,25 @@ function ensureWorker(): Promise<void> {
       workerReadyResolve?.();
       workerReadyResolve = null;
     } else if (msg.type === 'result' && msg.id !== undefined) {
-      const resolve = pendingResults.get(msg.id);
-      if (resolve) {
+      const pending = pendingResults.get(msg.id);
+      if (pending) {
         pendingResults.delete(msg.id);
-        resolve(msg.text ?? '');
+        pending.resolve(msg.text ?? '');
       }
     } else if (msg.type === 'error') {
-      console.error(`[plateOcr] worker error: ${msg.message}`);
-      workerReadyReject?.(new Error(msg.message));
-      workerReadyResolve = workerReadyReject = null;
+      if (msg.id !== undefined) {
+        // Per-request error (recognize failed) — reject so callers don't cache
+        const pending = pendingResults.get(msg.id);
+        if (pending) {
+          pendingResults.delete(msg.id);
+          pending.reject(new Error(msg.message));
+        }
+      } else {
+        // Init error
+        console.error(`[plateOcr] worker error: ${msg.message}`);
+        workerReadyReject?.(new Error(msg.message));
+        workerReadyResolve = workerReadyReject = null;
+      }
     }
   };
   worker.onerror = (e) => {
@@ -269,8 +279,8 @@ async function recognizeOne(
 
   await ensureWorker();
   const id = nextId++;
-  return new Promise<string>((resolve) => {
-    pendingResults.set(id, resolve);
+  return new Promise<string>((resolve, reject) => {
+    pendingResults.set(id, { resolve, reject });
     worker!.postMessage(
       { type: 'recognize', id, pixels: crop!.pixels, width: crop!.width, height: crop!.height },
       { transfer: [crop!.pixels] },
@@ -332,9 +342,14 @@ export async function recognizePlates(
     const key = makeOcrKey(fileHash, file.size, canvasW, canvasH, frameRef, d);
     let text = await ocrCacheGet(key);
     if (text === undefined) {
-      text = await recognizeOne(ctx, d, file, canvasW, canvasH);
-      ocrCacheSet(key, text);
-      console.log(`[plateOcr] recognized: "${text}" key="${key}"`);
+      try {
+        text = await recognizeOne(ctx, d, file, canvasW, canvasH);
+        ocrCacheSet(key, text);
+        console.log(`[plateOcr] recognized: "${text}" key="${key}"`);
+      } catch (err) {
+        console.warn(`[plateOcr] OCR failed (not cached): ${err instanceof Error ? err.message : err}`);
+        continue;
+      }
     } else {
       console.log(`[plateOcr] cache hit: "${text}" key="${key}"`);
     }
@@ -408,9 +423,14 @@ export async function filterByOcr(
     const cacheKey = makeOcrKey(fileHash, file.size, canvasW, canvasH, frameRef, d);
     let text = await ocrCacheGet(cacheKey);
     if (text === undefined) {
-      text = await recognizeOne(ctx, d, file, canvasW, canvasH);
-      ocrCacheSet(cacheKey, text);
-      console.log(`[plateOcr] recognized: "${text}" key="${cacheKey}"`);
+      try {
+        text = await recognizeOne(ctx, d, file, canvasW, canvasH);
+        ocrCacheSet(cacheKey, text);
+        console.log(`[plateOcr] recognized: "${text}" key="${cacheKey}"`);
+      } catch (err) {
+        console.warn(`[plateOcr] OCR failed (not cached): ${err instanceof Error ? err.message : err}`);
+        continue;
+      }
     }
     const bk = boxKey(d);
     if (text.length > 0) {

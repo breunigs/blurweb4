@@ -173,8 +173,7 @@ async function handleMessage(msg: Record<string, unknown>): Promise<void> {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`[ocr worker] error:`, err);
     if (msg.type === 'recognize') {
-      // Send result with empty text on error so the caller doesn't hang
-      self.postMessage({ type: 'result', id: msg.id, text: '' });
+      self.postMessage({ type: 'error', id: msg.id, message });
     } else {
       self.postMessage({ type: 'error', message });
     }
