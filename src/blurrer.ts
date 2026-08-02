@@ -412,7 +412,7 @@ export class Blurrer {
     const ox = x - xi;
     const oy = y - yi;
 
-    const strength = Math.max(10, Math.min(50, Math.round((wi * hi) / 100)));
+    const strength = Math.max(15, Math.min(180, Math.round(Math.max(w, h) / 3)));
 
     // getImageData: blocking but fast (only the sampling region, not full canvas).
     const plain = ctx.getImageData(xi, yi, wi, hi);
