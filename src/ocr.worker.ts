@@ -148,17 +148,21 @@ function ctcDecode(output: ort.Tensor): string {
 
 // ── Message handler ──────────────────────────────────────────────────────────
 
-self.onmessage = async (e: MessageEvent) => {
-  const msg = e.data;
+// Serialize all message processing so only one session.run() is active at a
+// time.  The ONNX WebGPU backend throws "Session already started" when
+// concurrent runs hit the same session.
+let taskQueue: Promise<void> = Promise.resolve();
+
+async function handleMessage(msg: Record<string, unknown>): Promise<void> {
   try {
     if (msg.type === 'init') {
-      await loadDictionary(msg.dictUrl);
-      await createSession(msg.modelUrl);
+      await loadDictionary(msg.dictUrl as string);
+      await createSession(msg.modelUrl as string);
       self.postMessage({ type: 'ready' });
     } else if (msg.type === 'recognize') {
       if (!session) throw new Error('Session not initialized');
-      const pixels = new Uint8ClampedArray(msg.pixels);
-      const inputTensor = buildTensor(pixels, msg.width, msg.height);
+      const pixels = new Uint8ClampedArray(msg.pixels as ArrayBuffer);
+      const inputTensor = buildTensor(pixels, msg.width as number, msg.height as number);
       const inputName = session.inputNames[0];
       const results = await session.run({ [inputName]: inputTensor });
       const outputName = session.outputNames[0];
@@ -175,4 +179,8 @@ self.onmessage = async (e: MessageEvent) => {
       self.postMessage({ type: 'error', message });
     }
   }
+}
+
+self.onmessage = (e: MessageEvent) => {
+  taskQueue = taskQueue.then(() => handleMessage(e.data));
 };
