@@ -2023,6 +2023,91 @@ test.describe('Export-time detection for uncached images', () => {
   });
 });
 
+// ── Re-export after settings change ─────────────────────────────────────────
+// When settings change (drawMode, confidence, expansion…) after an image has
+// already been rendered, the export must use the *current* settings — not stale
+// canvas pixels left over from the previous render.  The bug: once
+// detectionsDone is set to true, the export path skips re-rendering entirely
+// and uses the canvas as-is.  rerenderActive() only updates the *active* item,
+// so non-active images export with old settings.
+
+test.describe('Re-export after settings change', () => {
+  test.setTimeout(120_000);
+
+  test('Export All applies current draw mode to previously-rendered non-active image', async ({ page }) => {
+    // Detection box: plate at x=50, y=50, w=60, h=60 → centre at (80, 80).
+    const INJECT: Detection[] = [
+      { label: 'plate', conf: 0.95, x: 50, y: 50, w: 60, h: 60 },
+    ];
+    await injectDetections(page, INJECT);
+    await page.goto('http://localhost:3100');
+
+    // Start in solidcolor mode so the first render bakes black pixels into the
+    // detection region.
+    await page.evaluate(() => (window as any).__setDrawMode('solidcolor'));
+
+    // ── Load file 0 (jpeg.jpg) as active ──
+    await page.locator('#file-input').setInputFiles(path.join(EXAMPLES, 'jpeg.jpg'));
+    await waitForCanvas(page);
+    await waitForDetections(page, 30_000);
+    // file 0 now has solidcolor detections, detectionsDone = true
+
+    // ── Load file 1 (synthetic 200×200 grey JPEG) ──
+    // It becomes active (addFiles switches to the first new file), so
+    // inference runs and detectionsDone becomes true with solidcolor.
+    const syntheticJpegBytes = await page.evaluate(async () => {
+      const c = document.createElement('canvas');
+      c.width = c.height = 200;
+      c.getContext('2d')!.fillStyle = '#808080';
+      c.getContext('2d')!.fillRect(0, 0, 200, 200);
+      const blob = await new Promise<Blob>((resolve) =>
+        (c as HTMLCanvasElement).toBlob(resolve as BlobCallback, 'image/jpeg', 0.95),
+      );
+      return Array.from(new Uint8Array(await blob!.arrayBuffer()));
+    });
+    await page.locator('#file-input').setInputFiles({
+      name: 'synthetic.jpg',
+      mimeType: 'image/jpeg',
+      buffer: Buffer.from(syntheticJpegBytes),
+    });
+    await waitForCanvas(page);
+    await waitForDetections(page, 30_000);
+    // file 1 is now active with solidcolor detections, detectionsDone = true
+
+    // ── Switch back to file 0, then change draw mode ──
+    // rerenderActive() only re-renders file 0 (the active item).
+    // file 1 keeps its stale solidcolor canvas.
+    await page.locator('.file-list-row').nth(0).click();
+    await waitForDetections(page, 30_000);
+    await page.evaluate(() => { (window as any).__lastDetections = undefined; });
+    await page.evaluate(() => (window as any).__setDrawMode('outline'));
+    await waitForDetections(page, 30_000);
+
+    // ── Export All ──
+    const downloads: import('@playwright/test').Download[] = [];
+    let resolveBoth!: () => void;
+    const bothDone = new Promise<void>((res) => { resolveBoth = res; });
+    page.on('download', (dl) => { downloads.push(dl); if (downloads.length >= 2) resolveBoth(); });
+
+    await page.locator('#export-all-btn').click();
+    await bothDone;
+
+    // ── Verify file 1 (synthetic.jpg, canvas index 1) ──
+    // With outline mode, pixel (80, 80) in the detection interior should show
+    // the original grey (#808080), NOT near-black from the stale solidcolor.
+    const pixel = await page.evaluate(() => {
+      const canvases = document.querySelectorAll<HTMLCanvasElement>('.canvas-wrapper canvas');
+      const d = canvases[1].getContext('2d')!.getImageData(80, 80, 1, 1).data;
+      return [d[0], d[1], d[2]];
+    });
+    // Grey image ≈ [128, 128, 128].  Solidcolor would be [0, 0, 0].
+    // With outline mode the interior pixels are untouched — they must be far
+    // from black (> 50 per channel is generous).
+    expect(pixel[0], `R at (80,80) of synthetic.jpg should be grey (outline), not black (stale solidcolor): ${pixel}`).toBeGreaterThan(50);
+    expect(pixel[1], `G at (80,80) of synthetic.jpg should be grey (outline), not black (stale solidcolor): ${pixel}`).toBeGreaterThan(50);
+    expect(pixel[2], `B at (80,80) of synthetic.jpg should be grey (outline), not black (stale solidcolor): ${pixel}`).toBeGreaterThan(50);
+  });
+});
 
 // ── HDR tone-mapping toggle ──────────────────────────────────────────────────
 // av1.mp4 encodes bt2020+hlg content — confirmed to surface transfer='hlg' in

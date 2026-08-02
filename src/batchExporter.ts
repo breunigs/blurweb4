@@ -20,8 +20,6 @@ export interface ExportItem {
   meta?: FileMeta;
   singleFrame?: boolean;
   toneMappingEnabled?: boolean;
-  /** True once applyDetections has been painted on the canvas during preview. */
-  detectionsDone?: boolean;
 }
 
 export interface BatchCallbacks {
@@ -60,16 +58,24 @@ export async function runBatch(
 
     try {
       if (!item.isVideo) {
-        // Ensure detections are applied to the canvas before exporting.
-        // This covers the case where preview inference was never scheduled (queue
-        // thrashing) or is still in-flight. detectForExport checks IDB/memory cache
-        // first, so cached results are free; only uncached images run ONNX here.
-        if (!item.detectionsDone && item.canvas && item.file) {
+        // Always re-render from the source file so the export uses the
+        // *current* config (drawMode, confidence, expansion…).  Without
+        // this, a previously-rendered canvas whose detectionsDone flag is
+        // true would be exported as-is, ignoring any settings the user
+        // changed since the preview was painted.  Re-rendering is cheap:
+        // createImageBitmap is hardware-accelerated and detectForExport
+        // hits the in-memory / IDB cache for previously-inferred frames.
+        if (item.canvas && item.file) {
+          const bitmap = await createImageBitmap(item.file, { imageOrientation: 'from-image' as ImageOrientation });
+          item.canvas.width = bitmap.width;
+          item.canvas.height = bitmap.height;
+          const ctx = item.canvas.getContext('2d')!;
+          ctx.drawImage(bitmap, 0, 0);
+          bitmap.close();
           const key = await makeImageKey(item.file, item.canvas.width, item.canvas.height);
           const cfg = getConfig();
           const keepPlates = parseKeepPlates(cfg);
           const allDets = await detectForExport(item.canvas, key);
-          const ctx = item.canvas.getContext('2d')!;
           const result = await applyFiltersWithOcr(allDets, cfg.minConfidence, cfg.enabledLabels, keepPlates, ctx, item.file, 'img');
           if (cfg.drawMode === 'outline') {
             await applyDetections(ctx, result.allDetections, cfg.drawMode, cfg.solidColor, cfg.expansionFraction, result.ocrTexts, result.excludedKeys);
