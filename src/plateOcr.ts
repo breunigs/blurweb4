@@ -129,6 +129,30 @@ function ensureWorker(): Promise<void> {
 let workerReadyResolve: (() => void) | null = null;
 let workerReadyReject: ((e: Error) => void) | null = null;
 
+// ── Low-memory teardown ─────────────────────────────────────────────────────
+// On mobile / low-RAM devices, terminate the OCR worker after each batch to
+// avoid holding two ONNX Runtime WASM heaps (detection + OCR) simultaneously.
+// navigator.deviceMemory is Chrome/Edge only; fall back to maxTouchPoints as
+// a mobile heuristic when it's unavailable.
+
+const _lowMemory: boolean = (() => {
+  const mem = (navigator as unknown as { deviceMemory?: number }).deviceMemory;
+  if (mem !== undefined) return mem <= 4;
+  return navigator.maxTouchPoints > 0;
+})();
+
+/** Terminate the OCR worker to free WASM heap + model memory. Re-created on next use by ensureWorker(). */
+function terminateWorker(): void {
+  if (!worker) return;
+  console.log('[plateOcr] terminating worker (low-memory mode)');
+  worker.terminate();
+  worker = null;
+  workerReady = null;
+  workerReadyResolve = null;
+  workerReadyReject = null;
+  pendingResults.clear();
+}
+
 // ── Source dimensions ────────────────────────────────────────────────────────
 
 /** Get source image dimensions. Falls back to canvas dimensions for video files. */
@@ -358,6 +382,7 @@ export async function recognizePlates(
     }
   }
 
+  if (_lowMemory) terminateWorker();
   return results;
 }
 
@@ -440,6 +465,8 @@ export async function filterByOcr(
       }
     }
   }
+
+  if (_lowMemory) terminateWorker();
 
   // Filter out matched plates
   const filtered = detections.filter((d) => !excludedKeys.has(boxKey(d)));
