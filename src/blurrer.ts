@@ -130,21 +130,34 @@ const _blurWorkers: Worker[] = [];
 let _blurWorkerNextId = 0;
 let _poolRoundRobin = 0;
 const _blurWorkerPending = new Map<number, (result: ArrayBuffer | null, error?: string) => void>();
+// Track which pending IDs belong to which worker so a crash only fails that
+// worker's items, not items on healthy workers in the pool.
+const _workerPendingIds = new WeakMap<Worker, Set<number>>();
 
 function makeBlurWorker(): Worker {
   const url = new URL('./blurWorker.js', import.meta.url);
   url.searchParams.set('v', BUILD_VERSION);
   const w = new Worker(url, { type: 'module' });
+  _workerPendingIds.set(w, new Set());
   w.onmessage = (e: MessageEvent) => {
     const { id, blurred, error } = e.data as { id: number; blurred?: ArrayBuffer; error?: string };
     const resolve = _blurWorkerPending.get(id);
     _blurWorkerPending.delete(id);
+    _workerPendingIds.get(w)?.delete(id);
     resolve?.(blurred ?? null, error);
   };
   w.onerror = (e: ErrorEvent) => {
     const err = e.message || 'blur worker crashed';
-    for (const resolve of _blurWorkerPending.values()) resolve(null, err);
-    _blurWorkerPending.clear();
+    // Only fail this worker's pending items — other workers' items are unaffected.
+    const ids = _workerPendingIds.get(w);
+    if (ids) {
+      for (const id of ids) {
+        const resolve = _blurWorkerPending.get(id);
+        _blurWorkerPending.delete(id);
+        resolve?.(null, err);
+      }
+      ids.clear();
+    }
     const idx = _blurWorkers.indexOf(w);
     if (idx !== -1) _blurWorkers.splice(idx, 1);
   };
@@ -170,6 +183,7 @@ function stackBlurInWorker(pixels: ArrayBuffer, width: number, height: number, s
       if (result !== null && result !== undefined) resolve(result);
       else reject(new Error(error ?? 'blur worker error'));
     });
+    _workerPendingIds.get(worker)?.add(id);
     worker.postMessage({ id, pixels, width, height, strength }, [pixels]);
   });
 }
