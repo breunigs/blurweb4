@@ -524,6 +524,13 @@ async function resolveDetections(
   source: HTMLCanvasElement | OffscreenCanvas,
   key: string,
 ): Promise<Detection[]> {
+  // Guard: zero-dimension source would produce NaN scale/padding, run inference
+  // on a blank gray image, and poison the IDB cache with empty results.
+  if (source.width === 0 || source.height === 0) {
+    console.warn(`[detector] skipping inference: source canvas is ${source.width}×${source.height}`);
+    return [];
+  }
+
   const cached = await getCachedDetections(key);
   if (cached !== null) return cached;
 
