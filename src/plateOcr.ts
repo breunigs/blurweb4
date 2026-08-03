@@ -412,7 +412,7 @@ function boxKey(d: Detection): string {
  */
 export function plateMatches(ocrText: string, queries: string[]): boolean {
   const norm = normalizePlate(ocrText);
-  if (norm.length < 2) return false;
+  if (norm.length === 0) return false;
   return queries.some((q) => {
     const nq = normalizePlate(q);
     if (nq.length === 0) return false;
