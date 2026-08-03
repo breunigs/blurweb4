@@ -143,7 +143,7 @@ export class ExportManager {
       }
     }
     if (wakeLock === null && navigator.maxTouchPoints > 0 && exportItems.some((it) => it.isVideo)) {
-      tauriAlert(t('wakelock_warning'));
+      tauriAlert(t('wakelock_warning')).catch(console.error);
     }
     try {
       await runBatch(exportItems, namingPattern, {

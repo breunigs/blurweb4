@@ -334,7 +334,7 @@ export class App {
         clearDetectionCache()
           .then(() => this.rerenderActive())
           .catch(console.error);
-      });
+      }).catch(console.error);
     });
   }
 
