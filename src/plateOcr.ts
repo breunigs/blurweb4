@@ -111,8 +111,16 @@ function ensureWorker(): Promise<void> {
   };
   worker.onerror = (e) => {
     console.error(`[plateOcr] worker crashed: ${e.message}`);
-    workerReadyReject?.(new Error(e.message));
+    const err = new Error(`plateOcr worker: ${e.message}`);
+    workerReadyReject?.(err);
     workerReadyResolve = workerReadyReject = null;
+    // Reject all pending recognition requests so callers don't hang forever.
+    for (const pending of pendingResults.values()) pending.reject(err);
+    pendingResults.clear();
+    // Null the worker so ensureWorker() recreates it on next use.
+    worker?.terminate();
+    worker = null;
+    workerReady = null;
   };
 
   workerReady = new Promise<void>((resolve, reject) => {

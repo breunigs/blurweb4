@@ -376,6 +376,11 @@ function sendToWorker(msgType: 'init' | 'changeModel', modelSrc: string | ArrayB
       const err = new Error(`detector worker: ${detail}`);
       (workerReadyReject ?? workerInferReject)?.(err);
       workerReadyResolve = workerReadyReject = workerInferResolve = workerInferReject = null;
+      // Null the worker so ensureWorkerReady() recreates it on next inference
+      // instead of postMessaging to the dead worker (which hangs forever).
+      worker?.terminate();
+      worker = null;
+      workerReady = null;
     };
   }
   return new Promise<void>((resolve, reject) => {

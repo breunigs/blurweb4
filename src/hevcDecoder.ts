@@ -110,6 +110,10 @@ export class HevcFallbackDecoder extends CustomVideoDecoder {
     this.worker.onerror = (e) => {
       this.reject?.(new Error(`hevcWorker onerror: ${e.message}`));
       this.resolve = this.reject = null;
+      // Null the worker so subsequent decode/flush/close skip cleanly
+      // instead of postMessaging to the dead worker (which hangs forever).
+      this.worker?.terminate();
+      this.worker = null;
     };
 
     let extradata: Uint8Array | undefined;
