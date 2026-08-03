@@ -120,8 +120,8 @@ export class VideoPlayer {
       this.statusEl.classList.remove('visible');
 
       const usTs = firstSample.microsecondTimestamp;
-      const key = await makeVideoKey(this.file, this.canvas.width, this.canvas.height, usTs);
       firstSample.close();
+      const key = await makeVideoKey(this.file, this.canvas.width, this.canvas.height, usTs);
 
       const cached = await getCachedDetections(key);
       if (gen !== this.inferenceGen) return;
@@ -134,6 +134,9 @@ export class VideoPlayer {
           if (this.inferenceGen !== gen) return;
           this.statusEl.classList.remove('visible');
           this.applyAndNotify(dets, usTs);
+        }, (err) => {
+          console.error('[videoPlayer] inference failed during load:', err);
+          if (this.inferenceGen === gen) this.statusEl.classList.remove('visible');
         });
       }
     }
@@ -173,8 +176,8 @@ export class VideoPlayer {
       this.statusEl.classList.remove('visible');
 
       const usTs = sample.microsecondTimestamp;
-      const key = await makeVideoKey(this.file, this.canvas.width, this.canvas.height, usTs);
       sample.close();
+      const key = await makeVideoKey(this.file, this.canvas.width, this.canvas.height, usTs);
 
       const tCacheStart = performance.now();
       const cached = await getCachedDetections(key);
@@ -192,6 +195,9 @@ export class VideoPlayer {
           if (this.inferenceGen !== gen) return;
           this.statusEl.classList.remove('visible');
           this.applyAndNotify(dets, usTs);
+        }, (err) => {
+          console.error('[videoPlayer] inference failed during seek:', err);
+          if (this.inferenceGen === gen) this.statusEl.classList.remove('visible');
         });
       }
     }
@@ -205,49 +211,56 @@ export class VideoPlayer {
     const wallStart = performance.now();
     const mediaStart = this.currentTime;
 
-    for await (const sample of this.sink.samples(this.currentTime)) {
-      if (!this.playing) {
+    try {
+      for await (const sample of this.sink.samples(this.currentTime)) {
+        if (!this.playing) {
+          sample.close();
+          break;
+        }
+
+        const targetWall = wallStart + (sample.timestamp - mediaStart) * 1000;
+        const delay = targetWall - performance.now();
+        if (delay > 16) await new Promise<void>((resolve) => setTimeout(resolve, delay - 8));
+
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+        if (!this.playing) {
+          sample.close();
+          break;
+        }
+
+        this.drawFrame(sample);
+        this.currentTime = sample.timestamp;
+        this.onTimeUpdate?.(this.currentTime);
+        this.canvas.dispatchEvent(new CustomEvent('videoframe', { detail: { timestamp: this.currentTime } }));
+
+        this.inferenceGen++;
+        const gen = this.inferenceGen;
+        this.statusEl.classList.remove('visible');
+
+        const usTs = sample.microsecondTimestamp;
         sample.close();
-        break;
+        const key = await makeVideoKey(this.file, this.canvas.width, this.canvas.height, usTs);
+
+        const cached = await getCachedDetections(key);
+        if (gen !== this.inferenceGen || !this.playing) continue;
+        if (cached !== null) {
+          this.applyAndNotify(cached, usTs);
+        } else {
+          this.statusEl.textContent = detStatusText();
+          this.statusEl.classList.add('visible');
+          scheduleInference(this.canvas, key, (dets) => {
+            if (this.inferenceGen !== gen) return;
+            this.statusEl.classList.remove('visible');
+            this.applyAndNotify(dets, usTs);
+          }, (err) => {
+            console.error('[videoPlayer] inference failed during playback:', err);
+            if (this.inferenceGen === gen) this.statusEl.classList.remove('visible');
+          });
+        }
       }
-
-      const targetWall = wallStart + (sample.timestamp - mediaStart) * 1000;
-      const delay = targetWall - performance.now();
-      if (delay > 16) await new Promise<void>((resolve) => setTimeout(resolve, delay - 8));
-
-      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-
-      if (!this.playing) {
-        sample.close();
-        break;
-      }
-
-      this.drawFrame(sample);
-      this.currentTime = sample.timestamp;
-      this.onTimeUpdate?.(this.currentTime);
-      this.canvas.dispatchEvent(new CustomEvent('videoframe', { detail: { timestamp: this.currentTime } }));
-
-      this.inferenceGen++;
-      const gen = this.inferenceGen;
-      this.statusEl.classList.remove('visible');
-
-      const usTs = sample.microsecondTimestamp;
-      const key = await makeVideoKey(this.file, this.canvas.width, this.canvas.height, usTs);
-      sample.close();
-
-      const cached = await getCachedDetections(key);
-      if (gen !== this.inferenceGen || !this.playing) continue;
-      if (cached !== null) {
-        this.applyAndNotify(cached, usTs);
-      } else {
-        this.statusEl.textContent = detStatusText();
-        this.statusEl.classList.add('visible');
-        scheduleInference(this.canvas, key, (dets) => {
-          if (this.inferenceGen !== gen) return;
-          this.statusEl.classList.remove('visible');
-          this.applyAndNotify(dets, usTs);
-        });
-      }
+    } catch (err) {
+      console.error('[videoPlayer] playback error:', err);
     }
 
     if (this.playing) {
@@ -263,6 +276,7 @@ export class VideoPlayer {
   dispose(): void {
     this.playing = false;
     this.seekGen++; // invalidate any in-flight seek
+    this.inferenceGen++; // invalidate any pending inference callbacks
     this.statusEl.classList.remove('visible');
     window.removeEventListener('libavfallback', this.libavHandler);
     this.input?.dispose();
