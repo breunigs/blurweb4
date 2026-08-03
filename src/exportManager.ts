@@ -230,6 +230,7 @@ export class ExportManager {
       this.exportGlobalRow.classList.remove('visible');
       this.globalProgressFill.style.width = '0%';
       this.globalEta.textContent = '';
+      document.getElementById('step-load')?.classList.remove('has-eta');
     }, delay);
     pending.forEach((it) => setTimeout(() => {
       it.fileListRow.classList.remove('exporting');
