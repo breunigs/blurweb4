@@ -1,6 +1,6 @@
 /**
  * Tests for preview navigation: swipe, keyboard arrows, chevron buttons,
- * chevron visibility at boundaries, and no-wrap behavior.
+ * chevron visibility, and wraparound behavior.
  */
 
 import { test, expect, Page } from '@playwright/test';
@@ -29,7 +29,7 @@ function getActiveFileName(page: Page) {
 }
 
 test.describe('Preview navigation', () => {
-  test('arrow keys navigate between files without wrapping', async ({ page }) => {
+  test('arrow keys navigate between files with wraparound', async ({ page }) => {
     await loadMultipleFiles(page);
 
     // Should start at first file
@@ -43,21 +43,17 @@ test.describe('Preview navigation', () => {
     await page.keyboard.press('ArrowRight');
     expect(await getActiveFileName(page)).toBe('av1.mp4');
 
-    // ArrowRight at last → stays (no wrap)
+    // ArrowRight at last → wraps to first
     await page.keyboard.press('ArrowRight');
+    expect(await getActiveFileName(page)).toBe('jpeg.jpg');
+
+    // ArrowLeft at first → wraps to last
+    await page.keyboard.press('ArrowLeft');
     expect(await getActiveFileName(page)).toBe('av1.mp4');
 
     // ArrowLeft → previous
     await page.keyboard.press('ArrowLeft');
     expect(await getActiveFileName(page)).toBe('x264.mp4');
-
-    // Go back to first
-    await page.keyboard.press('ArrowLeft');
-    expect(await getActiveFileName(page)).toBe('jpeg.jpg');
-
-    // ArrowLeft at first → stays (no wrap)
-    await page.keyboard.press('ArrowLeft');
-    expect(await getActiveFileName(page)).toBe('jpeg.jpg');
   });
 
   test('arrow keys are ignored when input is focused', async ({ page }) => {
@@ -72,7 +68,8 @@ test.describe('Preview navigation', () => {
     expect(await getActiveFileName(page)).toBe('jpeg.jpg');
   });
 
-  test('chevron buttons navigate between files', async ({ page }) => {
+  test('chevron buttons navigate between files', async ({ page, browserName }) => {
+    test.skip(browserName === 'firefox', 'Firefox headless matches hover:none — chevrons are display:none');
     await loadMultipleFiles(page);
     expect(await getActiveFileName(page)).toBe('jpeg.jpg');
 
@@ -85,11 +82,12 @@ test.describe('Preview navigation', () => {
     expect(await getActiveFileName(page)).toBe('jpeg.jpg');
   });
 
-  test('prev chevron is hidden on first file, next hidden on last', async ({ page }) => {
+  test('both chevrons visible on all files when multiple loaded', async ({ page, browserName }) => {
+    test.skip(browserName === 'firefox', 'Firefox headless matches hover:none — chevrons are display:none');
     await loadMultipleFiles(page);
 
-    // On first file: prev hidden, next visible
-    expect(await page.locator('.preview-nav-prev').isHidden()).toBe(true);
+    // On first file: both visible
+    expect(await page.locator('.preview-nav-prev').isHidden()).toBe(false);
     expect(await page.locator('.preview-nav-next').isHidden()).toBe(false);
 
     // Navigate to last
@@ -97,15 +95,7 @@ test.describe('Preview navigation', () => {
     await page.keyboard.press('ArrowRight');
     expect(await getActiveFileName(page)).toBe('av1.mp4');
 
-    // On last file: prev visible, next hidden
-    expect(await page.locator('.preview-nav-prev').isHidden()).toBe(false);
-    expect(await page.locator('.preview-nav-next').isHidden()).toBe(true);
-
-    // Navigate to middle
-    await page.keyboard.press('ArrowLeft');
-    expect(await getActiveFileName(page)).toBe('x264.mp4');
-
-    // In middle: both visible
+    // On last file: both visible
     expect(await page.locator('.preview-nav-prev').isHidden()).toBe(false);
     expect(await page.locator('.preview-nav-next').isHidden()).toBe(false);
   });
@@ -122,7 +112,8 @@ test.describe('Preview navigation', () => {
     expect(await page.locator('.preview-nav-next').isHidden()).toBe(true);
   });
 
-  test('swipe left navigates to next file', async ({ page }) => {
+  test('swipe left navigates to next file', async ({ page, browserName }) => {
+    test.skip(browserName === 'firefox', 'Firefox headless does not support TouchEvent constructor');
     await loadMultipleFiles(page);
     expect(await getActiveFileName(page)).toBe('jpeg.jpg');
 
@@ -137,7 +128,8 @@ test.describe('Preview navigation', () => {
     expect(await getActiveFileName(page)).toBe('x264.mp4');
   });
 
-  test('swipe right navigates to previous file', async ({ page }) => {
+  test('swipe right navigates to previous file', async ({ page, browserName }) => {
+    test.skip(browserName === 'firefox', 'Firefox headless does not support TouchEvent constructor');
     await loadMultipleFiles(page);
     // Go to second file first
     await page.keyboard.press('ArrowRight');
@@ -154,7 +146,8 @@ test.describe('Preview navigation', () => {
     expect(await getActiveFileName(page)).toBe('jpeg.jpg');
   });
 
-  test('swipe does not wrap at boundaries', async ({ page }) => {
+  test('swipe wraps around at boundaries', async ({ page, browserName }) => {
+    test.skip(browserName === 'firefox', 'Firefox headless does not support TouchEvent constructor');
     await loadMultipleFiles(page);
     expect(await getActiveFileName(page)).toBe('jpeg.jpg');
 
@@ -163,21 +156,17 @@ test.describe('Preview navigation', () => {
     const centerX = box.x + box.width / 2;
     const centerY = box.y + box.height / 2;
 
-    // Swipe right on first file → should stay
+    // Swipe right on first file → wraps to last
     await swipe(page, centerX, centerY, centerX + 80, centerY);
-    expect(await getActiveFileName(page)).toBe('jpeg.jpg');
-
-    // Go to last file
-    await page.keyboard.press('ArrowRight');
-    await page.keyboard.press('ArrowRight');
     expect(await getActiveFileName(page)).toBe('av1.mp4');
 
-    // Swipe left on last file → should stay
+    // Swipe left on last file → wraps to first
     await swipe(page, centerX, centerY, centerX - 80, centerY);
-    expect(await getActiveFileName(page)).toBe('av1.mp4');
+    expect(await getActiveFileName(page)).toBe('jpeg.jpg');
   });
 
-  test('short swipe does not navigate', async ({ page }) => {
+  test('short swipe does not navigate', async ({ page, browserName }) => {
+    test.skip(browserName === 'firefox', 'Firefox headless does not support TouchEvent constructor');
     await loadMultipleFiles(page);
     expect(await getActiveFileName(page)).toBe('jpeg.jpg');
 

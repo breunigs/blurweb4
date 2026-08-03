@@ -265,7 +265,10 @@ export class FileManager {
       // Show detection result summary when this player's frame is detected.
       // Only update UI if this item is the active one.
       player.onDetection = (dets) => {
-        if (this.store.items[this.store.activeIndex] === item) this.onShowDetectionResult(dets);
+        if (this.store.items[this.store.activeIndex] === item) {
+          this.onShowDetectionResult(dets);
+          (window as unknown as Record<string, unknown>).__lastDetections = dets;
+        }
       };
       player.onOcrTexts = (ocrTexts) => {
         if (this.store.items[this.store.activeIndex] === item) this.onOcrTextsAvailable(ocrTexts);

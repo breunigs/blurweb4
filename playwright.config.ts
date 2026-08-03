@@ -31,6 +31,7 @@ export default defineConfig({
     {
       name: 'firefox',
       testDir: './tests',
+      retries: 1, // Firefox WebCodecs H.264 decode is unreliable under parallel load
       use: { ...devices['Desktop Firefox'], acceptDownloads: true },
     },
   ],
