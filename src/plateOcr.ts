@@ -10,6 +10,16 @@ import { LruMap } from './lruMap';
 
 declare const BUILD_VERSION: string;
 
+// ── Debug flag ──────────────────────────────────────────────────────────────
+// Enable from the browser console:  window.__ocrDebug = true
+// Then open a file (clear IDB cache first) to see det/rec debug output.
+// Deskewed plate images are logged as clickable blob URLs in the console.
+
+(window as unknown as Record<string, unknown>).__ocrDebug = false;
+function ocrDbg(): boolean {
+  return !!(window as unknown as Record<string, unknown>).__ocrDebug;
+}
+
 // ── Types ────────────────────────────────────────────────────────────────────
 
 export interface OcrResult {
@@ -24,7 +34,7 @@ type AnyCtx = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
 const REC_HEIGHT = 48;
 const MAX_REC_WIDTH = 320;
 /** Minimum plate dimensions to attempt OCR (in source image pixels). */
-const MIN_PLATE_WIDTH = 45;
+const MIN_PLATE_WIDTH = 30;
 const MIN_PLATE_HEIGHT = 10;
 
 // ── OCR cache (in-memory + IndexedDB) ────────────────────────────────────────
@@ -72,6 +82,10 @@ function getModelUrl(): string {
   return new URL('../models/ocr/rec.onnx', import.meta.url).href;
 }
 
+function getDetModelUrl(): string {
+  return new URL('../models/ocr/det.onnx', import.meta.url).href;
+}
+
 function getDictUrl(): string {
   return new URL('../models/ocr/dict.txt', import.meta.url).href;
 }
@@ -83,8 +97,13 @@ function ensureWorker(): Promise<void> {
   workerUrl.searchParams.set('v', BUILD_VERSION);
   worker = new Worker(workerUrl, { type: 'module' });
   worker.onmessage = (e: MessageEvent) => {
-    const msg = e.data as { type: string; id?: number; text?: string; message?: string };
-    if (msg.type === 'ready') {
+    const msg = e.data as { type: string; id?: number; text?: string; message?: string; label?: string; blob?: Blob };
+    if (msg.type === 'debug-image') {
+      // Display deskewed plate image in the console (when __ocrDebug is on)
+      // The blob URL can be clicked to open in a new tab, or copy-paste it.
+      const url = URL.createObjectURL(msg.blob!);
+      console.log(`[plateOcr] ${msg.label} — open: ${url}`);
+    } else if (msg.type === 'ready') {
       workerReadyResolve?.();
       workerReadyResolve = null;
     } else if (msg.type === 'result' && msg.id !== undefined) {
@@ -126,7 +145,7 @@ function ensureWorker(): Promise<void> {
   workerReady = new Promise<void>((resolve, reject) => {
     workerReadyResolve = resolve;
     workerReadyReject = reject;
-    worker!.postMessage({ type: 'init', modelUrl: getModelUrl(), dictUrl: getDictUrl() });
+    worker!.postMessage({ type: 'init', modelUrl: getModelUrl(), dictUrl: getDictUrl(), detModelUrl: getDetModelUrl() });
   });
   workerReady.catch(() => {
     workerReady = null;
@@ -273,6 +292,49 @@ async function cropPlateFromSource(
   return { pixels: resizedData.data.buffer, width: targetW, height: targetH };
 }
 
+// ── Raw crop extraction (for det + rec pipeline) ────────────────────────────
+
+/** Extract plate region at canvas resolution (no resize to 48×W). */
+function extractRawCrop(
+  ctx: AnyCtx,
+  d: Detection,
+): { pixels: ArrayBuffer; width: number; height: number } | null {
+  const canvasW = (ctx as CanvasRenderingContext2D).canvas.width;
+  const canvasH = (ctx as CanvasRenderingContext2D).canvas.height;
+  const sx = Math.max(0, Math.round(d.x));
+  const sy = Math.max(0, Math.round(d.y));
+  const sw = Math.min(Math.round(d.w), canvasW - sx);
+  const sh = Math.min(Math.round(d.h), canvasH - sy);
+  if (sw <= 0 || sh <= 0) return null;
+  const data = ctx.getImageData(sx, sy, sw, sh);
+  return { pixels: data.data.buffer, width: sw, height: sh };
+}
+
+/** Extract plate region from full-resolution source image (no resize). */
+async function extractRawCropFromSource(
+  sourceFile: File,
+  d: Detection,
+  canvasW: number,
+  canvasH: number,
+): Promise<{ pixels: ArrayBuffer; width: number; height: number } | null> {
+  const bitmap = await createImageBitmap(sourceFile);
+  const srcW = bitmap.width;
+  const srcH = bitmap.height;
+  const scaleX = srcW / canvasW;
+  const scaleY = srcH / canvasH;
+  const sx = Math.max(0, Math.round(d.x * scaleX));
+  const sy = Math.max(0, Math.round(d.y * scaleY));
+  const sw = Math.min(Math.round(d.w * scaleX), srcW - sx);
+  const sh = Math.min(Math.round(d.h * scaleY), srcH - sy);
+  if (sw <= 0 || sh <= 0) { bitmap.close(); return null; }
+  const plateCanvas = new OffscreenCanvas(sw, sh);
+  const plateCtx = plateCanvas.getContext('2d')!;
+  plateCtx.drawImage(bitmap, sx, sy, sw, sh, 0, 0, sw, sh);
+  bitmap.close();
+  const data = plateCtx.getImageData(0, 0, sw, sh);
+  return { pixels: data.data.buffer, width: sw, height: sh };
+}
+
 // ── OCR inference ────────────────────────────────────────────────────────────
 
 async function recognizeOne(
@@ -282,29 +344,24 @@ async function recognizeOne(
   canvasW: number,
   canvasH: number,
 ): Promise<string> {
-  // Check if the plate on the preview canvas is large enough for direct extraction
-  const previewW = Math.round(d.w);
-  const previewH = Math.round(d.h);
-
   let crop: { pixels: ArrayBuffer; width: number; height: number } | null = null;
 
-  if (previewW >= MIN_PLATE_WIDTH && previewH >= MIN_PLATE_HEIGHT) {
-    // Preview has enough pixels — extract directly
-    crop = cropPlateFromCtx(ctx, d);
+  // For images, prefer full-resolution source (better for det + rec)
+  if (sourceFile.type.startsWith('image/')) {
+    const { sourceW, sourceH } = await getSourceDims(sourceFile, canvasW, canvasH);
+    const srcBoxW = Math.round(d.w * sourceW / canvasW);
+    const srcBoxH = Math.round(d.h * sourceH / canvasH);
+    if (srcBoxW >= MIN_PLATE_WIDTH && srcBoxH >= MIN_PLATE_HEIGHT) {
+      crop = await extractRawCropFromSource(sourceFile, d, canvasW, canvasH);
+    }
   }
 
+  // Fall back to canvas crop
   if (!crop) {
-    // Preview plate is too small — try extracting from full-resolution source
-    const { sourceW: srcW, sourceH: srcH } = await getSourceDims(sourceFile, canvasW, canvasH);
-
-    const sourceBoxW = Math.round(d.w * srcW / canvasW);
-    const sourceBoxH = Math.round(d.h * srcH / canvasH);
-    if (sourceBoxW < MIN_PLATE_WIDTH || sourceBoxH < MIN_PLATE_HEIGHT) return '';
-
-    // Only attempt source crop for images (video frames are already on canvas)
-    if (sourceFile.type.startsWith('image/')) {
-      crop = await cropPlateFromSource(sourceFile, d, canvasW, canvasH);
-    }
+    const previewW = Math.round(d.w);
+    const previewH = Math.round(d.h);
+    if (previewW < MIN_PLATE_WIDTH || previewH < MIN_PLATE_HEIGHT) return '';
+    crop = extractRawCrop(ctx, d);
   }
 
   if (!crop) return '';
@@ -314,7 +371,7 @@ async function recognizeOne(
   return new Promise<string>((resolve, reject) => {
     pendingResults.set(id, { resolve, reject });
     worker!.postMessage(
-      { type: 'recognize', id, pixels: crop!.pixels, width: crop!.width, height: crop!.height },
+      { type: 'detect-and-recognize', id, pixels: crop!.pixels, width: crop!.width, height: crop!.height, debug: ocrDbg() },
       { transfer: [crop!.pixels] },
     );
   });
@@ -361,8 +418,17 @@ export async function recognizePlates(
 
   const { sourceW, sourceH } = await getSourceDims(file, canvasW, canvasH);
 
-  const plates = detections
-    .filter((d) => d.label === 'plate' && platePassesMinSize(d, canvasW, canvasH, sourceW, sourceH))
+  const allPlates = detections.filter((d) => d.label === 'plate');
+  const plates = allPlates
+    .filter((d) => {
+      const pass = platePassesMinSize(d, canvasW, canvasH, sourceW, sourceH);
+      if (!pass && ocrDbg()) {
+        const srcBoxW = Math.round(d.w * sourceW / canvasW);
+        const srcBoxH = Math.round(d.h * sourceH / canvasH);
+        console.log(`[plateOcr] skip: plate ${Math.round(d.w)}×${Math.round(d.h)} (source ${srcBoxW}×${srcBoxH}) below min ${MIN_PLATE_WIDTH}×${MIN_PLATE_HEIGHT}px`);
+      }
+      return pass;
+    })
     // Sort by area descending — recognize largest plates first
     .sort((a, b) => (b.w * b.h) - (a.w * a.h));
   if (plates.length === 0) return [];
@@ -444,9 +510,16 @@ export async function filterByOcr(
 
   const { sourceW, sourceH } = await getSourceDims(file, canvasW, canvasH);
 
-  const plates = detections.filter((d) =>
-    d.label === 'plate' && platePassesMinSize(d, canvasW, canvasH, sourceW, sourceH),
-  );
+  const plates = detections.filter((d) => {
+    if (d.label !== 'plate') return false;
+    const pass = platePassesMinSize(d, canvasW, canvasH, sourceW, sourceH);
+    if (!pass && ocrDbg()) {
+      const srcBoxW = Math.round(d.w * sourceW / canvasW);
+      const srcBoxH = Math.round(d.h * sourceH / canvasH);
+      console.log(`[plateOcr] skip: plate ${Math.round(d.w)}×${Math.round(d.h)} (source ${srcBoxW}×${srcBoxH}) below min ${MIN_PLATE_WIDTH}×${MIN_PLATE_HEIGHT}px`);
+    }
+    return pass;
+  });
   if (plates.length === 0) return { filtered: detections, excludedKeys, ocrTexts };
 
   const fileHash = await getFileHash(file);

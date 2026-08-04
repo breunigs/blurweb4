@@ -336,6 +336,18 @@ export class App {
           .catch(console.error);
       }).catch(console.error);
     });
+    document.getElementById('debug-ocr-btn')?.addEventListener('click', () => {
+      (window as unknown as Record<string, unknown>).__ocrDebug = true;
+      import('./plateOcr').then(({ clearOcrCache }) => {
+        clearOcrCache();
+        import('./db').then(({ idbClear }) => {
+          idbClear('ocr')
+            .then(() => this.rerenderActive())
+            .catch(console.error);
+        });
+      });
+      console.log('[debug] OCR debug enabled + cache cleared');
+    });
   }
 
   // ── Inference status ────────────────────────────────────────────────────────
