@@ -296,6 +296,9 @@ function findComponents(binary: Uint8Array, w: number, h: number): [number, numb
 
 interface DetResult {
   angle: number;
+  /** Detected text region center and dimensions in original crop coords. */
+  cx: number; cy: number;
+  tw: number; th: number;
 }
 
 async function runDetection(pixels: Uint8ClampedArray, width: number, height: number, debug: boolean): Promise<DetResult | null> {
@@ -380,7 +383,7 @@ async function runDetection(pixels: Uint8ClampedArray, width: number, height: nu
     // Normalize angle to [-π/2, π/2]
     while (ta > Math.PI / 2) ta -= Math.PI;
     while (ta < -Math.PI / 2) ta += Math.PI;
-    bestResult = { angle: ta };
+    bestResult = { angle: ta, cx: bestRect.cx / scale, cy: bestRect.cy / scale, tw: tw / scale, th: th / scale };
   }
 
   if (debug) {
@@ -397,7 +400,7 @@ async function runDetection(pixels: Uint8ClampedArray, width: number, height: nu
       const tmpCanvas = new OffscreenCanvas(width, height);
       tmpCanvas.getContext('2d')!.putImageData(srcImg, 0, 0);
       dbgCtx.drawImage(tmpCanvas, 0, 0, width * Z, height * Z);
-      // Draw det hull in green
+      // Draw detected text region in green
       dbgCtx.strokeStyle = '#00ff00';
       dbgCtx.lineWidth = 2;
       dbgCtx.beginPath();
@@ -406,7 +409,7 @@ async function runDetection(pixels: Uint8ClampedArray, width: number, height: nu
       dbgCtx.closePath();
       dbgCtx.stroke();
       dbgCanvas.convertToBlob({ type: 'image/png' }).then((blob) => {
-        self.postMessage({ type: 'debug-image', label: `det hull ${width}×${height} (4×)`, blob });
+        self.postMessage({ type: 'debug-image', label: `det region ${width}×${height} (4×)`, blob });
       }).catch(() => {});
     }
   }
@@ -433,11 +436,33 @@ async function recOnCrop(pixels: Uint8ClampedArray, w: number, h: number): Promi
   return ctcDecode(results[session.outputNames[0]]);
 }
 
-/** Run det to find text rotation, rotate crop, then run rec. Falls back to direct rec. */
+/** Rotate pixels by -angle around center. Returns full rotated bounding box. */
+function rotatePixels(
+  pixels: Uint8ClampedArray, w: number, h: number, angle: number,
+): { canvas: OffscreenCanvas; w: number; h: number } {
+  const cos = Math.abs(Math.cos(angle)), sin = Math.abs(Math.sin(angle));
+  const rotW = Math.ceil(w * cos + h * sin);
+  const rotH = Math.ceil(w * sin + h * cos);
+  const srcCanvas = new OffscreenCanvas(w, h);
+  srcCanvas.getContext('2d')!.putImageData(
+    new ImageData(new Uint8ClampedArray(pixels.buffer as ArrayBuffer, pixels.byteOffset, pixels.length), w, h), 0, 0,
+  );
+  const rotCanvas = new OffscreenCanvas(rotW, rotH);
+  const rotCtx = rotCanvas.getContext('2d')!;
+  rotCtx.translate(rotW / 2, rotH / 2);
+  rotCtx.rotate(-angle);
+  rotCtx.drawImage(srcCanvas, -w / 2, -h / 2);
+  return { canvas: rotCanvas, w: rotW, h: rotH };
+}
+
+/**
+ * 1. det on original crop → rotation angle
+ * 2. Rotate crop to level text
+ * 3. rec on rotated crop
+ */
 async function deskewAndRecognize(pixels: Uint8ClampedArray, w: number, h: number, debug: boolean): Promise<string> {
   const det = await runDetection(pixels, w, h, debug);
 
-  // No text detected or angle is negligible → run rec on original crop
   if (!det || Math.abs(det.angle) < DET_SKIP_ANGLE_RAD) {
     if (debug) console.log(`[ocr worker] deskew: ${det ? `angle ${(det.angle * 180 / Math.PI).toFixed(1)}° below threshold` : 'no det result'} — using original crop ${w}×${h}`);
     const text = await recOnCrop(pixels, w, h);
@@ -445,36 +470,38 @@ async function deskewAndRecognize(pixels: Uint8ClampedArray, w: number, h: numbe
     return text;
   }
 
-  const angle = det.angle;
-  const angleDeg = (angle * 180 / Math.PI).toFixed(1);
+  const angleDeg = (det.angle * 180 / Math.PI).toFixed(1);
+  const rot = rotatePixels(pixels, w, h, det.angle);
 
-  // Rotate the full crop by -angle around its center using OffscreenCanvas.
-  // Size the output to the rotated bounding box so nothing is clipped.
-  const cos = Math.abs(Math.cos(angle)), sin = Math.abs(Math.sin(angle));
-  const rotW = Math.ceil(w * cos + h * sin);
-  const rotH = Math.ceil(w * sin + h * cos);
-  const srcBitmap = await createImageBitmap(
-    new ImageData(new Uint8ClampedArray(pixels.buffer as ArrayBuffer, pixels.byteOffset, pixels.length), w, h),
-  );
-  const rotCanvas = new OffscreenCanvas(rotW, rotH);
-  const rotCtx = rotCanvas.getContext('2d')!;
-  rotCtx.translate(rotW / 2, rotH / 2);
-  rotCtx.rotate(-angle);
-  rotCtx.drawImage(srcBitmap, -w / 2, -h / 2);
-  srcBitmap.close();
-  const rotated = rotCtx.getImageData(0, 0, rotW, rotH);
-  console.log(`[ocr worker] deskew: rotate ${angleDeg}° ${w}×${h} → ${rotW}×${rotH}`);
+  // After rotation the text is horizontal, but the bounding box is padded
+  // with large black triangles making it nearly square. Keep full width
+  // but crop height to the text band (with generous padding) so the
+  // aspect ratio fed to rec reflects the actual plate shape.
+  // Transform text center through the rotation to find its y in the rotated image,
+  // then crop height to 3× text height to strip black rotation padding.
+  const cosA = Math.cos(-det.angle), sinA = Math.sin(-det.angle);
+  const rcy = (det.cx - w / 2) * sinA + (det.cy - h / 2) * cosA + rot.h / 2;
+  const bandH = Math.round(det.th * 3);
+  const cropY = Math.max(0, Math.round(rcy - bandH / 2));
+  const finalH = Math.min(bandH, rot.h - cropY);
+  const cropped = rot.canvas.getContext('2d')!.getImageData(0, cropY, rot.w, finalH);
+  console.log(`[ocr worker] deskew: rotate ${angleDeg}° ${w}×${h} → ${rot.w}×${rot.h} → crop ${rot.w}×${finalH}`);
 
   if (debug) {
-    const dbgCanvas = new OffscreenCanvas(rotW, rotH);
-    dbgCanvas.getContext('2d')!.putImageData(rotated, 0, 0);
+    const Z = 4;
+    const dbgCanvas = new OffscreenCanvas(rot.w * Z, finalH * Z);
+    const dbgCtx = dbgCanvas.getContext('2d')!;
+    dbgCtx.imageSmoothingEnabled = false;
+    const tmpCanvas = new OffscreenCanvas(rot.w, finalH);
+    tmpCanvas.getContext('2d')!.putImageData(cropped, 0, 0);
+    dbgCtx.drawImage(tmpCanvas, 0, 0, rot.w * Z, finalH * Z);
     dbgCanvas.convertToBlob({ type: 'image/png' }).then((blob) => {
-      self.postMessage({ type: 'debug-image', label: `rotated ${rotW}×${rotH} angle=${angleDeg}°`, blob });
-    }).catch((err) => { console.warn('[ocr worker] debug-image failed:', err); });
+      self.postMessage({ type: 'debug-image', label: `rotated+crop ${rot.w}×${finalH} (4×)`, blob });
+    }).catch(() => {});
   }
 
-  const text = await recOnCrop(rotated.data, rotW, rotH);
-  if (debug) console.log(`[ocr worker] rec: "${text}" (from rotated ${rotW}×${rotH})`);
+  const text = await recOnCrop(cropped.data, rot.w, finalH);
+  if (debug) console.log(`[ocr worker] rec: "${text}" (from rotated+crop ${rot.w}×${finalH})`);
   return text;
 }
 
