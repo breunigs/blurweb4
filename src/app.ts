@@ -419,6 +419,14 @@ export class App {
 
     document.getElementById('examples-btn')!.addEventListener('click', () => this.files.loadExamples());
 
+    const resetBtn = document.getElementById('reset-btn') as HTMLButtonElement;
+    resetBtn.addEventListener('click', () => {
+      this.files.clearAll();
+      (document.getElementById('keep-plates-input') as HTMLInputElement).value = '';
+      (document.getElementById('examples-btn') as HTMLButtonElement).disabled = false;
+      resetBtn.hidden = true;
+    });
+
     this.exportBtn.addEventListener('click', () => void this.exportManager.startExport(false));
     this.exportAllBtn.addEventListener('click', () => void this.exportManager.startExport(true));
 

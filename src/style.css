@@ -314,7 +314,8 @@ details.step-card[open]>summary.step-header {
 }
 
 #pick-btn,
-#examples-btn {
+#examples-btn,
+#reset-btn {
   padding: 9px 20px;
   border: none;
   border-radius: 8px;
@@ -333,12 +334,14 @@ details.step-card[open]>summary.step-header {
   background: var(--accent-h);
 }
 
-#examples-btn {
+#examples-btn,
+#reset-btn {
   background: var(--card2);
   color: var(--dim);
 }
 
-#examples-btn:not(:disabled):hover {
+#examples-btn:not(:disabled):hover,
+#reset-btn:hover {
   color: var(--text);
 }
 
@@ -1706,6 +1709,7 @@ html[data-theme^='macos'] #drop-zone {
 
 html[data-theme^='macos'] #pick-btn,
 html[data-theme^='macos'] #examples-btn,
+html[data-theme^='macos'] #reset-btn,
 html[data-theme^='macos'] #export-btn,
 html[data-theme^='macos'] #export-all-btn {
   border-radius: 10px;
@@ -1806,6 +1810,7 @@ html[data-theme^='windows'] #drop-zone {
 
 html[data-theme^='windows'] #pick-btn,
 html[data-theme^='windows'] #examples-btn,
+html[data-theme^='windows'] #reset-btn,
 html[data-theme^='windows'] #export-btn,
 html[data-theme^='windows'] #export-all-btn {
   border-radius: 4px;

@@ -375,6 +375,27 @@ export class FileManager {
     }
   }
 
+  clearAll(): void {
+    for (const item of this.store.items) item.player?.dispose();
+    this.store.items.length = 0;
+    this.store.activeIndex = -1;
+
+    // Bulk-remove DOM: clear all canvas wrappers and file-list rows at once
+    this.previewArea.querySelectorAll('.canvas-wrapper').forEach((el) => el.remove());
+    this.fileListEl.querySelectorAll('.file-list-row').forEach((el) => el.remove());
+
+    document.getElementById('step-redaction')!.classList.remove('active');
+    document.getElementById('step-preview')!.classList.remove('active');
+    document.getElementById('step-export')!.classList.remove('active');
+    document.getElementById('step-load')!.classList.remove('has-files');
+    this.previewArea.style.aspectRatio = '';
+    this.updateAudioSettingVisibility();
+    this.updateLoadedSummary();
+    this.updateFileNav();
+    this.updateNavChevrons();
+    this.exportManager.updateBtnState();
+  }
+
   removeFile(item: MediaItem): void {
     const index = this.store.items.indexOf(item);
     if (index === -1) return;
@@ -461,6 +482,7 @@ export class FileManager {
   updateLoadedSummary(): void {
     const n = this.store.items.length;
     this.loadedSummary.textContent = n === 0 ? '' : n === 1 ? t('files_loaded_one') : tpl('files_loaded_n', { n });
+    (document.getElementById('reset-btn') as HTMLButtonElement).hidden = n === 0;
     // "Export all" is only meaningful when there are multiple files.
     this.exportAllBtn.style.display = n > 1 ? '' : 'none';
   }
