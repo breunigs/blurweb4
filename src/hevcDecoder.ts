@@ -94,7 +94,7 @@ export class HevcFallbackDecoder extends CustomVideoDecoder {
   async init(): Promise<void> {
     window.dispatchEvent(new CustomEvent('libavfallback', { detail: 'hevc' }));
     const workerUrl = new URL('./hevcWorker.js', import.meta.url);
-    workerUrl.searchParams.set('v', BUILD_VERSION);
+    workerUrl.searchParams.set('v', HASH_HEVC_WORKER);
     this.worker = new Worker(workerUrl, { type: 'module' });
 
     this.worker.onmessage = (e: MessageEvent) => {
@@ -300,7 +300,7 @@ export class HevcFallbackDecoder extends CustomVideoDecoder {
 
 // SKIP_HEVC_WASM is set at build time (esbuild define) for Tauri macOS builds
 // where native WebCodecs handles HEVC — no WASM fallback needed.
-declare const BUILD_VERSION: string;
+declare const HASH_HEVC_WORKER: string;
 declare const SKIP_HEVC_WASM: boolean;
 if (!SKIP_HEVC_WASM) {
   registerDecoder(HevcFallbackDecoder);

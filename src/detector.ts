@@ -15,7 +15,9 @@ import { getConfig, type ModelChoice } from './config';
 import { idbGet, idbPut, idbClear } from './db';
 import { LruMap } from './lruMap';
 
-declare const BUILD_VERSION: string;
+declare const HASH_DETECTOR_WORKER: string;
+declare const HASH_MODEL_N: string;
+declare const HASH_MODEL_X: string;
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -282,7 +284,9 @@ async function loadModelBuffer(
   onProgress?: (done: number, total: number) => void,
 ): Promise<string | ArrayBuffer> {
   if (model === 'detect_n') {
-    return new URL('../models/detect_n_2024_04.onnx', import.meta.url).href;
+    const u = new URL('../models/detect_n_2024_04.onnx', import.meta.url);
+    u.searchParams.set('v', HASH_MODEL_N);
+    return u.href;
   }
   // Fetch detect_x chunks with a concurrency limit of 2 to avoid saturating the
   // connection and triggering browser-side throttling on large parallel fetches.
@@ -296,7 +300,9 @@ async function loadModelBuffer(
   async function fetchWorker(): Promise<void> {
     while (nextChunk < DETECT_X_CHUNKS) {
       const i = nextChunk++;
-      const url = new URL(`../models/detect_x_2024_04.onnx.${i}`, import.meta.url).href;
+      const _u = new URL(`../models/detect_x_2024_04.onnx.${i}`, import.meta.url);
+      _u.searchParams.set('v', HASH_MODEL_X);
+      const url = _u.href;
       const tChunk = performance.now();
       console.log(`[detector] chunk ${i} fetch start`);
       const resp = await fetch(url);
@@ -364,7 +370,7 @@ function handleWorkerMessage(e: MessageEvent): void {
 function sendToWorker(msgType: 'init' | 'changeModel', modelSrc: string | ArrayBuffer): Promise<void> {
   if (!worker) {
     const workerUrl = new URL('./detectorWorker.js', import.meta.url);
-    workerUrl.searchParams.set('v', BUILD_VERSION);
+    workerUrl.searchParams.set('v', HASH_DETECTOR_WORKER);
     worker = new Worker(workerUrl, { type: 'module' });
     worker.onmessage = handleWorkerMessage;
     worker.onerror = (e) => {

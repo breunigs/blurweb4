@@ -11,10 +11,13 @@ import type { VideoSamplePixelFormat, VideoCodec, EncodedPacket } from 'mediabun
 
 // ── Vendor file path ───────────────────────────────────────────────────────
 
-export const LIBAV_AVC_AV1_MJS = new URL(
+declare const HASH_LIBAV_AVC: string;
+const _libavUrl = new URL(
   '../vendor/libav-avc-av1/libav-6.8.8.0-avc-av1.wasm.mjs',
   import.meta.url,
-).href;
+);
+_libavUrl.searchParams.set('v', HASH_LIBAV_AVC);
+export const LIBAV_AVC_AV1_MJS = _libavUrl.href;
 
 // ── Pixel format maps ──────────────────────────────────────────────────────
 

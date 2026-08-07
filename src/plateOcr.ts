@@ -8,7 +8,10 @@
 import { getFileHash, idbGet, idbPut, type Detection } from './detector';
 import { LruMap } from './lruMap';
 
-declare const BUILD_VERSION: string;
+declare const HASH_OCR_WORKER: string;
+declare const HASH_OCR_REC: string;
+declare const HASH_OCR_DET: string;
+declare const HASH_OCR_DICT: string;
 
 // ── Debug flag ──────────────────────────────────────────────────────────────
 // Enable from the browser console:  window.__ocrDebug = true
@@ -79,22 +82,28 @@ let nextId = 0;
 const pendingResults = new Map<number, { resolve: (text: string) => void; reject: (err: Error) => void }>();
 
 function getModelUrl(): string {
-  return new URL('../models/ocr/rec.onnx', import.meta.url).href;
+  const u = new URL('../models/ocr/rec.onnx', import.meta.url);
+  u.searchParams.set('v', HASH_OCR_REC);
+  return u.href;
 }
 
 function getDetModelUrl(): string {
-  return new URL('../models/ocr/det.onnx', import.meta.url).href;
+  const u = new URL('../models/ocr/det.onnx', import.meta.url);
+  u.searchParams.set('v', HASH_OCR_DET);
+  return u.href;
 }
 
 function getDictUrl(): string {
-  return new URL('../models/ocr/dict.txt', import.meta.url).href;
+  const u = new URL('../models/ocr/dict.txt', import.meta.url);
+  u.searchParams.set('v', HASH_OCR_DICT);
+  return u.href;
 }
 
 function ensureWorker(): Promise<void> {
   if (workerReady) return workerReady;
 
   const workerUrl = new URL('./ocrWorker.js', import.meta.url);
-  workerUrl.searchParams.set('v', BUILD_VERSION);
+  workerUrl.searchParams.set('v', HASH_OCR_WORKER);
   worker = new Worker(workerUrl, { type: 'module' });
   worker.onmessage = (e: MessageEvent) => {
     const msg = e.data as { type: string; id?: number; text?: string; message?: string; label?: string; blob?: Blob };

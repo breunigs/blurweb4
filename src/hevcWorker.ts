@@ -19,7 +19,10 @@
  *  Worker → Main  { type:'error', message:string }       (any of the above fail)
  */
 
-const LIBAV_MJS = new URL('../vendor/libav-hevc/libav-6.8.8.0-hevc-aac.wasm.mjs', import.meta.url).href;
+declare const HASH_LIBAV_HEVC: string;
+const _libavUrl = new URL('../vendor/libav-hevc/libav-6.8.8.0-hevc-aac.wasm.mjs', import.meta.url);
+_libavUrl.searchParams.set('v', HASH_LIBAV_HEVC);
+const LIBAV_MJS = _libavUrl.href;
 const AVMEDIA_TYPE_VIDEO = 0;
 const AV_CODEC_ID_HEVC = 173;
 

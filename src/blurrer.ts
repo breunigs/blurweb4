@@ -17,7 +17,7 @@
 
 import type { Detection } from './detector';
 
-declare const BUILD_VERSION: string;
+declare const HASH_BLUR_WORKER: string;
 
 // ── Corner ratios ─────────────────────────────────────────────────────────────
 
@@ -136,7 +136,7 @@ const _workerPendingIds = new WeakMap<Worker, Set<number>>();
 
 function makeBlurWorker(): Worker {
   const url = new URL('./blurWorker.js', import.meta.url);
-  url.searchParams.set('v', BUILD_VERSION);
+  url.searchParams.set('v', HASH_BLUR_WORKER);
   const w = new Worker(url, { type: 'module' });
   _workerPendingIds.set(w, new Set());
   w.onmessage = (e: MessageEvent) => {
