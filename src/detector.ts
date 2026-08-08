@@ -24,7 +24,7 @@ declare const HASH_MODEL_X: string;
 const MODEL_W = 1280;
 const MODEL_H = 1280;
 const MODEL_NAMES: Record<ModelChoice, string> = {
-  detect_n: 'detect_n_2024_04',
+  detect_n: 'detect_n_2026_08',
   detect_x: 'detect_x_2024_04',
 };
 const DETECT_X_CHUNKS = 9;
@@ -199,9 +199,46 @@ export function filterByLabel(dets: Detection[], enabledLabels: string[]): Detec
   return dets.filter((d) => set.has(d.label));
 }
 
-/** Apply both confidence and label filters from config. */
+/** Merge ratio: boxes whose smaller area is ≥ this fraction covered merge. */
+const THRESHOLD_MERGE = 0.7;
+
+/**
+ * Merge same-label boxes that heavily overlap: when the intersection covers
+ * ≥ THRESHOLD_MERGE of the smaller box's area, replace both with their
+ * bounding union (keeping the higher confidence). Repeats until stable.
+ */
+function mergeOverlapping(dets: Detection[]): Detection[] {
+  const before = dets.length;
+  const out = dets.slice();
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (let i = 0; i < out.length; i++) {
+      for (let j = i + 1; j < out.length; j++) {
+        if (out[i].label !== out[j].label) continue;
+        const a = out[i], b = out[j];
+        const ix = Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x));
+        const iy = Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
+        const inter = ix * iy;
+        const minArea = Math.min(a.w * a.h, b.w * b.h);
+        if (minArea <= 0 || inter / minArea < THRESHOLD_MERGE) continue;
+        const mx = Math.min(a.x, b.x), my = Math.min(a.y, b.y);
+        out[i] = { label: a.label, conf: Math.max(a.conf, b.conf), x: mx, y: my, w: Math.max(a.x + a.w, b.x + b.w) - mx, h: Math.max(a.y + a.h, b.y + b.h) - my };
+        out.splice(j, 1);
+        changed = true;
+        break;
+      }
+      if (changed) break;
+    }
+  }
+  const merged = before - out.length;
+  if (merged > 0) console.log(`[detector] merged ${merged} overlapping boxes (${before} → ${out.length})`);
+  return out;
+}
+
+/** Apply both confidence and label filters from config, then merge overlapping boxes. */
 export function applyFilters(dets: Detection[], minConf: number, enabledLabels: string[]): Detection[] {
-  return filterByLabel(filterByConf(dets, minConf), enabledLabels);
+  return mergeOverlapping(filterByLabel(filterByConf(dets, minConf), enabledLabels));
 }
 
 // ── OCR integration ──────────────────────────────────────────────────────────
@@ -284,7 +321,7 @@ async function loadModelBuffer(
   onProgress?: (done: number, total: number) => void,
 ): Promise<string | ArrayBuffer> {
   if (model === 'detect_n') {
-    const u = new URL('../models/detect_n_2024_04.onnx', import.meta.url);
+    const u = new URL('../models/detect_n_2026_08.onnx', import.meta.url);
     u.searchParams.set('v', HASH_MODEL_N);
     return u.href;
   }
