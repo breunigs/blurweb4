@@ -1,4 +1,4 @@
-# Media Redactor
+# veloroute.hamburg · Redactor
 
 Browser-based tool for automatically detecting and redacting license plates
 and people in images and videos. Runs entirely in-browser — no server, no

@@ -43,7 +43,7 @@ function walkAndCopy(srcDir, destDir, { skipMaps = false } = {}) {
 }
 
 // Root files
-for (const name of ['index.html', 'sw.js', 'manifest.json', 'icon.svg', 'robots.txt']) {
+for (const name of ['index.html', 'sw.js', 'manifest.json', 'icon.svg', 'header.svg', 'robots.txt']) {
   const src = join(ROOT, name);
   if (!existsSync(src)) {
     console.warn(`  ${name} — skipped (not found)`);

@@ -110,15 +110,10 @@ body {
 
 /* ── App title ─────────────────────────────────────────────── */
 #app-title {
-  font-size: 22px;
-  font-weight: 700;
-  letter-spacing: -0.03em;
-  color: var(--text);
-  margin-bottom: 20px;
-}
-
-#app-title span {
-  color: var(--accent);
+  max-width: 400px;
+  width: 100%;
+  height: auto;
+  margin-bottom: 15px;
 }
 
 

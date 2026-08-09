@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Media Redactor</title>
+  <title>veloroute.hamburg · Redactor</title>
   <!-- Apply theme before CSS renders to prevent flash of unstyled content -->
   <script>
     (function () {
@@ -20,15 +20,16 @@
     })();
   </script>
   <link rel="stylesheet" href="src/style.css">
-  <link rel="manifest" href="/manifest.json">
-  <link rel="apple-touch-icon" href="/icon.svg">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon.svg">
   <meta name="theme-color" content="#3b82f6">
-  <script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => { });</script>
+  <script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => { });</script>
 </head>
 
 <body>
 
-  <h1 id="app-title">Media<span>·</span>Redactor</h1>
+  <img id="app-title" src="header.svg" alt="veloroute.hamburg Redactor" width="694" height="155">
 
 
   <!-- ─────────────────────────── STEP 1: LOAD ─────────────────────────── -->
@@ -162,14 +163,15 @@
             <span class="setting-row-label"></span>
             <div class="keep-plates-wrap">
               <input type="text" id="keep-plates-input" placeholder="e.g. HH AB 1234"
-                     data-i18n-placeholder="keep_plates_placeholder">
+                data-i18n-placeholder="keep_plates_placeholder">
               <button id="keep-plates-info-btn" title="Show help" data-i18n-title="info_btn_show_help">i</button>
               <div id="keep-plates-suggestions"></div>
             </div>
           </div>
         </div>
         <div id="keep-plates-info-panel" hidden>
-          <p data-i18n="keep_plates_help">Enter one or more license plates (comma-separated) to keep them visible instead of blurring. Use * as a wildcard to match any characters, e.g. HH*1234 matches HHAB1234.</p>
+          <p data-i18n="keep_plates_help">Enter one or more license plates (comma-separated) to keep them visible
+            instead of blurring. Use * as a wildcard to match any characters, e.g. HH*1234 matches HHAB1234.</p>
         </div>
       </div>
     </div>
@@ -240,8 +242,8 @@
           <div class="pill-group" id="export-mode-radio-group">
             <label><input type="radio" name="exportMode" value="quality" checked><span
                 data-i18n="export_mode_quality">Quality</span></label>
-            <label><input type="radio" name="exportMode" value="filesize"><span
-                data-i18n="export_mode_filesize">File size</span></label>
+            <label><input type="radio" name="exportMode" value="filesize"><span data-i18n="export_mode_filesize">File
+                size</span></label>
           </div>
         </div>
         <div class="setting-row">

@@ -45,7 +45,7 @@ export function initLangControls(): void {
 const STRINGS = {
   en: {
     // Page
-    page_title: 'Media Redactor',
+    page_title: 'veloroute.hamburg · Redactor',
 
     // Step 1 — Load
     step_load: 'Load files',
@@ -190,7 +190,7 @@ const STRINGS = {
   },
 
   de: {
-    page_title: 'Media Redactor',
+    page_title: 'veloroute.hamburg · Redactor',
 
     step_load: 'Dateien laden',
     dropzone_text: 'Bilder oder Videos hier ablegen',

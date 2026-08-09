@@ -75,6 +75,8 @@ embedFile(join(ROOT, 'sw.js'), join(OUT, 'sw.js'));
 console.log('  sw.js');
 embedFile(join(ROOT, 'icon.svg'), join(OUT, 'icon.svg'));
 console.log('  icon.svg');
+embedFile(join(ROOT, 'header.svg'), join(OUT, 'header.svg'));
+console.log('  header.svg');
 
 // src/style.css — referenced directly from index.html as "src/style.css"
 embedFile(join(ROOT, 'src', 'style.css'), join(OUT, 'src', 'style.css'));
