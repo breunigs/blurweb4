@@ -39,7 +39,7 @@ blurweb4/
 │   ├── imageExporter.ts  canvas.toBlob → JPEG download
 │   └── batchExporter.ts  sequential multi-file export with progress callbacks
 ├── models/
-│   └── detect_n_2024_04.onnx   YOLOv5n model (~8 MB), labels: plate, person
+│   └── detect_n_2026_08.onnx   YOLOv5n model (~9 MB), labels: plate, person
 ├── vendor/
 │   ├── libav-hevc/       pre-built libav.js hevc-aac WASM variant (not bundled by esbuild)
 │   │   ├── libav-6.8.8.0-hevc-aac.wasm.mjs   ES module wrapper (~260 KB)
@@ -424,7 +424,7 @@ Works with both `CanvasRenderingContext2D` and `OffscreenCanvasRenderingContext2
 
 ## YOLOv5 object detection (src/detector.ts + src/detector.worker.ts)
 
-Model: `models/detect_n_2024_04.onnx` (8 MB) or `detect_x` (178 MB), labels: `plate`, `person`.
+Model: `models/detect_n_2026_08.onnx` (9 MB) or `detect_x` (178 MB), labels: `plate`, `person`.
 Input: `[1, 3, 1280, 1280]` float32 RGB CHW tensor normalized to [0, 1].
 Output: `[1, N, 7]` — rows of `[cx, cy, w, h, obj_conf, plate_conf, person_conf]`
 in model-pixel coordinates (0..1280, 0..1280).
@@ -488,7 +488,7 @@ and `hash8` is the first 8 hex bytes of a SHA-256 over the file's first 8 KB
 **Status bar:** `.detect-status` div inside each `.canvas-wrapper`, shown at top
 with spinner while inference is pending, hidden on completion or cache hit.
 
-**Test reference detections** (from `detect_n_2024_04.onnx` on `jpeg.jpg`
+**Test reference detections** (from `detect_n_2026_08.onnx` on `jpeg.jpg`
 at display size 1429×497, Hamburg street scene with GPS EXIF):
 With `THRESHOLD_CONF=0.01` the model returns 2 plates + 16 persons (18 total).
 See `JPEG_REF_DETECTIONS` in `media.test.ts` for the full list.
