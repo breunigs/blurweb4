@@ -99,6 +99,13 @@ function parseExifMeta(jpeg: Uint8Array): FileMeta {
     }
   }
 
+  const fields = Object.keys(meta).length;
+  console.log(
+    `[meta] EXIF: ${fields} fields` +
+    (meta.lat ? ` | GPS ${meta.lat},${meta.lon}` : '') +
+    (meta.year ? ` | date ${meta.year}-${meta.month}-${meta.day} ${meta.hour}:${meta.minute}` : '') +
+    (meta.timezone ? ` ${meta.timezone}` : ''),
+  );
   return meta;
 }
 
@@ -146,6 +153,13 @@ export async function extractVideoMeta(file: File): Promise<FileMeta> {
         .join(':');
     }
 
+    const fields = Object.keys(meta).length;
+    console.log(
+      `[meta] video: ${fields} fields` +
+      (meta.lat ? ` | GPS ${meta.lat},${meta.lon}` : '') +
+      (meta.year ? ` | date ${meta.year}-${meta.month}-${meta.day} ${meta.hour}:${meta.minute}` : '') +
+      (meta.duration ? ` | duration ${meta.duration}` : ''),
+    );
     return meta;
   } finally {
     input.dispose();

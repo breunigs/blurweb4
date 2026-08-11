@@ -140,10 +140,13 @@ function extractGpsOnlyExif(jpeg: Uint8Array): Uint8Array | null {
 }
 
 /**
- * Strip the EXIF orientation tag (0x0112) from an APP1 segment.
- * The canvas pixels are already rotated by createImageBitmap, so keeping the
- * tag would cause viewers to double-rotate the exported image.
- * Returns a new APP1 segment without the orientation entry in IFD0.
+ * Neutralise the EXIF orientation tag (0x0112) in an APP1 segment by setting
+ * it to 1 (normal).  The canvas pixels are already rotated by createImageBitmap,
+ * so keeping the original value would cause viewers to double-rotate the export.
+ *
+ * Previous approach removed the 12-byte IFD entry, which shifted all subsequent
+ * data without adjusting TIFF offset pointers — corrupting the entire EXIF
+ * structure (sub-IFD pointers, out-of-line data offsets).
  */
 function stripOrientationTag(app1: Uint8Array): Uint8Array {
   // APP1 layout: FF E1 (2) + length (2) + "Exif\0\0" (6) + TIFF data
@@ -163,37 +166,23 @@ function stripOrientationTag(app1: Uint8Array): Uint8Array {
   if (ifd0Off + 2 > tiff.length) return app1;
   const count = r16(ifd0Off);
 
-  // Find the orientation entry index
-  let orientIdx = -1;
   for (let i = 0; i < count; i++) {
-    if (r16(ifd0Off + 2 + i * 12) === 0x0112) { orientIdx = i; break; }
+    const e = ifd0Off + 2 + i * 12;
+    if (r16(e) === 0x0112) {
+      // Overwrite orientation value to 1 (normal) in a copy, preserving all
+      // byte positions so TIFF offset pointers remain valid.
+      const result = new Uint8Array(app1);
+      const valueOff = 10 + e + 8; // position in app1 of the 4-byte value field
+      if (isLE) {
+        result[valueOff] = 1; result[valueOff + 1] = 0;
+      } else {
+        result[valueOff] = 0; result[valueOff + 1] = 1;
+      }
+      result[valueOff + 2] = 0; result[valueOff + 3] = 0;
+      return result;
+    }
   }
-  if (orientIdx === -1) return app1; // no orientation tag present
-
-  // Build new TIFF with the orientation entry removed from IFD0.
-  // IFD entries are contiguous 12-byte blocks; remove one and fix the count.
-  const entryStart = 10 + ifd0Off + 2 + orientIdx * 12; // offset in app1
-  const newApp1 = new Uint8Array(app1.length - 12);
-  newApp1.set(app1.subarray(0, entryStart));
-  newApp1.set(app1.subarray(entryStart + 12), entryStart);
-
-  // Fix IFD0 entry count (at offset 10 + ifd0Off in app1)
-  const countOff = 10 + ifd0Off;
-  const newCount = count - 1;
-  if (isLE) {
-    newApp1[countOff] = newCount & 0xff;
-    newApp1[countOff + 1] = (newCount >> 8) & 0xff;
-  } else {
-    newApp1[countOff] = (newCount >> 8) & 0xff;
-    newApp1[countOff + 1] = newCount & 0xff;
-  }
-
-  // Fix APP1 segment length (bytes 2-3, big-endian, includes itself)
-  const newSegLen = newApp1.length - 2; // subtract FF E1 marker
-  newApp1[2] = (newSegLen >> 8) & 0xff;
-  newApp1[3] = newSegLen & 0xff;
-
-  return newApp1;
+  return app1; // no orientation tag present
 }
 
 /**
@@ -231,6 +220,7 @@ export async function exportAsJpeg(
   outputStem?: string,
 ): Promise<ImageExportResult> {
   const needsSource = keepMetadata !== 'strip' && sourceFile?.type === 'image/jpeg';
+  console.log(`[export] metadata=${keepMetadata} file=${sourceFilename} type=${sourceFile?.type ?? 'none'} needsSource=${needsSource}`);
   const [canvasBlob, sourceBytes] = await Promise.all([
     new Promise<Blob>((resolve, reject) => {
       canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('canvas.toBlob returned null'))), 'image/jpeg', quality);
@@ -242,13 +232,20 @@ export async function exportAsJpeg(
   if (sourceBytes) {
     let exifSegment =
       keepMetadata === 'gps' ? extractGpsOnlyExif(sourceBytes) : findJpegApp1(sourceBytes);
+    console.log(`[export] EXIF APP1 ${exifSegment ? `found (${exifSegment.length} bytes)` : 'not found'}`);
     if (exifSegment) {
-      // Canvas pixels are already rotated by createImageBitmap — strip the
-      // orientation tag so viewers don't double-rotate the export.
       exifSegment = stripOrientationTag(exifSegment);
       const canvasBytes = new Uint8Array(await canvasBlob.arrayBuffer());
-      finalBlob = new Blob([injectExif(canvasBytes, exifSegment)], { type: 'image/jpeg' });
+      const injected = injectExif(canvasBytes, exifSegment);
+      finalBlob = new Blob([injected], { type: 'image/jpeg' });
+      // Verify: first bytes should be FF D8 FF E1, followed by "Exif\0\0"
+      const hdr = Array.from(injected.subarray(0, 12))
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join(' ');
+      console.log(`[export] injected EXIF into output (${finalBlob.size} bytes), header: ${hdr}`);
     }
+  } else if (keepMetadata !== 'strip') {
+    console.log(`[export] no source bytes — metadata not preserved (type=${sourceFile?.type ?? 'no file'})`);
   }
 
   const stem = outputStem ?? sourceFilename.replace(/\.[^.]+$/, '');
