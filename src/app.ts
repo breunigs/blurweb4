@@ -52,6 +52,7 @@ export class App {
   private loadedSummary!: HTMLElement;
   private stepPreviewSubtitle!: HTMLElement;
   private audioSettingRow!: HTMLElement;
+  private highlightEl: HTMLDivElement | null = null;
   private modelLoadAfterSwitch = false;
 
   init(): void {
@@ -117,6 +118,7 @@ export class App {
         this.detectStatusInline.classList.remove('visible');
         const suggestionsEl = document.getElementById('keep-plates-suggestions');
         if (suggestionsEl) suggestionsEl.innerHTML = '';
+        this.removeDetectionHighlight();
         void this.updateNamingInfoPanel();
         void index;
       },
@@ -562,7 +564,7 @@ export class App {
   }
 
   /** Populate suggestion chips from OCR results, excluding already-entered plates. */
-  private renderSuggestionChips(results: Array<{ text: string }>, mod: typeof import('./plateOcr')): void {
+  private renderSuggestionChips(results: Array<{ text: string; boxKey: string }>, mod: typeof import('./plateOcr')): void {
     const suggestionsEl = document.getElementById('keep-plates-suggestions');
     if (!suggestionsEl) return;
     suggestionsEl.innerHTML = '';
@@ -583,6 +585,8 @@ export class App {
         setConfig({ keepPlates: newVal.toUpperCase() });
         btn.remove();
       });
+      btn.addEventListener('mouseenter', () => this.showDetectionHighlight(r.boxKey));
+      btn.addEventListener('mouseleave', () => this.removeDetectionHighlight());
       suggestionsEl.appendChild(btn);
     }
   }
@@ -597,12 +601,12 @@ export class App {
     const mod = await import('./plateOcr');
     // Deduplicate texts (multiple boxes may have the same plate)
     const seen = new Set<string>();
-    const results: Array<{ text: string }> = [];
-    for (const text of ocrTexts.values()) {
+    const results: Array<{ text: string; boxKey: string }> = [];
+    for (const [key, text] of ocrTexts.entries()) {
       const norm = mod.normalizePlate(text);
       if (norm.length > 0 && !seen.has(norm)) {
         seen.add(norm);
-        results.push({ text });
+        results.push({ text, boxKey: key });
       }
     }
     this.renderSuggestionChips(results, mod);
@@ -637,7 +641,13 @@ export class App {
       const mod = await import('./plateOcr');
       registerPlateOcrModule(mod);
       const results = await mod.recognizePlates(offCtx, plates, item.file, 'img');
-      this.renderSuggestionChips(results, mod);
+      this.renderSuggestionChips(
+        results.map((r) => ({
+          text: r.text,
+          boxKey: `${Math.round(r.detection.x)},${Math.round(r.detection.y)},${Math.round(r.detection.w)},${Math.round(r.detection.h)}`,
+        })),
+        mod,
+      );
       // Re-render so outline mode shows the newly-cached OCR texts.
       if (results.length > 0 && getConfig().drawMode === 'outline') {
         void this.rerenderActive();
@@ -645,6 +655,52 @@ export class App {
     } catch (err) {
       console.error('[app] OCR suggestions failed:', err);
       suggestionsEl.innerHTML = '';
+    }
+  }
+
+  private showDetectionHighlight(boxKey: string): void {
+    this.removeDetectionHighlight();
+    const item = this.store.items[this.store.activeIndex];
+    if (!item) return;
+    const canvas = item.canvas;
+    const wrapper = item.wrapper;
+
+    const parts = boxKey.split(',').map(Number);
+    if (parts.length !== 4 || parts.some(isNaN)) return;
+    const [bx, by, bw, bh] = parts;
+
+    // Apply expansion fraction to match the actual redacted area
+    const cfg = getConfig();
+    const frac = cfg.expansionFraction;
+    const cw = canvas.width;
+    const ch = canvas.height;
+    let dx = bx, dy = by, dw = bw, dh = bh;
+    if (frac > 0) {
+      const padX = dw * frac * 0.5;
+      const padY = dh * frac * 0.5;
+      dx = Math.max(0, dx - padX);
+      dy = Math.max(0, dy - padY);
+      dw = Math.min(cw, bx + bw + padX) - dx;
+      dh = Math.min(ch, by + bh + padY) - dy;
+    }
+
+    // Map canvas pixel coords to CSS coords within the wrapper
+    const scaleX = canvas.clientWidth / canvas.width;
+    const scaleY = canvas.clientHeight / canvas.height;
+    const el = document.createElement('div');
+    el.className = 'detection-highlight';
+    el.style.left = `${dx * scaleX + canvas.offsetLeft}px`;
+    el.style.top = `${dy * scaleY + canvas.offsetTop}px`;
+    el.style.width = `${dw * scaleX}px`;
+    el.style.height = `${dh * scaleY}px`;
+    wrapper.appendChild(el);
+    this.highlightEl = el;
+  }
+
+  private removeDetectionHighlight(): void {
+    if (this.highlightEl) {
+      this.highlightEl.remove();
+      this.highlightEl = null;
     }
   }
 

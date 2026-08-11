@@ -1393,6 +1393,22 @@ input[name="drawMode"][value="solidcolor"]:checked~#solidcolor-color-picker {
   color: #fff;
 }
 
+@keyframes pulse-border {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.detection-highlight {
+  position: absolute;
+  pointer-events: none;
+  box-sizing: border-box;
+  outline: 3px solid rgba(0, 0, 0, 0.8);
+  border: 2px solid #00ff88;
+  border-radius: 2px;
+  animation: pulse-border 1s ease-in-out infinite;
+  z-index: 5;
+}
+
 .ocr-suggestions-loading {
   font-size: 12px;
   color: var(--dim);
