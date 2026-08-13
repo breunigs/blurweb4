@@ -25,7 +25,7 @@ const MODEL_W = 1280;
 const MODEL_H = 1280;
 const MODEL_NAMES: Record<ModelChoice, string> = {
   detect_n: 'detect_n_2026_08',
-  detect_x: 'detect_x_2024_04',
+  detect_x: 'detect_l_2026_08',
 };
 const DETECT_X_CHUNKS = 9;
 
@@ -337,7 +337,7 @@ async function loadModelBuffer(
   async function fetchWorker(): Promise<void> {
     while (nextChunk < DETECT_X_CHUNKS) {
       const i = nextChunk++;
-      const _u = new URL(`../models/detect_x_2024_04.onnx.${i}`, import.meta.url);
+      const _u = new URL(`../models/detect_l_2026_08.onnx.${i}`, import.meta.url);
       _u.searchParams.set('v', HASH_MODEL_X);
       const url = _u.href;
       const tChunk = performance.now();

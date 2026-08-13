@@ -61,7 +61,7 @@ const devTs = dev ? String(Date.now()) : '';
 // Static file hashes — computed before the esbuild build.
 const staticH = dev ? {} : {
   MODEL_N:    fileHash('models/detect_n_2026_08.onnx'),
-  MODEL_X:    fileHash(...Array.from({ length: 9 }, (_, i) => `models/detect_x_2024_04.onnx.${i}`)),
+  MODEL_X:    fileHash(...Array.from({ length: 9 }, (_, i) => `models/detect_l_2026_08.onnx.${i}`)),
   OCR_REC:    fileHash('models/ocr/rec.onnx'),
   OCR_DET:    fileHash('models/ocr/det.onnx'),
   OCR_DICT:   fileHash('models/ocr/dict.txt'),
