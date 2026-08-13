@@ -5,10 +5,9 @@
  * user enters a plate string in the "Keep plates" field or focuses it.
  */
 
-import { getFileHash, idbGet, idbPut, type Detection } from './detector';
+import { getFileHash, idbGet, idbPut, postOcrMessage, registerOcrHandler, type Detection } from './detector';
 import { LruMap } from './lruMap';
 
-declare const HASH_OCR_WORKER: string;
 declare const HASH_OCR_REC: string;
 declare const HASH_OCR_DET: string;
 declare const HASH_OCR_DICT: string;
@@ -74,10 +73,14 @@ function makeOcrKey(
   return `ocr|${fileHash}|${fileSize}|${canvasW}x${canvasH}|${frameRef}|${Math.round(d.x)},${Math.round(d.y)},${Math.round(d.w)},${Math.round(d.h)}`;
 }
 
-// ── Worker lifecycle ─────────────────────────────────────────────────────────
+// ── Shared worker lifecycle ──────────────────────────────────────────────────
+// OCR now runs inside the same Web Worker as object detection (detector.worker.ts)
+// so there is only one ONNX Runtime WASM heap. Messages are routed via
+// registerOcrHandler / postOcrMessage from detector.ts.
 
-let worker: Worker | null = null;
-let workerReady: Promise<void> | null = null;
+let ocrReady: Promise<void> | null = null;
+let ocrReadyResolve: (() => void) | null = null;
+let ocrReadyReject: ((e: Error) => void) | null = null;
 let nextId = 0;
 const pendingResults = new Map<number, { resolve: (text: string) => void; reject: (err: Error) => void }>();
 
@@ -99,75 +102,62 @@ function getDictUrl(): string {
   return u.href;
 }
 
-function ensureWorker(): Promise<void> {
-  if (workerReady) return workerReady;
-
-  const workerUrl = new URL('./ocrWorker.js', import.meta.url);
-  workerUrl.searchParams.set('v', HASH_OCR_WORKER);
-  worker = new Worker(workerUrl, { type: 'module' });
-  worker.onmessage = (e: MessageEvent) => {
-    const msg = e.data as { type: string; id?: number; text?: string; message?: string; label?: string; blob?: Blob };
-    if (msg.type === 'debug-image') {
-      // Display deskewed plate image in the console (when __ocrDebug is on)
-      // The blob URL can be clicked to open in a new tab, or copy-paste it.
-      const url = URL.createObjectURL(msg.blob!);
-      console.log(`[plateOcr] ${msg.label} — open: ${url}`);
-    } else if (msg.type === 'ready') {
-      workerReadyResolve?.();
-      workerReadyResolve = null;
-    } else if (msg.type === 'result' && msg.id !== undefined) {
-      const pending = pendingResults.get(msg.id);
-      if (pending) {
-        pendingResults.delete(msg.id);
-        pending.resolve(msg.text ?? '');
-      }
-    } else if (msg.type === 'error') {
-      if (msg.id !== undefined) {
-        // Per-request error (recognize failed) — reject so callers don't cache
-        const pending = pendingResults.get(msg.id);
-        if (pending) {
-          pendingResults.delete(msg.id);
-          pending.reject(new Error(msg.message));
-        }
-      } else {
-        // Init error
-        console.error(`[plateOcr] worker error: ${msg.message}`);
-        workerReadyReject?.(new Error(msg.message));
-        workerReadyResolve = workerReadyReject = null;
-      }
+function handleOcrMessage(msg: Record<string, unknown>): void {
+  const type = msg.type as string;
+  if (type === 'debug-image') {
+    const url = URL.createObjectURL(msg.blob as Blob);
+    console.log(`[plateOcr] ${msg.label} — open: ${url}`);
+  } else if (type === 'ocr-ready') {
+    ocrReadyResolve?.();
+    ocrReadyResolve = ocrReadyReject = null;
+  } else if (type === 'ocr-result' && msg.id !== undefined) {
+    const pending = pendingResults.get(msg.id as number);
+    if (pending) {
+      pendingResults.delete(msg.id as number);
+      pending.resolve((msg.text as string) ?? '');
     }
-  };
-  worker.onerror = (e) => {
-    console.error(`[plateOcr] worker crashed: ${e.message}`);
-    const err = new Error(`plateOcr worker: ${e.message}`);
-    workerReadyReject?.(err);
-    workerReadyResolve = workerReadyReject = null;
-    // Reject all pending recognition requests so callers don't hang forever.
+  } else if (type === 'ocr-released') {
+    ocrReady = null;
+  } else if (type === 'ocr-error') {
+    if (msg.id !== undefined) {
+      const pending = pendingResults.get(msg.id as number);
+      if (pending) {
+        pendingResults.delete(msg.id as number);
+        pending.reject(new Error(msg.message as string));
+      }
+    } else {
+      console.error(`[plateOcr] OCR init error: ${msg.message}`);
+      ocrReadyReject?.(new Error(msg.message as string));
+      ocrReadyResolve = ocrReadyReject = null;
+    }
+  } else if (type === 'error') {
+    // Worker crashed — reject everything
+    const err = new Error((msg.message as string) ?? 'worker crashed');
+    ocrReadyReject?.(err);
+    ocrReadyResolve = ocrReadyReject = null;
     for (const pending of pendingResults.values()) pending.reject(err);
     pendingResults.clear();
-    // Null the worker so ensureWorker() recreates it on next use.
-    worker?.terminate();
-    worker = null;
-    workerReady = null;
-  };
-
-  workerReady = new Promise<void>((resolve, reject) => {
-    workerReadyResolve = resolve;
-    workerReadyReject = reject;
-    worker!.postMessage({ type: 'init', modelUrl: getModelUrl(), dictUrl: getDictUrl(), detModelUrl: getDetModelUrl() });
-  });
-  workerReady.catch(() => {
-    workerReady = null;
-  });
-  return workerReady;
+    ocrReady = null;
+  }
 }
 
-let workerReadyResolve: (() => void) | null = null;
-let workerReadyReject: ((e: Error) => void) | null = null;
+// Register handler once at module load.
+registerOcrHandler(handleOcrMessage);
+
+function ensureOcr(): Promise<void> {
+  if (ocrReady) return ocrReady;
+  ocrReady = new Promise<void>((resolve, reject) => {
+    ocrReadyResolve = resolve;
+    ocrReadyReject = reject;
+    postOcrMessage({ type: 'ocr-init', modelUrl: getModelUrl(), dictUrl: getDictUrl(), detModelUrl: getDetModelUrl() });
+  });
+  ocrReady.catch(() => { ocrReady = null; });
+  return ocrReady;
+}
 
 // ── Low-memory teardown ─────────────────────────────────────────────────────
-// On mobile / low-RAM devices, terminate the OCR worker after each batch to
-// avoid holding two ONNX Runtime WASM heaps (detection + OCR) simultaneously.
+// On mobile / low-RAM devices, release OCR sessions after each batch to free
+// model memory within the shared WASM heap.
 // navigator.deviceMemory is Chrome/Edge only; fall back to maxTouchPoints as
 // a mobile heuristic when it's unavailable.
 
@@ -177,16 +167,12 @@ const _lowMemory: boolean = (() => {
   return navigator.maxTouchPoints > 0;
 })();
 
-/** Terminate the OCR worker to free WASM heap + model memory. Re-created on next use by ensureWorker(). */
-function terminateWorker(): void {
-  if (!worker) return;
-  console.log('[plateOcr] terminating worker (low-memory mode)');
-  worker.terminate();
-  worker = null;
-  workerReady = null;
-  workerReadyResolve = null;
-  workerReadyReject = null;
-  pendingResults.clear();
+/** Release OCR sessions in the shared worker. Re-loaded on next use by ensureOcr(). */
+function releaseOcr(): void {
+  if (!ocrReady) return;
+  console.log('[plateOcr] releasing OCR sessions (low-memory mode)');
+  postOcrMessage({ type: 'ocr-release' });
+  ocrReady = null;
 }
 
 // ── Source dimensions ────────────────────────────────────────────────────────
@@ -375,13 +361,13 @@ async function recognizeOne(
 
   if (!crop) return '';
 
-  await ensureWorker();
+  await ensureOcr();
   const id = nextId++;
   return new Promise<string>((resolve, reject) => {
     pendingResults.set(id, { resolve, reject });
-    worker!.postMessage(
-      { type: 'detect-and-recognize', id, pixels: crop!.pixels, width: crop!.width, height: crop!.height, debug: ocrDbg() },
-      { transfer: [crop!.pixels] },
+    postOcrMessage(
+      { type: 'ocr-detect-and-recognize', id, pixels: crop!.pixels, width: crop!.width, height: crop!.height, debug: ocrDbg() },
+      [crop!.pixels],
     );
   });
 }
@@ -465,7 +451,7 @@ export async function recognizePlates(
     }
   }
 
-  if (_lowMemory) terminateWorker();
+  if (_lowMemory) releaseOcr();
   return results;
 }
 
@@ -556,7 +542,7 @@ export async function filterByOcr(
     }
   }
 
-  if (_lowMemory) terminateWorker();
+  if (_lowMemory) releaseOcr();
 
   // Filter out matched plates
   const filtered = detections.filter((d) => !excludedKeys.has(boxKey(d)));

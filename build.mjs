@@ -51,7 +51,6 @@ const PH = {
   DETECTOR_WORKER: '__PH_DETW__',
   HEVC_WORKER:     '__PH_HVCW__',
   BLUR_WORKER:     '__PH_BLRW__',
-  OCR_WORKER:      '__PH_OCRW__',
 };
 
 // In dev mode, a startup timestamp stands in for all hashes (esbuild serves
@@ -83,7 +82,6 @@ const buildConfig = {
     hevcWorker: 'src/hevcWorker.ts',
     detectorWorker: 'src/detector.worker.ts',
     blurWorker: 'src/blurWorker.ts',
-    ocrWorker: 'src/ocr.worker.ts',
   },
   bundle: true,
   outdir: 'dist',
@@ -106,7 +104,6 @@ const buildConfig = {
     'HASH_DETECTOR_WORKER': JSON.stringify(dev ? devTs : PH.DETECTOR_WORKER),
     'HASH_HEVC_WORKER':     JSON.stringify(dev ? devTs : PH.HEVC_WORKER),
     'HASH_BLUR_WORKER':     JSON.stringify(dev ? devTs : PH.BLUR_WORKER),
-    'HASH_OCR_WORKER':      JSON.stringify(dev ? devTs : PH.OCR_WORKER),
   },
 };
 
@@ -127,7 +124,7 @@ function generateServiceWorker(workerH) {
 const CACHE = 'blurweb-${cacheId}';
 
 // Precache the core app shell so the UI loads offline.
-const PRECACHE = ['/', '/src/style.css', '/dist/bundle.js', '/dist/hevcWorker.js?v=${wh.HEVC_WORKER}', '/dist/detectorWorker.js?v=${wh.DETECTOR_WORKER}', '/dist/blurWorker.js?v=${wh.BLUR_WORKER}', '/dist/ocrWorker.js?v=${wh.OCR_WORKER}'];
+const PRECACHE = ['/', '/src/style.css', '/dist/bundle.js', '/dist/hevcWorker.js?v=${wh.HEVC_WORKER}', '/dist/detectorWorker.js?v=${wh.DETECTOR_WORKER}', '/dist/blurWorker.js?v=${wh.BLUR_WORKER}'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(
@@ -176,7 +173,6 @@ async function computeWorkerHashes() {
     DETECTOR_WORKER: fileHash('dist/detectorWorker.js'),
     HEVC_WORKER:     fileHash('dist/hevcWorker.js'),
     BLUR_WORKER:     fileHash('dist/blurWorker.js'),
-    OCR_WORKER:      fileHash('dist/ocrWorker.js'),
   };
   // Patch defines with real hashes for the final build
   for (const [key, hash] of Object.entries(workerH)) {
@@ -186,7 +182,7 @@ async function computeWorkerHashes() {
 }
 
 if (dev) {
-  const devWorkerH = { DETECTOR_WORKER: devTs, HEVC_WORKER: devTs, BLUR_WORKER: devTs, OCR_WORKER: devTs };
+  const devWorkerH = { DETECTOR_WORKER: devTs, HEVC_WORKER: devTs, BLUR_WORKER: devTs };
   generateServiceWorker(devWorkerH);
   const ctx = await esbuild.context(buildConfig);
   await ctx.watch();
@@ -211,5 +207,5 @@ if (dev) {
 
   generateServiceWorker(workerH);
 
-  console.log('Build complete → dist/bundle.js + dist/hevcWorker.js + dist/detectorWorker.js + dist/blurWorker.js + dist/ocrWorker.js');
+  console.log('Build complete → dist/bundle.js + dist/hevcWorker.js + dist/detectorWorker.js + dist/blurWorker.js');
 }

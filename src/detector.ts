@@ -366,7 +366,8 @@ async function loadModelBuffer(
 // ── Web Worker lifecycle ───────────────────────────────────────────────────────
 //
 // All heavy ONNX work (session creation, tensor building, session.run, NMS)
-// runs in detector.worker.ts to avoid blocking the main thread.
+// runs in detector.worker.ts to avoid blocking the main thread. The worker also
+// handles OCR inference (same WASM heap) — see postOcrMessage / registerOcrHandler.
 //
 // The protocol is strictly sequential — onnxChain ensures only one infer message
 // is in-flight at a time, so a single resolve/reject pair suffices (same pattern
@@ -382,8 +383,62 @@ let workerReadyReject: ((e: Error) => void) | null = null;
 let workerInferResolve: ((d: Detection[]) => void) | null = null;
 let workerInferReject: ((e: Error) => void) | null = null;
 
+// ── OCR message routing ──────────────────────────────────────────────────────
+// plateOcr.ts registers a handler to receive ocr-* messages from the shared worker.
+
+type OcrMsgHandler = (msg: Record<string, unknown>) => void;
+let ocrHandler: OcrMsgHandler | null = null;
+
+/** Register a callback for OCR-related messages from the shared worker. */
+export function registerOcrHandler(handler: OcrMsgHandler): void {
+  ocrHandler = handler;
+}
+
+/**
+ * Post an OCR message to the shared worker. Creates the worker if it doesn't
+ * exist yet (the detection model is loaded lazily on first detection inference).
+ */
+export function postOcrMessage(msg: Record<string, unknown>, transfers?: Transferable[]): void {
+  ensureWorkerExists();
+  worker!.postMessage(msg, { transfer: transfers ?? [] });
+}
+
+// ── Worker creation & message handling ────────────────────────────────────────
+
+function ensureWorkerExists(): void {
+  if (worker) return;
+  const workerUrl = new URL('./detectorWorker.js', import.meta.url);
+  workerUrl.searchParams.set('v', HASH_DETECTOR_WORKER);
+  worker = new Worker(workerUrl, { type: 'module' });
+  worker.onmessage = handleWorkerMessage;
+  worker.onerror = handleWorkerError;
+}
+
+function handleWorkerError(e: ErrorEvent): void {
+  // e.message is often empty/undefined for module-level worker failures
+  // (script load error, bad import, ORT init crash). Include filename and
+  // line so the debug log gives actionable info.
+  const detail = e.message || `${e.filename}:${e.lineno}` || 'unknown';
+  console.error(`[detector] worker crashed: ${detail}`);
+  const err = new Error(`detector worker: ${detail}`);
+  (workerReadyReject ?? workerInferReject)?.(err);
+  workerReadyResolve = workerReadyReject = workerInferResolve = workerInferReject = null;
+  // Notify OCR handler about the crash so it can reject pending requests.
+  ocrHandler?.({ type: 'error', message: `worker crashed: ${detail}` });
+  // Null the worker so ensureWorkerReady() recreates it on next inference
+  // instead of postMessaging to the dead worker (which hangs forever).
+  worker?.terminate();
+  worker = null;
+  workerReady = null;
+}
+
 function handleWorkerMessage(e: MessageEvent): void {
-  const msg = e.data as { type: string; ep?: string; detections?: Detection[]; message?: string };
+  const msg = e.data as { type: string; ep?: string; detections?: Detection[]; message?: string; [k: string]: unknown };
+  // Route OCR messages to registered handler
+  if (typeof msg.type === 'string' && (msg.type.startsWith('ocr-') || msg.type === 'debug-image')) {
+    ocrHandler?.(msg);
+    return;
+  }
   if (msg.type === 'ready') {
     currentEP = msg.ep ?? null;
     workerReadyResolve?.();
@@ -405,27 +460,7 @@ function handleWorkerMessage(e: MessageEvent): void {
 }
 
 function sendToWorker(msgType: 'init' | 'changeModel', modelSrc: string | ArrayBuffer): Promise<void> {
-  if (!worker) {
-    const workerUrl = new URL('./detectorWorker.js', import.meta.url);
-    workerUrl.searchParams.set('v', HASH_DETECTOR_WORKER);
-    worker = new Worker(workerUrl, { type: 'module' });
-    worker.onmessage = handleWorkerMessage;
-    worker.onerror = (e) => {
-      // e.message is often empty/undefined for module-level worker failures
-      // (script load error, bad import, ORT init crash). Include filename and
-      // line so the debug log gives actionable info.
-      const detail = e.message || `${e.filename}:${e.lineno}` || 'unknown';
-      console.error(`[detector] worker crashed: ${detail}`);
-      const err = new Error(`detector worker: ${detail}`);
-      (workerReadyReject ?? workerInferReject)?.(err);
-      workerReadyResolve = workerReadyReject = workerInferResolve = workerInferReject = null;
-      // Null the worker so ensureWorkerReady() recreates it on next inference
-      // instead of postMessaging to the dead worker (which hangs forever).
-      worker?.terminate();
-      worker = null;
-      workerReady = null;
-    };
-  }
+  ensureWorkerExists();
   return new Promise<void>((resolve, reject) => {
     workerReadyResolve = resolve;
     workerReadyReject = reject;
