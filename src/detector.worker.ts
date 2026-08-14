@@ -84,6 +84,22 @@ let ocrDetSession: ort.InferenceSession | null = null;
 let dictionary: string[] = [];
 let blankIdx = 0;
 
+// Reusable OffscreenCanvas pair for OCR operations — avoids allocating new
+// canvas backing stores on every inference, which causes GC pressure and OOM
+// on memory-constrained devices (iOS Safari).  Sequential taskQueue guarantees
+// only one OCR operation is active at a time, so two canvases suffice.
+const _ocrCanvas: { a: OffscreenCanvas | null; b: OffscreenCanvas | null } = { a: null, b: null };
+
+function ocrPrepareCanvas(slot: 'a' | 'b', w: number, h: number): OffscreenCanvasRenderingContext2D {
+  let c = _ocrCanvas[slot];
+  if (!c) { c = new OffscreenCanvas(w, h); _ocrCanvas[slot] = c; }
+  else { c.width = w; c.height = h; }
+  return c.getContext('2d')!;
+}
+
+// Reusable tensor buffer for OCR det model (max 960×960×3 ≈ 10.5 MB).
+let _ocrDetTensorBuf: Float32Array | null = null;
+
 // ── EP probing ──────────────────────────────────────────────────────────────
 
 async function resolveEps(): Promise<string[]> {
@@ -197,6 +213,9 @@ async function releaseOcrSessions(): Promise<void> {
     ocrDetSession = null;
   }
   dictionary = [];
+  _ocrDetTensorBuf = null;
+  if (_ocrCanvas.a) { _ocrCanvas.a.width = 1; _ocrCanvas.a.height = 1; }
+  if (_ocrCanvas.b) { _ocrCanvas.b.width = 1; _ocrCanvas.b.height = 1; }
   console.log('[detector worker] OCR sessions released');
 }
 
@@ -472,15 +491,15 @@ async function runOcrDetection(pixels: Uint8ClampedArray, width: number, height:
 
   if (debug) console.log(`[detector worker] ocr det: input ${width}x${height} → scaled ${sW}x${sH} → padded ${padW}x${padH} (scale=${scale.toFixed(3)})`);
 
-  const srcCanvas = new OffscreenCanvas(width, height);
-  srcCanvas.getContext('2d')!.putImageData(new ImageData(new Uint8ClampedArray(pixels.buffer as ArrayBuffer, pixels.byteOffset, pixels.length), width, height), 0, 0);
-  const padCanvas = new OffscreenCanvas(padW, padH);
-  const padCtx = padCanvas.getContext('2d')!;
-  padCtx.drawImage(srcCanvas, 0, 0, width, height, 0, 0, sW, sH);
+  ocrPrepareCanvas('a', width, height).putImageData(new ImageData(new Uint8ClampedArray(pixels.buffer as ArrayBuffer, pixels.byteOffset, pixels.length), width, height), 0, 0);
+  const padCtx = ocrPrepareCanvas('b', padW, padH);
+  padCtx.drawImage(_ocrCanvas.a!, 0, 0, width, height, 0, 0, sW, sH);
   const rgba = padCtx.getImageData(0, 0, padW, padH).data;
 
   const pc = padH * padW;
-  const t = new Float32Array(3 * pc);
+  const needed = 3 * pc;
+  if (!_ocrDetTensorBuf || _ocrDetTensorBuf.length < needed) _ocrDetTensorBuf = new Float32Array(needed);
+  const t = _ocrDetTensorBuf;
   for (let i = 0; i < pc; i++) {
     t[i]          = (rgba[i * 4]     / 255 - DET_MEAN[0]) / DET_STD[0];
     t[pc + i]     = (rgba[i * 4 + 1] / 255 - DET_MEAN[1]) / DET_STD[1];
@@ -561,13 +580,13 @@ async function recOnCrop(pixels: Uint8ClampedArray, w: number, h: number): Promi
   if (!ocrRecSession) throw new Error('OCR rec session not initialized');
   const tgtH = REC_HEIGHT;
   const tgtW = Math.min(320, Math.max(1, Math.round(w * tgtH / h)));
-  const srcBitmap = await createImageBitmap(new ImageData(new Uint8ClampedArray(pixels.buffer as ArrayBuffer, pixels.byteOffset, pixels.length), w, h));
-  const rc = new OffscreenCanvas(tgtW, tgtH);
-  const rctx = rc.getContext('2d')!;
+  ocrPrepareCanvas('a', w, h).putImageData(
+    new ImageData(new Uint8ClampedArray(pixels.buffer as ArrayBuffer, pixels.byteOffset, pixels.length), w, h), 0, 0,
+  );
+  const rctx = ocrPrepareCanvas('b', tgtW, tgtH);
   rctx.imageSmoothingEnabled = true;
   rctx.imageSmoothingQuality = 'high';
-  rctx.drawImage(srcBitmap, 0, 0, w, h, 0, 0, tgtW, tgtH);
-  srcBitmap.close();
+  rctx.drawImage(_ocrCanvas.a!, 0, 0, w, h, 0, 0, tgtW, tgtH);
   const resized = rctx.getImageData(0, 0, tgtW, tgtH).data;
   const inputTensor = ocrBuildTensor(resized, tgtW, tgtH);
   const results = await ocrRecSession.run({ [ocrRecSession.inputNames[0]]: inputTensor });
@@ -580,16 +599,14 @@ function rotatePixels(
   const cos = Math.abs(Math.cos(angle)), sin = Math.abs(Math.sin(angle));
   const rotW = Math.ceil(w * cos + h * sin);
   const rotH = Math.ceil(w * sin + h * cos);
-  const srcCanvas = new OffscreenCanvas(w, h);
-  srcCanvas.getContext('2d')!.putImageData(
+  ocrPrepareCanvas('a', w, h).putImageData(
     new ImageData(new Uint8ClampedArray(pixels.buffer as ArrayBuffer, pixels.byteOffset, pixels.length), w, h), 0, 0,
   );
-  const rotCanvas = new OffscreenCanvas(rotW, rotH);
-  const rotCtx = rotCanvas.getContext('2d')!;
+  const rotCtx = ocrPrepareCanvas('b', rotW, rotH);
   rotCtx.translate(rotW / 2, rotH / 2);
   rotCtx.rotate(-angle);
-  rotCtx.drawImage(srcCanvas, -w / 2, -h / 2);
-  return { canvas: rotCanvas, w: rotW, h: rotH };
+  rotCtx.drawImage(_ocrCanvas.a!, -w / 2, -h / 2);
+  return { canvas: _ocrCanvas.b!, w: rotW, h: rotH };
 }
 
 async function deskewAndRecognize(pixels: Uint8ClampedArray, w: number, h: number, debug: boolean): Promise<string> {

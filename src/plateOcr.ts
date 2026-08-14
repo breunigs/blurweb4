@@ -330,28 +330,52 @@ async function extractRawCropFromSource(
   return { pixels: data.data.buffer, width: sw, height: sh };
 }
 
+/** Extract plate region from a pre-decoded ImageBitmap (no resize, no re-decode). */
+function extractRawCropFromBitmap(
+  bitmap: ImageBitmap,
+  d: Detection,
+  canvasW: number,
+  canvasH: number,
+): { pixels: ArrayBuffer; width: number; height: number } | null {
+  const srcW = bitmap.width;
+  const srcH = bitmap.height;
+  const scaleX = srcW / canvasW;
+  const scaleY = srcH / canvasH;
+  const sx = Math.max(0, Math.round(d.x * scaleX));
+  const sy = Math.max(0, Math.round(d.y * scaleY));
+  const sw = Math.min(Math.round(d.w * scaleX), srcW - sx);
+  const sh = Math.min(Math.round(d.h * scaleY), srcH - sy);
+  if (sw <= 0 || sh <= 0) return null;
+  const plateCanvas = new OffscreenCanvas(sw, sh);
+  const plateCtx = plateCanvas.getContext('2d')!;
+  plateCtx.drawImage(bitmap, sx, sy, sw, sh, 0, 0, sw, sh);
+  const data = plateCtx.getImageData(0, 0, sw, sh);
+  return { pixels: data.data.buffer, width: sw, height: sh };
+}
+
 // ── OCR inference ────────────────────────────────────────────────────────────
 
 async function recognizeOne(
   ctx: AnyCtx,
   d: Detection,
-  sourceFile: File,
   canvasW: number,
   canvasH: number,
+  sourceBitmap?: ImageBitmap,
 ): Promise<string> {
   let crop: { pixels: ArrayBuffer; width: number; height: number } | null = null;
 
-  // For images, prefer full-resolution source (better for det + rec)
-  if (sourceFile.type.startsWith('image/')) {
-    const { sourceW, sourceH } = await getSourceDims(sourceFile, canvasW, canvasH);
-    const srcBoxW = Math.round(d.w * sourceW / canvasW);
-    const srcBoxH = Math.round(d.h * sourceH / canvasH);
+  // For images, prefer full-resolution source (better for det + rec).
+  // sourceBitmap is pre-decoded once per batch to avoid repeated full-image
+  // decodes that cause OOM on iOS.
+  if (sourceBitmap) {
+    const srcBoxW = Math.round(d.w * sourceBitmap.width / canvasW);
+    const srcBoxH = Math.round(d.h * sourceBitmap.height / canvasH);
     if (srcBoxW >= MIN_PLATE_WIDTH && srcBoxH >= MIN_PLATE_HEIGHT) {
-      crop = await extractRawCropFromSource(sourceFile, d, canvasW, canvasH);
+      crop = extractRawCropFromBitmap(sourceBitmap, d, canvasW, canvasH);
     }
   }
 
-  // Fall back to canvas crop
+  // Fall back to canvas crop (video files, or image plates too small in source)
   if (!crop) {
     const previewW = Math.round(d.w);
     const previewH = Math.round(d.h);
@@ -411,7 +435,16 @@ export async function recognizePlates(
   const canvasW = (ctx as CanvasRenderingContext2D).canvas.width;
   const canvasH = (ctx as CanvasRenderingContext2D).canvas.height;
 
-  const { sourceW, sourceH } = await getSourceDims(file, canvasW, canvasH);
+  // Decode source bitmap once for all plates (images only).
+  // Previously each plate triggered 2 separate createImageBitmap(file) calls,
+  // each decoding the full JPEG into ~16 MB RGBA — causing OOM on iOS.
+  let sourceBitmap: ImageBitmap | undefined;
+  let sourceW = canvasW, sourceH = canvasH;
+  if (file.type.startsWith('image/')) {
+    sourceBitmap = await createImageBitmap(file);
+    sourceW = sourceBitmap.width;
+    sourceH = sourceBitmap.height;
+  }
 
   const allPlates = detections.filter((d) => d.label === 'plate');
   const plates = allPlates
@@ -426,7 +459,10 @@ export async function recognizePlates(
     })
     // Sort by area descending — recognize largest plates first
     .sort((a, b) => (b.w * b.h) - (a.w * a.h));
-  if (plates.length === 0) return [];
+  if (plates.length === 0) {
+    sourceBitmap?.close();
+    return [];
+  }
 
   const fileHash = await getFileHash(file);
 
@@ -436,7 +472,7 @@ export async function recognizePlates(
     let text = await ocrCacheGet(key);
     if (text === undefined) {
       try {
-        text = await recognizeOne(ctx, d, file, canvasW, canvasH);
+        text = await recognizeOne(ctx, d, canvasW, canvasH, sourceBitmap);
         ocrCacheSet(key, text);
         console.log(`[plateOcr] recognized: "${text}" key="${key}"`);
       } catch (err) {
@@ -451,6 +487,7 @@ export async function recognizePlates(
     }
   }
 
+  sourceBitmap?.close();
   if (_lowMemory) releaseOcr();
   return results;
 }
@@ -503,7 +540,14 @@ export async function filterByOcr(
   const canvasW = (ctx as CanvasRenderingContext2D).canvas.width;
   const canvasH = (ctx as CanvasRenderingContext2D).canvas.height;
 
-  const { sourceW, sourceH } = await getSourceDims(file, canvasW, canvasH);
+  // Decode source bitmap once for all plates (images only).
+  let sourceBitmap: ImageBitmap | undefined;
+  let sourceW = canvasW, sourceH = canvasH;
+  if (file.type.startsWith('image/')) {
+    sourceBitmap = await createImageBitmap(file);
+    sourceW = sourceBitmap.width;
+    sourceH = sourceBitmap.height;
+  }
 
   const plates = detections.filter((d) => {
     if (d.label !== 'plate') return false;
@@ -515,7 +559,10 @@ export async function filterByOcr(
     }
     return pass;
   });
-  if (plates.length === 0) return { filtered: detections, excludedKeys, ocrTexts };
+  if (plates.length === 0) {
+    sourceBitmap?.close();
+    return { filtered: detections, excludedKeys, ocrTexts };
+  }
 
   const fileHash = await getFileHash(file);
 
@@ -525,7 +572,7 @@ export async function filterByOcr(
     let text = await ocrCacheGet(cacheKey);
     if (text === undefined) {
       try {
-        text = await recognizeOne(ctx, d, file, canvasW, canvasH);
+        text = await recognizeOne(ctx, d, canvasW, canvasH, sourceBitmap);
         ocrCacheSet(cacheKey, text);
         console.log(`[plateOcr] recognized: "${text}" key="${cacheKey}"`);
       } catch (err) {
@@ -542,6 +589,7 @@ export async function filterByOcr(
     }
   }
 
+  sourceBitmap?.close();
   if (_lowMemory) releaseOcr();
 
   // Filter out matched plates
