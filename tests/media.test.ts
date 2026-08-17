@@ -177,6 +177,53 @@ function hasExifGps(bytes: Buffer): boolean {
   return false;
 }
 
+/** Inspect the EXIF TIFF structure for specific IFD pointers and tags. */
+function inspectExifTiff(bytes: Buffer): { hasGpsIfd: boolean; hasExifIfd: boolean; hasDateTimeOriginal: boolean; ifd0TagCount: number } {
+  const result = { hasGpsIfd: false, hasExifIfd: false, hasDateTimeOriginal: false, ifd0TagCount: 0 };
+  let pos = 2;
+  while (pos + 4 <= bytes.length) {
+    if (bytes[pos] !== 0xff) break;
+    const marker = bytes[pos + 1];
+    if (marker === 0xda) break;
+    const segLen = (bytes[pos + 2] << 8) | bytes[pos + 3];
+    if (
+      marker === 0xe1 &&
+      bytes[pos + 4] === 0x45 && bytes[pos + 5] === 0x78 &&
+      bytes[pos + 6] === 0x69 && bytes[pos + 7] === 0x66
+    ) {
+      const tiff = bytes.subarray(pos + 10, pos + 2 + segLen);
+      if (tiff.length < 8) return result;
+      const isLE = tiff[0] === 0x49;
+      const r16 = (o: number) => isLE ? tiff[o] | (tiff[o + 1] << 8) : (tiff[o] << 8) | tiff[o + 1];
+      const r32 = (o: number) => isLE
+        ? (tiff[o] | (tiff[o + 1] << 8) | (tiff[o + 2] << 16) | (tiff[o + 3] << 24)) >>> 0
+        : ((tiff[o] << 24) | (tiff[o + 1] << 16) | (tiff[o + 2] << 8) | tiff[o + 3]) >>> 0;
+      if (r16(2) !== 0x002a) return result;
+      const ifd0Off = r32(4);
+      const count = r16(ifd0Off);
+      result.ifd0TagCount = count;
+      let exifIfdOff: number | null = null;
+      for (let i = 0; i < count; i++) {
+        const tag = r16(ifd0Off + 2 + i * 12);
+        if (tag === 0x8825) result.hasGpsIfd = true;
+        if (tag === 0x8769) {
+          result.hasExifIfd = true;
+          exifIfdOff = r32(ifd0Off + 2 + i * 12 + 8);
+        }
+      }
+      if (exifIfdOff !== null) {
+        const ec = r16(exifIfdOff);
+        for (let i = 0; i < ec; i++) {
+          if (r16(exifIfdOff + 2 + i * 12) === 0x9003) result.hasDateTimeOriginal = true;
+        }
+      }
+      return result;
+    }
+    pos += 2 + segLen;
+  }
+  return result;
+}
+
 test.describe('JPEG export — EXIF preservation', () => {
   test('exported JPEG retains EXIF when keepMetadata=keep', async ({ page }) => {
     await injectDetections(page, JPEG_INJECT_DETECTIONS);
@@ -230,6 +277,38 @@ test.describe('JPEG export — EXIF preservation', () => {
       import('fs').then((fs) => fs.unlinkSync(tmpPath)).catch(() => {});
     }
     expect(hasExif, 'Exported JPEG should NOT contain EXIF when strip is selected').toBe(false);
+  });
+
+  test('exported JPEG keeps only GPS + DateTimeOriginal when keepMetadata=gps', async ({ page }) => {
+    await injectDetections(page, JPEG_INJECT_DETECTIONS);
+    await loadFile(page, path.join(EXAMPLES, 'jpeg.jpg'));
+    await waitForCanvas(page);
+    await waitForDetections(page);
+
+    // Switch to GPS-only
+    await page.evaluate(() => {
+      (document.querySelector('input[name="keepMetadata"][value="gps"]') as HTMLInputElement).click();
+    });
+
+    const downloadPromise = page.waitForEvent('download', { timeout: 60_000 });
+    await page.locator('#export-btn').click();
+    const download = await downloadPromise;
+
+    const tmpPath = path.join(path.dirname(fileURLToPath(import.meta.url)), '../.tmp-jpeg-gps.jpg');
+    await download.saveAs(tmpPath);
+    try {
+      const bytes = (await import('fs')).readFileSync(tmpPath);
+      const info = inspectExifTiff(bytes);
+      // Source jpeg.jpg has GPS — it must survive GPS-only mode
+      expect(info.hasGpsIfd, 'GPS IFD should be present in GPS-only export').toBe(true);
+      // IFD0 should contain only the GPS pointer (and Exif IFD pointer if DateTimeOriginal
+      // were present in the source — jpeg.jpg lacks it, so only the GPS pointer)
+      expect(info.ifd0TagCount, 'IFD0 should contain only sub-IFD pointers, not extra tags').toBeLessThanOrEqual(2);
+      // jpeg.jpg has no DateTimeOriginal, so Exif sub-IFD should be absent
+      expect(info.hasDateTimeOriginal, 'DateTimeOriginal should be absent (source lacks it)').toBe(false);
+    } finally {
+      import('fs').then((fs) => fs.unlinkSync(tmpPath)).catch(() => {});
+    }
   });
 });
 

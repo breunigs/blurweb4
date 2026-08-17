@@ -153,12 +153,15 @@ export async function encodeVideo(
             // ©xyz — QuickTime/Apple/GoPro GPS coordinate string (ISO 6709 format)
             // loci  — QuickTime location atom (older cameras)
             const GPS_KEYS = new Set(['©xyz', 'loci']);
-            const { raw } = input;
+            const { raw, date } = input;
             const gpsRaw: typeof raw = {};
             for (const [k, v] of Object.entries(raw ?? {})) {
               if (GPS_KEYS.has(k)) gpsRaw[k] = v;
             }
-            return Object.keys(gpsRaw).length ? { raw: gpsRaw } : {};
+            const out: Record<string, unknown> = {};
+            if (date instanceof Date && !isNaN(date.getTime())) out.date = date;
+            if (Object.keys(gpsRaw).length) out.raw = gpsRaw;
+            return Object.keys(out).length ? out : {};
           }
         : (input) => {
             const { raw, ...rest } = input;
