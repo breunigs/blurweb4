@@ -42,7 +42,8 @@
       "Bash(pip install:*)",
       "Bash(tee /tmp/test-results.txt)",
       "Read(~/.cache/ms-playwright/firefox-1511/firefox/**)",
-      "Read(//home/stefan/labeling/**)"
+      "Read(//home/stefan/labeling/**)",
+      "Bash(sort -k5 -h)"
     ],
     "additionalDirectories": [
       "/tmp",
