@@ -18,3 +18,4 @@ server/blurweb-server
 release
 sw.js
 test-results
+models/*zst
