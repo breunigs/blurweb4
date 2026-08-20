@@ -55,4 +55,6 @@ tauri-build: node_modules/.package-lock.json
 ## serve pre-compressed files automatically when configured with `gzip_static on`.
 deploy: prepare-go-embed
 	@test -n "$(BLURWEB_RSYNC_TARGET)" || (echo "Error: BLURWEB_RSYNC_TARGET is not set"; exit 1)
-	rsync -r --progress --partial server/dist-embedded/ $(BLURWEB_RSYNC_TARGET)
+	rsync -r --progress --partial --ignore-existing server/dist-embedded/ $(BLURWEB_RSYNC_TARGET)
+	rsync -r --progress --partial --existing server/dist-embedded/ $(BLURWEB_RSYNC_TARGET)
+	rsync -r --progress --partial --delete server/dist-embedded/ $(BLURWEB_RSYNC_TARGET)
