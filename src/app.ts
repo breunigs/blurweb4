@@ -584,6 +584,7 @@ export class App {
         input.value = newVal;
         setConfig({ keepPlates: newVal.toUpperCase() });
         btn.remove();
+        this.removeDetectionHighlight();
       });
       btn.addEventListener('mouseenter', () => this.showDetectionHighlight(r.boxKey));
       btn.addEventListener('mouseleave', () => this.removeDetectionHighlight());
