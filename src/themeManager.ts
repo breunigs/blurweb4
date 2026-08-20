@@ -27,6 +27,8 @@ export function applyTheme(): void {
   const color: EffectiveColor =
     colorPref === 'auto' ? getSystemColor() : (colorPref as EffectiveColor);
   document.documentElement.dataset.theme = `${platform}-${color}`;
+  const title = document.getElementById('app-title') as HTMLImageElement | null;
+  if (title) title.src = color === 'dark' ? 'header_dark.svg' : 'header.svg';
 }
 
 export function getPlatformPref(): ThemePlatform {
