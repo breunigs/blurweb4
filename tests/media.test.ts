@@ -2357,6 +2357,46 @@ test.describe('OCR — plate recognition', () => {
     expect(texts.some((t) => t.includes('821')),
       `Expected OCR to recognize *821 pattern, got: ${JSON.stringify(texts)}`).toBe(true);
   });
+
+  // Regression: the OCR text-detection tensor buffer in detector.worker.ts is
+  // reused across calls and only ever grows. It was handed to ort.Tensor whole,
+  // so any plate whose padded det input was SMALLER than a previously processed
+  // one threw "Tensor's size(N) does not match data length(M)" and produced no
+  // text — until the page was reloaded (which resets the worker buffer).
+  //
+  // recognizePlates() processes plates largest-area-first, and the det input is
+  // padded to a multiple of 32 whose width grows with the box aspect ratio.  The
+  // decoy box below is therefore processed first AND pads wider (200×40 → 384×96)
+  // than the real plate (75×22 → 224×64), which re-creates the stale-buffer state.
+  // The boxes must not overlap — overlapping injected boxes are merged into one.
+  test('OCR still recognizes a plate processed after a larger box', async ({ page }) => {
+    test.setTimeout(180_000);
+
+    const workerErrors: string[] = [];
+    page.on('console', (msg) => {
+      const text = msg.text();
+      if (text.includes('does not match data length') || text.includes('OCR failed')) {
+        workerErrors.push(text);
+      }
+    });
+
+    await injectDetections(page, [
+      // Decoy: bigger area, wider aspect, no readable text — only there to size
+      // the worker's det tensor buffer up before the real plate is processed.
+      { label: 'plate', conf: 0.9, x: 100, y: 380, w: 200, h: 40 },
+      OCR_PLATE_DETECTION,
+    ]);
+    await loadFile(page, path.join(EXAMPLES, 'jpeg.jpg'));
+    await waitForCanvas(page);
+    await waitForDetections(page);
+
+    const ocrResults = await page.evaluate(() => (window as any).__runOcr()) as Array<{ text: string; raw: string }>;
+
+    expect(workerErrors, 'OCR must not fail with a tensor size mismatch on the second plate').toEqual([]);
+    const texts = ocrResults.map((r) => r.text);
+    expect(texts.some((t) => t.includes('821')),
+      `Second-processed plate should still be recognized, got: ${JSON.stringify(texts)}`).toBe(true);
+  });
 });
 
 test.describe('OCR — initial load', () => {

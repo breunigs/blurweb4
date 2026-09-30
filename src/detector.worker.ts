@@ -507,7 +507,7 @@ async function runOcrDetection(pixels: Uint8ClampedArray, width: number, height:
   }
 
   const t0 = performance.now();
-  const inTensor = new ort.Tensor('float32', t, [1, 3, padH, padW]);
+  const inTensor = new ort.Tensor('float32', t.subarray(0, needed), [1, 3, padH, padW]);
   const res = await ocrDetSession.run({ [ocrDetSession.inputNames[0]]: inTensor });
   const prob = res[ocrDetSession.outputNames[0]].data as Float32Array;
   const detMs = performance.now() - t0;
