@@ -43,7 +43,9 @@
       "Bash(tee /tmp/test-results.txt)",
       "Read(~/.cache/ms-playwright/firefox-1511/firefox/**)",
       "Read(//home/stefan/labeling/**)",
-      "Bash(sort -k5 -h)"
+      "Bash(sort -k5 -h)",
+      "Bash(python3 -)",
+      "Bash(git -C /home/stefan/code/blurweb4 diff --stat)"
     ],
     "additionalDirectories": [
       "/tmp",
