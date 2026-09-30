@@ -24,6 +24,7 @@ blurweb4/
 │   ├── hangDetector.ts   main-thread hang detection via Web Worker rAF heartbeat
 │   ├── debugLog.ts       in-memory ring buffer capturing all console output
 │   ├── lruMap.ts         fixed-capacity LRU Map used by blurrer mask cache + detector
+│   ├── canvasZoom.ts     touch pinch-zoom / pan / double-tap-to-fit for the preview
 │   ├── imageRenderer.ts  createImageBitmap → canvas (renders bitmap only, no detection)
 │   ├── videoPlayer.ts    mediabunny VideoSampleSink wrapper with play/pause/seek
 │   ├── hevcDecoder.ts    libav.js WASM fallback decoder for HEVC (registered at startup)

@@ -9,6 +9,7 @@ import {
 import { loadTrim } from './trimStorage';
 import { applyDetections } from './detectionDrawer';
 import { renderImage } from './imageRenderer';
+import { CanvasZoom } from './canvasZoom';
 import { getConfig, parseKeepPlates } from './config';
 import { t, tpl } from './i18n';
 import { type MediaItem, type ItemStore } from './types';
@@ -95,6 +96,7 @@ export class FileManager {
     // Called after store.activeIndex is updated, for App to coordinate
     private readonly onAfterSwitchTo: (index: number) => void,
   ) {
+    this.zoom = new CanvasZoom(previewArea);
     this.initNavigation();
     this.initSwipeNavigation();
   }
@@ -451,6 +453,7 @@ export class FileManager {
     const item = this.store.items[index];
     item.wrapper.classList.add('active');
     item.fileListRow.classList.add('active-file');
+    this.zoom.reset();
 
     if (item.player) {
       (window as unknown as Record<string, unknown>).__activePlayer = item.player;
@@ -519,6 +522,7 @@ export class FileManager {
 
   private prevBtn!: HTMLButtonElement;
   private nextBtn!: HTMLButtonElement;
+  private readonly zoom: CanvasZoom;
 
   private initNavigation(): void {
     // Chevron overlays
@@ -563,7 +567,8 @@ export class FileManager {
     const LOCK_THRESHOLD = 10;
 
     this.previewArea.addEventListener('touchstart', (e: TouchEvent) => {
-      if (e.touches.length !== 1) return;
+      // While zoomed in a one-finger drag pans the canvas instead of navigating.
+      if (e.touches.length !== 1 || this.zoom.isZoomed()) return;
       startX = e.touches[0].clientX;
       startY = e.touches[0].clientY;
       tracking = true;

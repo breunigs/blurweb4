@@ -578,6 +578,10 @@ html[data-theme^='windows'] .file-list-row {
   overflow: hidden;
   min-height: 180px;
   margin: 0 auto;
+  /* Pinch-zoom is handled by canvasZoom.ts, so the browser must not page-zoom
+     here. Vertical page scrolling stays; canvasZoom switches this to `none`
+     inline while zoomed in so one-finger panning isn't stolen by the page. */
+  touch-action: pan-y;
 }
 
 .canvas-wrapper {
@@ -586,7 +590,9 @@ html[data-theme^='windows'] .file-list-row {
   display: none;
   align-items: center;
   justify-content: center;
-  overflow: auto;
+  /* hidden, not auto: a pinch-zoomed canvas is transformed, which would
+     otherwise add the scaled-up canvas to the scrollable overflow area. */
+  overflow: hidden;
 }
 
 .canvas-wrapper.active {
