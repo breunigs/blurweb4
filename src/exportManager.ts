@@ -3,7 +3,7 @@ import type { ExportItem } from './batchExporter';
 import { getConfig } from './config';
 import { getAverageInferenceMs } from './detector';
 import { t, tpl } from './i18n';
-import { type ItemStore, formatEta } from './types';
+import { type ItemStore, type MediaItem, formatEta } from './types';
 
 // Assumed frame rate for pre-encoding ETA estimation when no timing data yet.
 const FPS_ESTIMATE = 30;
@@ -23,6 +23,13 @@ export class ExportManager {
   private exporting = false;
   private cancelled = false;
   private readonly cancelBtn: HTMLButtonElement;
+
+  /**
+   * Repaint an item's canvas before exporting it. Assigned by `FileManager`,
+   * which owns canvas lifetime: inactive items have their backing store
+   * released, and a single-frame video export encodes the live canvas.
+   */
+  ensureFramePainted: (item: MediaItem) => Promise<void> = () => Promise.resolve();
 
   constructor(
     private readonly store: ItemStore,
@@ -128,6 +135,9 @@ export class ExportManager {
       meta: it.meta,
       singleFrame: it.singleFrame,
       toneMappingEnabled: it.toneMappingEnabled,
+      // Only the single-frame video path encodes the canvas as-is; every other
+      // path re-renders from the source file.
+      prepare: it.isVideo && it.singleFrame ? () => this.ensureFramePainted(it) : undefined,
     }));
 
     const _nav = navigator as unknown as { wakeLock?: { request(t: string): Promise<{ release(): Promise<void> }> } };

@@ -64,10 +64,45 @@ export class FileManager {
     if (item.isVideo && item.player && item.player.duration > 0) {
       item.fileListDurationEl.textContent = this.formatDuration(item.player.duration);
     }
-    if (item.canvas.width > 0 && item.canvas.height > 0) {
-      item.fileListDimsEl.textContent = `${item.canvas.width}×${item.canvas.height}`;
+    // Read the cached dimensions, not the canvas: an inactive item's backing
+    // store has been released and reports 0×0.
+    if (item.width && item.height) {
+      item.fileListDimsEl.textContent = `${item.width}×${item.height}`;
     }
     item.fileListSizeEl.textContent = this.formatFileSize(item.file.size);
+  }
+
+  /**
+   * Drop an item's canvas backing store.
+   *
+   * A 12 MP photo costs ~48 MB of pixels and a 4K video frame ~33 MB. These
+   * canvases use `willReadFrequently`, so the pixels sit in the renderer's heap
+   * rather than on the GPU, and keeping one per loaded file is what drives
+   * memory-constrained browsers (iOS Safari in particular) into an
+   * out-of-memory tab reload. Only the active item keeps its pixels; the rest
+   * are repainted on demand from the source file, with detections served from
+   * the in-memory / IndexedDB cache.
+   */
+  private releasePixels(item: MediaItem): void {
+    if (item.canvas.width === 0 && item.canvas.height === 0) return;
+    item.canvas.width = 0;
+    item.canvas.height = 0;
+    // Signals "no pixels on this canvas" to anything waiting for a painted
+    // frame; `item.loaded` continues to mean "has been decoded at least once".
+    item.canvas.dataset.loaded = 'false';
+  }
+
+  /**
+   * Repaint a released canvas for a single-frame video export, which encodes
+   * whatever the canvas currently holds. Images need no equivalent — the export
+   * path re-decodes them from the source file so that it picks up the current
+   * redaction settings.
+   */
+  async ensureFramePainted(item: MediaItem): Promise<void> {
+    if (item.canvas.width > 0 && item.canvas.height > 0) return;
+    if (!item.loaded || !item.isVideo || !item.player) return;
+    await item.player.seekTo(item.player.currentTime);
+    item.canvas.dataset.loaded = 'true';
   }
 
   clearExamplesLoading(): void {
@@ -97,6 +132,9 @@ export class FileManager {
     private readonly onAfterSwitchTo: (index: number) => void,
   ) {
     this.zoom = new CanvasZoom(previewArea);
+    // Single-frame video exports encode the live canvas, which may have been
+    // released. Hand the export side a way to get it repainted first.
+    exportManager.ensureFramePainted = (item) => this.ensureFramePainted(item);
     this.initNavigation();
     this.initSwipeNavigation();
   }
@@ -280,6 +318,8 @@ export class FileManager {
         .load(file)
         .then(async () => {
           item.loaded = true;
+          item.width = canvas.width;
+          item.height = canvas.height;
           canvas.dataset.loaded = 'true';
           if (this.store.items[this.store.activeIndex] === item) this.updatePreviewAspectRatio();
           this.updateFileListMeta(item);
@@ -299,6 +339,8 @@ export class FileManager {
       renderImage(file, canvas)
         .then(async () => {
           item.loaded = true;
+          item.width = canvas.width;
+          item.height = canvas.height;
           canvas.dataset.loaded = 'true';
           if (this.store.items[this.store.activeIndex] === item) this.updatePreviewAspectRatio();
           this.updateFileListMeta(item);
@@ -361,6 +403,10 @@ export class FileManager {
               },
             );
           }
+          // Nothing further will touch an inactive image's canvas — preview
+          // inference is only scheduled for the active item — so its pixels can
+          // go now rather than waiting for the first file switch.
+          if (this.store.items[this.store.activeIndex] !== item) this.releasePixels(item);
         })
         .catch((err) => {
           console.error(`Failed to render image "${file.name}":`, err);
@@ -445,8 +491,10 @@ export class FileManager {
 
   switchTo(index: number): void {
     if (this.store.activeIndex >= 0) {
-      this.store.items[this.store.activeIndex].wrapper.classList.remove('active');
-      this.store.items[this.store.activeIndex].fileListRow.classList.remove('active-file');
+      const prev = this.store.items[this.store.activeIndex];
+      prev.wrapper.classList.remove('active');
+      prev.fileListRow.classList.remove('active-file');
+      if (prev !== this.store.items[index]) this.releasePixels(prev);
     }
     this.store.activeIndex = index;
 
@@ -467,7 +515,13 @@ export class FileManager {
     this.exportManager.updateBtnState();
     this.updatePreviewAspectRatio();
     this.onAfterSwitchTo(index);
-    if (item.loaded) void this.onRerenderActive();
+    // The rerender repaints a canvas whose backing store was released on the
+    // way out, so data-loaded only goes back to true once pixels are present.
+    if (item.loaded) {
+      void this.onRerenderActive().then(() => {
+        item.canvas.dataset.loaded = 'true';
+      });
+    }
   }
 
   updateFileNav(): void {
@@ -497,8 +551,10 @@ export class FileManager {
   updatePreviewAspectRatio(): void {
     const item = this.store.items[this.store.activeIndex];
     if (!item) return;
-    const { width, height } = item.canvas;
-    if (width > 0 && height > 0) {
+    // Cached dimensions, so the aspect ratio is right even while the canvas is
+    // still being repainted after a switch.
+    const { width, height } = item;
+    if (width && height) {
       this.previewArea.style.aspectRatio = `${width} / ${height}`;
     }
   }

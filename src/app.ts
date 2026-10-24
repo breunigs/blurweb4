@@ -634,10 +634,12 @@ export class App {
 
     try {
       // Render to an offscreen canvas at preview dimensions (detection coords are in this space)
+      // Cached dimensions, not canvas ones: an inactive item's backing store has
+      // been released, and detection coords are in this space either way.
       const bitmap = await createImageBitmap(item.file, { imageOrientation: 'from-image' as ImageOrientation });
-      const offscreen = new OffscreenCanvas(item.canvas.width, item.canvas.height);
+      const offscreen = new OffscreenCanvas(item.width ?? bitmap.width, item.height ?? bitmap.height);
       const offCtx = offscreen.getContext('2d')!;
-      offCtx.drawImage(bitmap, 0, 0, item.canvas.width, item.canvas.height);
+      offCtx.drawImage(bitmap, 0, 0, offscreen.width, offscreen.height);
       bitmap.close();
       const mod = await import('./plateOcr');
       registerPlateOcrModule(mod);
@@ -709,7 +711,8 @@ export class App {
     const item = this.store.items[this.store.activeIndex];
     if (!item) return;
     if (!item.isVideo) {
-      const key = await makeImageKey(item.file, item.canvas.width, item.canvas.height);
+      // Cached dimensions: the canvas reports 0×0 until it is repainted below.
+      const key = await makeImageKey(item.file, item.width ?? item.canvas.width, item.height ?? item.canvas.height);
       const cached = await getCachedDetections(key);
       if (cached !== null) {
         // Fast path: compose on an offscreen canvas, then copy to visible canvas

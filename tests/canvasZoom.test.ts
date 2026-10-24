@@ -37,6 +37,21 @@ async function touchSequence(
   }, steps);
 }
 
+/**
+ * Wait until the active canvas holds pixels.
+ *
+ * Inactive items have their canvas backing store released, so switching files
+ * repaints asynchronously and `data-loaded` is only restored once pixels are
+ * back. Gestures are meaningless before that: zoom clamping derives its limit
+ * from `canvas.width`.
+ */
+function waitForActivePixels(page: Page): Promise<unknown> {
+  return page.waitForFunction(() => {
+    const c = document.querySelector<HTMLCanvasElement>('.canvas-wrapper.active canvas[data-loaded="true"]');
+    return c !== null && c.width > 0;
+  }, { timeout: 60_000 });
+}
+
 function canvasTransform(page: Page): Promise<string> {
   return page.evaluate(() =>
     document.querySelector<HTMLCanvasElement>('.canvas-wrapper.active canvas')!.style.transform);
@@ -150,6 +165,7 @@ test.describe('Canvas preview pinch-zoom', () => {
     await page.locator('#file-input').setInputFiles(path.join(EXAMPLES, 'rotated.jpg'));
     await page.waitForFunction(() => document.querySelectorAll('.canvas-wrapper').length === 2);
     await page.locator('.file-list-row').nth(0).click();
+    await waitForActivePixels(page);
     const activeBefore = await page.evaluate(() =>
       document.querySelector('.file-list-row.active-file')?.textContent);
 

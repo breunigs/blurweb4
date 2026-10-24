@@ -10,6 +10,13 @@ export interface MediaItem {
   canvas: HTMLCanvasElement;
   player?: VideoPlayer;
   loaded: boolean;
+  /**
+   * Natural pixel dimensions of the decoded media. Cached on the item because
+   * the canvas backing store is released for inactive files, which zeroes
+   * `canvas.width` / `canvas.height`.
+   */
+  width?: number;
+  height?: number;
   exported: boolean;
   trimStart?: number;
   trimEnd?: number;

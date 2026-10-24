@@ -20,6 +20,8 @@ export interface ExportItem {
   meta?: FileMeta;
   singleFrame?: boolean;
   toneMappingEnabled?: boolean;
+  /** Called before this item is exported, e.g. to repaint a released canvas. */
+  prepare?: () => Promise<void>;
 }
 
 export interface BatchCallbacks {
@@ -57,6 +59,7 @@ export async function runBatch(
     const outputStem = applyPattern(namingPattern, stem, i + 1, item.meta ?? {});
 
     try {
+      await item.prepare?.();
       if (!item.isVideo) {
         // Always re-render from the source file so the export uses the
         // *current* config (drawMode, confidence, expansion…).  Without
