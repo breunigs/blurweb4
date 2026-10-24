@@ -9,7 +9,9 @@
  * the box is extended flush to that border and the adjacent corners become
  * square (radius 0) so no rounded gap appears at the image edge.
  *
- * Blur masks are LRU-cached keyed by shape, position, feather, and snap flags.
+ * Blur masks are LRU-cached keyed by shape, position, feather, and snap flags,
+ * under a byte budget rather than an entry count — mask size scales with the
+ * detection box, so counting entries left the cache unbounded in practice.
  *
  * StackBlur runs in a dedicated Web Worker (blurWorker.ts) to avoid blocking
  * the main thread during inference/export.
@@ -230,14 +232,19 @@ function sdfRoundedRect(
 }
 
 /**
- * Build a Float32Array alpha mask for the blur blend.
+ * Build an alpha mask for the blur blend.
  *
  * The mask is in sampling-region coordinates (w×h pixels).
  * The detection box occupies [ox, oy, ox+dw, oy+dh] within the mask.
  *
- * alpha[i] = 1.0 → pixel fully covered by blur
- * alpha[i] = 0.0 → pixel is plain (no blur)
- * alpha[i] ∈ (0,1) → feathered edge (linear ramp over `feather` pixels)
+ * alpha[i] = 255 → pixel fully covered by blur
+ * alpha[i] = 0   → pixel is plain (no blur)
+ * in between     → feathered edge (linear ramp over `feather` pixels)
+ *
+ * One byte per pixel: the blend output is 8-bit anyway, so the extra precision
+ * of a Float32Array bought nothing and cost 4× the memory. A sampling region
+ * around a large person box in a 4K frame runs to a couple of megapixels, which
+ * as floats was over 20 MB per mask.
  *
  * Snap flags suppress feathering on edges that are flush with the canvas
  * border by clamping the effective pixel coordinate so out-of-box pixels
@@ -256,8 +263,8 @@ function buildMaskSDF(
   snapT: boolean,
   snapR: boolean,
   snapB: boolean,
-): Float32Array {
-  const mask = new Float32Array(w * h);
+): Uint8Array {
+  const mask = new Uint8Array(w * h);
   const cx = ox + dw / 2;
   const cy = oy + dh / 2;
   const hx = dw / 2;
@@ -273,11 +280,11 @@ function buildMaskSDF(
       const dist = sdfRoundedRect(epx, epy, cx, cy, hx, hy, tl, tr, br, bl);
       let alpha: number;
       if (dist <= 0) {
-        alpha = 1;
+        alpha = 255;
       } else if (dist >= feather) {
         alpha = 0;
       } else {
-        alpha = 1 - dist * invFeather;
+        alpha = Math.round((1 - dist * invFeather) * 255);
       }
       mask[py * w + px] = alpha;
     }
@@ -287,9 +294,14 @@ function buildMaskSDF(
 
 // ── Blurrer ───────────────────────────────────────────────────────────────────
 
+/** Reciprocal of the mask's 8-bit full-coverage value, hoisted out of the blend loop. */
+const INV_ALPHA_MAX = 1 / 255;
+
 export class Blurrer {
-  readonly #cache = new Map<string, Float32Array>();
-  readonly #maxSize: number;
+  readonly #cache = new Map<string, Uint8Array>();
+  /** Running total of #cache entry sizes, kept in step with insertions/evictions. */
+  #cacheBytes = 0;
+  readonly #maxCacheBytes: number;
   // Per-canvas version counter. Incremented at the start of every apply()
   // call for a given canvas. #blurArea captures the value and checks it
   // before putImageData — if it has changed, a newer render has started for
@@ -299,8 +311,14 @@ export class Blurrer {
   // other's in-flight blur workers.
   readonly #canvasVersions = new WeakMap<HTMLCanvasElement | OffscreenCanvas, number>();
 
-  constructor(maxSize = 64) {
-    this.#maxSize = maxSize;
+  /**
+   * @param maxCacheBytes Budget for the mask cache. Bounding it by bytes rather
+   *   than by entry count is what matters: mask size scales with the detection
+   *   box, so a fixed entry count let the cache grow without limit as boxes got
+   *   bigger. Scrubbing through a 4K video generates many distinct sizes.
+   */
+  constructor(maxCacheBytes = 32 * 1024 * 1024) {
+    this.#maxCacheBytes = maxCacheBytes;
   }
 
   async apply(ctx: AnyCtx, detections: Detection[], mode: 'blur' | 'solidcolor' | 'pixelate', color = '#000000'): Promise<void> {
@@ -457,7 +475,7 @@ export class Blurrer {
     const blurredPx = new Uint8ClampedArray(blurredBuf);
     const plainPx = plain.data;
     for (let i = 0; i < blurredPx.length; i += 4) {
-      const a = mask[i >> 2];
+      const a = mask[i >> 2] * INV_ALPHA_MAX;
       blurredPx[i]     = blurredPx[i]     * a + plainPx[i]     * (1 - a);
       blurredPx[i + 1] = blurredPx[i + 1] * a + plainPx[i + 1] * (1 - a);
       blurredPx[i + 2] = blurredPx[i + 2] * a + plainPx[i + 2] * (1 - a);
@@ -480,7 +498,7 @@ export class Blurrer {
     snapT: boolean,
     snapR: boolean,
     snapB: boolean,
-  ): Float32Array {
+  ): Uint8Array {
     const cf =
       (corners.tl > 0 ? 8 : 0) | (corners.tr > 0 ? 4 : 0) | (corners.br > 0 ? 2 : 0) | (corners.bl > 0 ? 1 : 0);
     const r = Math.max(corners.tl, corners.tr, corners.br, corners.bl);
@@ -494,15 +512,25 @@ export class Blurrer {
       return hit;
     }
     const mask = buildMaskSDF(w, h, feather, ox, oy, dw, dh, corners, snapL, snapT, snapR, snapB);
-    this.#cache.set(key, mask);
-    if (this.#cache.size > this.#maxSize) {
-      this.#cache.delete(this.#cache.keys().next().value!);
+    // A mask big enough to displace most of the cache is not worth keeping:
+    // rebuilding one is a few milliseconds of pure arithmetic, whereas evicting
+    // every small mask costs those rebuilds on the next frame too.
+    if (mask.byteLength * 4 <= this.#maxCacheBytes) {
+      this.#cache.set(key, mask);
+      this.#cacheBytes += mask.byteLength;
+      // Evict oldest-first until back inside the budget.
+      while (this.#cacheBytes > this.#maxCacheBytes) {
+        const oldestKey = this.#cache.keys().next().value!;
+        const oldest = this.#cache.get(oldestKey)!;
+        this.#cache.delete(oldestKey);
+        this.#cacheBytes -= oldest.byteLength;
+      }
     }
     return mask;
   }
 }
 
-export const blurrer = new Blurrer(64);
+export const blurrer = new Blurrer();
 
 // Expose for Playwright unit tests (direct blurrer invocation without inference).
 (window as unknown as Record<string, unknown>).__blurrer = blurrer;
