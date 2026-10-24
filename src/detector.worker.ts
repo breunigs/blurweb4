@@ -38,6 +38,11 @@
  */
 
 import * as ort from 'onnxruntime-web';
+import { forwardWorkerLogs } from './workerLog';
+
+// Mirror this worker's console to the main thread, so the in-app debug panel
+// (the only log available on a phone) shows OCR and inference diagnostics.
+forwardWorkerLogs();
 
 ort.env.wasm.wasmPaths = new URL('./ort/', import.meta.url).href;
 
@@ -72,6 +77,27 @@ const DET_MIN_RECT_SIDE = 3;
 const DET_MIN_INPUT_SIDE = 64;
 const DET_MAX_INPUT_SIDE = 960;
 const DET_SKIP_ANGLE_RAD = 2 * Math.PI / 180;
+
+/**
+ * Largest deskew the text region is allowed to ask for.
+ *
+ * The crop comes from the plate detector as an axis-aligned box, so its text is
+ * near-horizontal by construction — a steeply tilted "text region" is a plate
+ * edge or the blue EU band, not a line of characters. Without this bound a
+ * 90°-oriented sliver turned the plate on its side and the recogniser was fed a
+ * strip containing no glyphs.
+ */
+const DET_MAX_TILT_RAD = 30 * Math.PI / 180;
+
+/**
+ * Minimum thickness of a text region, as a fraction of the crop's short side.
+ *
+ * Real characters are a substantial share of the plate: ~40 % for a single-line
+ * car plate, ~30 % per line on a two-line motorcycle plate. Edges, borders and
+ * dealer stickers come in around 5 %, so this separates them without assuming
+ * anything about the plate's aspect ratio.
+ */
+const DET_MIN_TEXT_BAND_FRAC = 0.12;
 
 // ── State ────────────────────────────────────────────────────────────────────
 
@@ -481,9 +507,23 @@ async function runOcrDetection(pixels: Uint8ClampedArray, width: number, height:
     return null;
   }
 
-  let scale = 1;
-  if (Math.min(width, height) < DET_MIN_INPUT_SIDE) scale = DET_MIN_INPUT_SIDE / Math.min(width, height);
-  if (Math.max(width, height) * scale > DET_MAX_INPUT_SIDE) scale = DET_MAX_INPUT_SIDE / Math.max(width, height);
+  // Two bounds on the scale: the short side wants to reach DET_MIN_INPUT_SIDE,
+  // the long side must not exceed DET_MAX_INPUT_SIDE. Compose them rather than
+  // letting the second overwrite the first, which previously left the short
+  // side under-sized whenever both applied.
+  const minSide = Math.min(width, height);
+  const maxSide = Math.max(width, height);
+  const loScale = DET_MIN_INPUT_SIDE / minSide;
+  const hiScale = DET_MAX_INPUT_SIDE / maxSide;
+  let scale: number;
+  if (loScale > hiScale) {
+    // Aspect ratio beyond DET_MAX_INPUT_SIDE : DET_MIN_INPUT_SIDE — the two
+    // bounds cannot both hold. Honour the upper one, which is what caps
+    // inference cost, and accept a short side below the minimum.
+    scale = hiScale;
+  } else {
+    scale = Math.min(Math.max(1, loScale), hiScale);
+  }
   const sW = Math.round(width * scale);
   const sH = Math.round(height * scale);
   const padW = Math.ceil(sW / 32) * 32;
@@ -531,18 +571,35 @@ async function runOcrDetection(pixels: Uint8ClampedArray, width: number, height:
       if (debug) console.log(`[detector worker] ocr det:   comp[${ci}] ${comp.length}px → rect ${rect.w.toFixed(0)}x${rect.h.toFixed(0)} — too small, skip`);
       continue;
     }
+
+    // Normalise so tw is the long axis and ta is that axis's tilt, then judge
+    // whether the component could be a line of characters at all. Doing this
+    // before picking a winner lets a plausible region win even when an edge or
+    // a sticker scores higher.
+    let tw = rect.w, th = rect.h, ta = rect.angle;
+    if (tw < th) { [tw, th] = [th, tw]; ta += Math.PI / 2; }
+    while (ta > Math.PI / 2) ta -= Math.PI;
+    while (ta < -Math.PI / 2) ta += Math.PI;
+
     const score = boxScore(prob, padW, padH, hull);
-    if (debug) console.log(`[detector worker] ocr det:   comp[${ci}] ${comp.length}px → rect ${rect.w.toFixed(0)}x${rect.h.toFixed(0)} angle=${(rect.angle * 180 / Math.PI).toFixed(1)}° score=${score.toFixed(3)}`);
+    if (debug) console.log(`[detector worker] ocr det:   comp[${ci}] ${comp.length}px → rect ${rect.w.toFixed(0)}x${rect.h.toFixed(0)} angle=${(ta * 180 / Math.PI).toFixed(1)}° score=${score.toFixed(3)}`);
     if (score < DET_BOX_THRESH) continue;
+
+    if (Math.abs(ta) > DET_MAX_TILT_RAD) {
+      if (debug) console.log(`[detector worker] ocr det:   comp[${ci}] tilt ${(ta * 180 / Math.PI).toFixed(1)}° exceeds ${(DET_MAX_TILT_RAD * 180 / Math.PI).toFixed(0)}° — not a text line, skip`);
+      continue;
+    }
+    const bandPx = th / scale;
+    const minBandPx = DET_MIN_TEXT_BAND_FRAC * Math.min(width, height);
+    if (bandPx < minBandPx) {
+      if (debug) console.log(`[detector worker] ocr det:   comp[${ci}] band ${bandPx.toFixed(0)}px < ${minBandPx.toFixed(0)}px — too thin for characters, skip`);
+      continue;
+    }
 
     if (score > bestScore) {
       bestScore = score;
       bestHull = hull;
-      let tw = rect.w, th = rect.h, ta = rect.angle;
-      if (tw < th) { [tw, th] = [th, tw]; ta += Math.PI / 2; }
-      while (ta > Math.PI / 2) ta -= Math.PI;
-      while (ta < -Math.PI / 2) ta += Math.PI;
-      bestResult = { angle: ta, cx: rect.cx / scale, cy: rect.cy / scale, tw: tw / scale, th: th / scale };
+      bestResult = { angle: ta, cx: rect.cx / scale, cy: rect.cy / scale, tw: tw / scale, th: bandPx };
     }
   }
 
