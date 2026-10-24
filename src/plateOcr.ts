@@ -7,6 +7,7 @@
 
 import { getFileHash, idbGet, idbPut, postOcrMessage, registerOcrHandler, type Detection } from './detector';
 import { LruMap } from './lruMap';
+import { isLowMemoryDevice } from './config';
 
 declare const HASH_OCR_REC: string;
 declare const HASH_OCR_DET: string;
@@ -158,14 +159,8 @@ function ensureOcr(): Promise<void> {
 // ── Low-memory teardown ─────────────────────────────────────────────────────
 // On mobile / low-RAM devices, release OCR sessions after each batch to free
 // model memory within the shared WASM heap.
-// navigator.deviceMemory is Chrome/Edge only; fall back to maxTouchPoints as
-// a mobile heuristic when it's unavailable.
 
-const _lowMemory: boolean = (() => {
-  const mem = (navigator as unknown as { deviceMemory?: number }).deviceMemory;
-  if (mem !== undefined) return mem <= 4;
-  return navigator.maxTouchPoints > 0;
-})();
+const _lowMemory: boolean = isLowMemoryDevice();
 
 /** Release OCR sessions in the shared worker. Re-loaded on next use by ensureOcr(). */
 function releaseOcr(): void {

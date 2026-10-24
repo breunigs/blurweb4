@@ -1,6 +1,14 @@
+import { isLowMemoryDevice } from './config';
+
 // Limit concurrent createImageBitmap calls to avoid exhausting Firefox's GPU
 // compositor resources when many large images are opened simultaneously.
-const MAX_CONCURRENT = 4;
+//
+// Each call in flight holds a fully decoded bitmap — ~48 MB for a 12 MP phone
+// photo — on top of the canvas it is about to be drawn into. Four at once is
+// nearly 200 MB of transient bitmaps, more than a whole tab's budget on an
+// older iPhone, so constrained devices decode one at a time. Only the active
+// image is displayed anyway, so the lost pipelining costs little.
+const MAX_CONCURRENT = isLowMemoryDevice() ? 1 : 4;
 let active = 0;
 const waitQueue: Array<() => void> = [];
 

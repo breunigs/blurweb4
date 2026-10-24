@@ -61,6 +61,25 @@ function isMobilePhone(): boolean {
   return mobileUA && smallScreen;
 }
 
+/**
+ * True where memory is tight enough to be worth trading throughput for.
+ *
+ * navigator.deviceMemory is Chrome/Edge only, so fall back to treating any
+ * touch device as constrained — which is the case that matters, since iOS
+ * Safari exposes neither the hint nor a generous memory budget.
+ *
+ * Evaluated once: neither input changes over a page's lifetime.
+ */
+const _lowMemoryDevice: boolean = (() => {
+  const mem = (navigator as unknown as { deviceMemory?: number }).deviceMemory;
+  if (mem !== undefined) return mem <= 4;
+  return navigator.maxTouchPoints > 0;
+})();
+
+export function isLowMemoryDevice(): boolean {
+  return _lowMemoryDevice;
+}
+
 export function getConfig(): AppConfig {
   return current;
 }
