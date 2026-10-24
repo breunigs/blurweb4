@@ -23,7 +23,7 @@ blurweb4/
 │   ├── trimStorage.ts    IndexedDB persistence for video trim points
 │   ├── hangDetector.ts   main-thread hang detection via Web Worker rAF heartbeat
 │   ├── debugLog.ts       in-memory ring buffer capturing all console output
-│   ├── lruMap.ts         fixed-capacity LRU Map used by blurrer mask cache + detector
+│   ├── lruMap.ts         fixed-capacity LRU Map used by detector + OCR caches
 │   ├── canvasZoom.ts     touch pinch-zoom / pan / double-tap-to-fit for the preview
 │   ├── imageRenderer.ts  createImageBitmap → canvas (renders bitmap only, no detection)
 │   ├── videoPlayer.ts    mediabunny VideoSampleSink wrapper with play/pause/seek
@@ -411,7 +411,7 @@ with `localStorage` persistence:
 ## Redaction rendering (src/blurrer.ts + src/detectionDrawer.ts)
 
 **`Blurrer` (singleton `blurrer`)** renders three redaction styles onto a canvas context:
-- `blur` — stackblur-canvas with feathered mask (LRU cache of 64 mask bitmaps)
+- `blur` — stackblur-canvas with feathered mask (LRU cache under a 32 MB budget)
 - `solidcolor` — plain fill with rounded corners
 - `pixelate` — low-resolution block scaling
 
@@ -422,6 +422,60 @@ corners. Rounded-corner radii are label-specific (`plate`: 0.95×, `person`: 0.8
 **`detectionDrawer.ts`** provides `expandDetections()` (uniform box padding) and
 `applyDetections()` (dispatches to `Blurrer` or draws colored outline rectangles).
 Works with both `CanvasRenderingContext2D` and `OffscreenCanvasRenderingContext2D`.
+
+Masks are `Uint8Array` (alpha 0–255) and the cache is bounded by **total bytes**,
+not entry count: mask size scales with the detection box, so a 4K person box
+costs megabytes per mask. A mask larger than a quarter of the budget is not
+cached at all — rebuilding is a few milliseconds of arithmetic, cheaper than
+evicting every small mask.
+
+`apply()` runs non-overlapping boxes concurrently, but in slices capped at
+`MAX_CONCURRENT_BLUR_PIXELS` (8 MP) of combined sampling area: each blur in
+flight holds its region twice on the main thread plus once in the worker.
+
+## Memory ownership (peak-memory constraints)
+
+These rules exist because iOS Safari reloads the tab when a renderer's budget is
+exhausted. A 12 MP photo is ~48 MB of canvas pixels and a 4K video frame ~33 MB,
+and all preview canvases use `willReadFrequently`, so those pixels live in the
+renderer heap rather than on the GPU.
+
+- **Only the active file holds pixels.** `FileManager.releasePixels()` sets an
+  inactive canvas to 0x0 on switch-away, and images are released as soon as a
+  non-active one finishes loading. Switching back repaints from the source file
+  via `App.rerenderActive()`, with detections served from the memory/IDB cache.
+- **`canvas.dataset.loaded` means "pixels are present"**, not "has ever been
+  decoded" — so anything awaiting a painted frame must wait for it after a file
+  switch. `MediaItem.loaded` carries the logical meaning.
+- **Only the active video holds a decoder.** `openVideo()` / `closeVideo()`
+  manage one mediabunny `Input` + `VideoSampleSink` + `VideoDecoder` at a time;
+  `MediaItem.lastTime` carries the playhead across the cycle. Concurrent
+  `openVideo()` calls share one load, and a generation counter discards a load
+  whose file is no longer on screen.
+- **Dimensions and duration come from the container, not the canvas.**
+  `extractVideoMeta()` returns `width` / `height` / `durationSec` so the file
+  list and trim UI work for files that were never opened; `MediaItem.width` /
+  `height` cache them for released canvases. Reading `canvas.width` for anything
+  other than the active file yields 0.
+- **`isLowMemoryDevice()`** (config.ts) gates throughput-for-memory trades:
+  `imageRenderer` decodes one image at a time instead of four, and `plateOcr`
+  releases OCR sessions after each batch.
+- **Single-frame video export** encodes the live canvas, so `ExportManager`
+  passes a `prepare` hook that repaints it first. Every other export path
+  re-renders from the source file.
+
+Measured effect of the above on peak renderer RSS (8x 12 MP images, then 6x 4K
+clips, Chromium): 1793 MB -> 640 MB and 1535 MB -> 685 MB respectively.
+
+**Export memory is still unbounded by design.** `videoEncoder` uses
+`BufferTarget`, which holds the whole encoded file in one ArrayBuffer, and
+`triggerDownload` copies it again into a Blob — roughly 2x the output size. A
+streaming `AppendOnlyStreamTarget` + fragmented-MP4 version exists on the
+`wip/stream-export-memory` branch; it produced valid output but measured *worse*
+peak RSS on Chromium desktop, where Blob parts are retained in memory rather
+than spilled to disk, and the export scenario's run-to-run variance (+/-30%)
+exceeds the effect being measured. Revisit with a measurement that can resolve
+it (a memory-capped renderer, or a real iOS device).
 
 ## YOLOv5 object detection (src/detector.ts + src/detector.worker.ts)
 
