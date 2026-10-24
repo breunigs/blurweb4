@@ -762,54 +762,52 @@ interface RefDetection {
 }
 
 // Reference detections for examples/jpeg.jpg (Hamburg street scene with GPS, 1429×497).
-// With THRESHOLD_CONF=0.01 the model returns 2 plates + 16 persons (18 total).
+// At the default minConfidence (0.05) the model returns 17 boxes; 16 of those are
+// seen by both Chromium and Firefox, and 16 survive a 0.10 confidence floor.
+//
+// Calibrated against models/detect_n_2026_08.onnx by intersecting the Chromium and
+// Firefox results within BOX_TOL, then setting conf_min 0.03 below the lowest
+// confidence either browser reported — margin for decoder pixel differences on
+// platforms not measured here.
 const JPEG_REF_DETECTIONS: RefDetection[] = [
-  { label: 'person', conf_min: 0.25, x:   13, y: 290, w: 24, h: 33 },
-  { label: 'person', conf_min: 0.38, x:  503, y: 268, w: 13, h: 23 },
-  { label: 'person', conf_min: 0.77, x:  525, y: 265, w: 10, h: 20 },
-  { label: 'person', conf_min: 0.12, x:  564, y: 260, w: 39, h: 21 },
-  { label: 'person', conf_min: 0.48, x:  565, y: 261, w: 13, h: 21 },
-  { label: 'person', conf_min: 0.65, x:  571, y: 259, w: 13, h: 23 },
-  { label: 'person', conf_min: 0.74, x:  596, y: 258, w: 12, h: 22 },
-  { label: 'person', conf_min: 0.69, x:  617, y: 268, w:  9, h: 16 },
-  { label: 'person', conf_min: 0.67, x:  631, y: 258, w: 11, h: 20 },
-  { label: 'person', conf_min: 0.15, x:  686, y: 263, w:  8, h: 14 },
-  { label: 'person', conf_min: 0.56, x:  728, y: 258, w:  9, h: 18 },
-  { label: 'person', conf_min: 0.72, x:  761, y: 256, w:  9, h: 17 },
-  { label: 'person', conf_min: 0.42, x:  774, y: 249, w:  9, h: 16 },
-  { label: 'person', conf_min: 0.27, x:  785, y: 248, w:  8, h: 16 },
-  { label: 'person', conf_min: 0.22, x:  947, y: 245, w:  9, h: 16 },
-  { label: 'person', conf_min: 0.34, x:  960, y: 246, w:  9, h: 16 },
-  { label: 'plate',  conf_min: 0.80, x: 1024, y: 331, w: 34, h: 10 },
-  { label: 'plate',  conf_min: 0.85, x: 1318, y: 322, w: 58, h: 15 },
+  { label: 'plate',  conf_min: 0.81, x: 1317, y: 322, w: 60, h: 16 },
+  { label: 'plate',  conf_min: 0.77, x: 1024, y: 330, w: 34, h: 12 },
+  { label: 'person', conf_min: 0.77, x:  595, y: 257, w: 13, h: 22 },
+  { label: 'person', conf_min: 0.72, x:  525, y: 264, w: 11, h: 20 },
+  { label: 'person', conf_min: 0.71, x:  631, y: 257, w: 12, h: 21 },
+  { label: 'person', conf_min: 0.65, x:  761, y: 255, w: 10, h: 18 },
+  { label: 'person', conf_min: 0.58, x:  570, y: 259, w: 14, h: 23 },
+  { label: 'person', conf_min: 0.54, x:  617, y: 267, w:  9, h: 16 },
+  { label: 'person', conf_min: 0.52, x:  728, y: 258, w: 10, h: 19 },
+  { label: 'person', conf_min: 0.31, x:  959, y: 246, w:  9, h: 16 },
+  { label: 'person', conf_min: 0.24, x:  947, y: 246, w:  9, h: 16 },
+  { label: 'person', conf_min: 0.19, x:  775, y: 248, w:  9, h: 17 },
+  { label: 'person', conf_min: 0.17, x:  507, y: 259, w: 11, h: 20 },
+  { label: 'person', conf_min: 0.16, x:  505, y: 267, w: 12, h: 24 },
+  { label: 'person', conf_min: 0.14, x:  784, y: 247, w: 10, h: 18 },
 ];
 
 // Reference detections for the three test videos (Hamburg street scene, display 1920×1080).
-// Uses 10 stable detections that appear in both H.264 and AV1 when filtered to conf >= 0.52.
-// Lower-confidence boxes vary between codecs due to NMS sensitivity to pixel differences.
-// assertDetectionsMatch is called with minConf=0.52 for video tests.
-// Full 10-box reference calibrated on Chromium (Chromium-only tests).
-const VIDEO_REF_DETECTIONS: RefDetection[] = [
-  { label: 'plate',  conf_min: 0.52, x: 1603, y: 460, w: 60, h: 17 },
-  { label: 'person', conf_min: 0.52, x:   20, y: 405, w: 15, h: 28 },
-  { label: 'person', conf_min: 0.52, x:  199, y: 380, w: 16, h: 24 },
-  { label: 'person', conf_min: 0.52, x:  226, y: 378, w: 13, h: 24 },
-  { label: 'person', conf_min: 0.52, x:  257, y: 379, w: 10, h: 18 },
-  { label: 'person', conf_min: 0.52, x:  283, y: 390, w: 15, h: 26 },
-  { label: 'person', conf_min: 0.52, x:  313, y: 387, w: 14, h: 25 },
-  { label: 'person', conf_min: 0.52, x:  435, y: 386, w: 13, h: 21 },
-  { label: 'person', conf_min: 0.52, x:  460, y: 390, w: 13, h: 21 },
-  { label: 'person', conf_min: 0.52, x:  506, y: 380, w: 13, h: 23 },
-];
-// Cross-browser references: boxes detected by both Chromium and Firefox above 0.52.
-// assertDetectionsMatch uses subset matching so extra browser-specific boxes are ignored.
 //
-// H.264: Firefox sees x=88 (conf≈0.54) as extra; x=435 drops to conf≈0.508 on Firefox
-//        (below 0.52) so it is excluded from the shared reference.
-const H264_VIDEO_REF_DETECTIONS: RefDetection[] = VIDEO_REF_DETECTIONS.filter((r) => r.x !== 435);
-// AV1 / H.265: Firefox sees x=88 (conf≈0.54) as extra; x=199 drops below 0.52 on Firefox
-//              (AV1: conf≈0.485, H.265/libav: not detected) so it is excluded.
-const AV1_H265_VIDEO_REF_DETECTIONS: RefDetection[] = VIDEO_REF_DETECTIONS.filter((r) => r.x !== 199);
+// One shared list for all three codecs: a box is included only when all six
+// (browser × codec) combinations measured here report it within BOX_TOL —
+// Chromium and Firefox, each decoding H.264, AV1 and H.265. conf_min sits 0.05
+// below the lowest confidence any of the six reported. Because every box is
+// codec-independent, no per-codec exclusion lists are needed.
+//
+// assertDetectionsMatch is called with minConf=0.30 for video tests, which keeps
+// the 8 boxes below while discarding the marginal tail where NMS is sensitive to
+// decoder pixel differences.
+const VIDEO_REF_DETECTIONS: RefDetection[] = [
+  { label: 'plate',  conf_min: 0.74, x: 1602, y: 459, w: 63, h: 18 },
+  { label: 'person', conf_min: 0.73, x:  282, y: 390, w: 16, h: 27 },
+  { label: 'person', conf_min: 0.58, x:   19, y: 400, w: 18, h: 33 },
+  { label: 'person', conf_min: 0.53, x:  458, y: 390, w: 13, h: 21 },
+  { label: 'person', conf_min: 0.51, x:  506, y: 381, w: 14, h: 25 },
+  { label: 'person', conf_min: 0.47, x:  435, y: 385, w: 14, h: 23 },
+  { label: 'person', conf_min: 0.46, x:  313, y: 388, w: 15, h: 25 },
+  { label: 'person', conf_min: 0.33, x:   87, y: 431, w: 15, h: 23 },
+];
 
 // Properly-shaped Detection[] arrays for injectDetections() — used to pre-populate
 // the IDB cache in tests not focused on inference output; never passed to
@@ -890,15 +888,15 @@ test.describe('Object detection — JPEG first frame', () => {
     assertDetectionsMatch(detections, JPEG_REF_DETECTIONS);
   });
 
-  // Actual confidences: 2 plates (~0.88, ~0.83); persons ranging from ~0.81 down to ~0.17.
-  // At 0.10 all 18 detections pass; at 0.80 only the highest-conf plate and person pass.
-  test('minConfidence=0.10 shows all 18 detections', async ({ page }) => {
+  // Actual confidences: 2 plates (~0.84, ~0.80); persons ranging from ~0.81 down to ~0.18.
+  // At 0.10 all 16 detections pass; at 0.80 only the two plates and the top person pass.
+  test('minConfidence=0.10 shows all 16 detections', async ({ page }) => {
     await loadFile(page, path.join(EXAMPLES, 'jpeg.jpg'));
     await waitForCanvas(page);
     await waitForDetections(page);
     await page.evaluate(() => (window as any).__setMinConfidence(0.1));
     const detections = await waitForDetections(page);
-    expect(detections.length).toBe(18);
+    expect(detections.length).toBe(16);
   });
 
   test('minConfidence=0.80 shows 3 detections', async ({ page }) => {
@@ -913,9 +911,9 @@ test.describe('Object detection — JPEG first frame', () => {
 });
 
 const DETECTION_VIDEO_CASES = [
-  { file: 'x264.mp4', codec: 'H.264', refDetections: H264_VIDEO_REF_DETECTIONS, minConf: 0.52 },
-  { file: 'av1.mp4', codec: 'AV1', refDetections: AV1_H265_VIDEO_REF_DETECTIONS, minConf: 0.52 },
-  { file: 'x265.mp4', codec: 'H.265', wasmFallback: true, refDetections: AV1_H265_VIDEO_REF_DETECTIONS, minConf: 0.52 },
+  { file: 'x264.mp4', codec: 'H.264', refDetections: VIDEO_REF_DETECTIONS, minConf: 0.30 },
+  { file: 'av1.mp4', codec: 'AV1', refDetections: VIDEO_REF_DETECTIONS, minConf: 0.30 },
+  { file: 'x265.mp4', codec: 'H.265', wasmFallback: true, refDetections: VIDEO_REF_DETECTIONS, minConf: 0.30 },
 ];
 
 // ── Draw mode tests ───────────────────────────────────────────────────────────

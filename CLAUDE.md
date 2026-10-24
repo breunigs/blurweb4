@@ -491,23 +491,29 @@ with spinner while inference is pending, hidden on completion or cache hit.
 
 **Test reference detections** (from `detect_n_2026_08.onnx` on `jpeg.jpg`
 at display size 1429×497, Hamburg street scene with GPS EXIF):
-With `THRESHOLD_CONF=0.01` the model returns 2 plates + 16 persons (18 total).
-See `JPEG_REF_DETECTIONS` in `media.test.ts` for the full list.
+At the default `minConfidence` of 0.05 the model returns 17 boxes; 16 pass a 0.10
+confidence floor. See `JPEG_REF_DETECTIONS` in `media.test.ts` for the full list.
 Note: `jpeg.jpg` is a different scene from the three test videos — video first-frame
 detection tests have separate reference values in `media.test.ts`.
 
-Video detection tests use **subset matching**: each reference box must appear in the
-actual results, but extra browser-specific boxes are tolerated. This handles NMS
-differences between Chromium and Firefox (different codec implementations produce
-slightly different pixel values, shifting marginal-confidence boxes across the
-threshold). Two codec-specific reference sets are used:
-- `H264_VIDEO_REF_DETECTIONS` — excludes the `x≈435` box (scores ~0.508 on Firefox,
-  below the 0.52 threshold)
-- `AV1_H265_VIDEO_REF_DETECTIONS` — excludes the `x≈199` box (Firefox AV1 scores
-  ~0.485; libav H.265 doesn't detect it at all)
+Detection tests use **subset matching**: each reference box must appear in the actual
+results, but extra browser-specific boxes are tolerated. This handles NMS differences
+between Chromium and Firefox (different codec implementations produce slightly
+different pixel values, shifting marginal-confidence boxes across the threshold).
+
+`VIDEO_REF_DETECTIONS` is a single list shared by all three codecs: a box is included
+only when every measured (browser × codec) combination reports it — Chromium and
+Firefox, each decoding H.264, AV1 and H.265. `conf_min` sits 0.05 below the lowest
+confidence any combination reported, so no per-codec exclusion lists are needed.
+The video tests assert at `minConf=0.30`.
 
 Tolerance: ±5 pixels per coordinate. ONNX/WASM inference itself is deterministic;
 variance comes from decoder pixel differences, not ONNX.
+
+**Recalibrating after a model swap:** replacing the `.onnx` weights invalidates these
+arrays. Regenerate them by dumping `window.__lastDetections` for `jpeg.jpg` and each
+test video in both browsers at the default config, intersecting the results within
+±5 px, and subtracting the confidence margin above.
 
 **Debug flag:** Set `window.__detectDebug = true` in the browser console before
 opening a file (with cold IDB cache) to log preprocessing params, per-channel
