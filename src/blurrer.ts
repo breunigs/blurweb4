@@ -297,6 +297,16 @@ function buildMaskSDF(
 /** Reciprocal of the mask's 8-bit full-coverage value, hoisted out of the blend loop. */
 const INV_ALPHA_MAX = 1 / 255;
 
+/**
+ * Upper bound on the sampling-region area blurred concurrently, in pixels.
+ *
+ * Non-overlapping boxes are safe to blur in parallel, but each one in flight
+ * costs several buffers the size of its sampling region. 8 MP keeps the
+ * transient cost near that of a single 4K-sized region while still letting the
+ * common case — a handful of small plates — run in one pass.
+ */
+const MAX_CONCURRENT_BLUR_PIXELS = 8_000_000;
+
 export class Blurrer {
   readonly #cache = new Map<string, Uint8Array>();
   /** Running total of #cache entry sizes, kept in step with insertions/evictions. */
@@ -373,8 +383,27 @@ export class Blurrer {
       if (!placed) batches.push([i]);
     }
 
+    // Each in-flight blur holds its sampling region twice over (the blurred
+    // result plus the plain pixels for the blend) and a third copy inside the
+    // worker, so a batch of several large boxes multiplied the transient cost.
+    // Run a batch in area-bounded slices instead of all at once.
     for (const batch of batches) {
-      await Promise.all(batch.map(i => this.#blurArea(ctx, canvas, items[i].box, cw, ch, version)));
+      let slice: number[] = [];
+      let slicePixels = 0;
+      for (const i of batch) {
+        const it = items[i];
+        const pixels = (it.xe - it.xi) * (it.ye - it.yi);
+        if (slice.length > 0 && slicePixels + pixels > MAX_CONCURRENT_BLUR_PIXELS) {
+          await Promise.all(slice.map(j => this.#blurArea(ctx, canvas, items[j].box, cw, ch, version)));
+          slice = [];
+          slicePixels = 0;
+        }
+        slice.push(i);
+        slicePixels += pixels;
+      }
+      if (slice.length > 0) {
+        await Promise.all(slice.map(j => this.#blurArea(ctx, canvas, items[j].box, cw, ch, version)));
+      }
     }
   }
 
@@ -447,16 +476,16 @@ export class Blurrer {
     const strength = Math.max(15, Math.min(180, Math.round(Math.max(w, h) / 3)));
 
     // getImageData: blocking but fast (only the sampling region, not full canvas).
-    const plain = ctx.getImageData(xi, yi, wi, hi);
-
-    // Clone the plain pixels — the copy is sent to the worker for blurring
-    // (zero-copy transfer via ArrayBuffer), while we keep `plain` for the blend.
-    const blurBuf = plain.data.buffer.slice(0);
+    // The buffer is handed to the worker rather than cloned for it: the canvas
+    // still holds these pixels, so the plain copy the blend needs can be read
+    // back afterwards. Cloning kept two region-sized buffers alive on the main
+    // thread on top of the worker's, for no benefit.
+    const source = ctx.getImageData(xi, yi, wi, hi);
 
     // StackBlur runs in the worker; the main thread is free during this await.
     let blurredBuf: ArrayBuffer;
     try {
-      blurredBuf = await stackBlurInWorker(blurBuf, wi, hi, strength);
+      blurredBuf = await stackBlurInWorker(source.data.buffer, wi, hi, strength);
     } catch {
       // Worker failure: fall back to synchronous StackBlur in the main thread.
       // This avoids a visible glitch at the cost of a temporary frame hang.
@@ -468,12 +497,14 @@ export class Blurrer {
 
     // If a newer apply() call started while we were awaiting the worker,
     // discard this result rather than overwriting the canvas with stale pixels.
+    // Checked before re-reading the plain pixels, so a stale blur costs nothing.
     if (this.#canvasVersions.get(canvas) !== version) return;
 
-    // Alpha-blend: blurred × mask + plain × (1-mask).
+    // Alpha-blend: blurred × mask + plain × (1-mask). Boxes within a batch never
+    // overlap, so nothing has written to this region while the worker ran.
     const mask = this.#getMask(wi, hi, feather, ox, oy, w, h, corners, snapL, snapT, snapR, snapB);
     const blurredPx = new Uint8ClampedArray(blurredBuf);
-    const plainPx = plain.data;
+    const plainPx = ctx.getImageData(xi, yi, wi, hi).data;
     for (let i = 0; i < blurredPx.length; i += 4) {
       const a = mask[i >> 2] * INV_ALPHA_MAX;
       blurredPx[i]     = blurredPx[i]     * a + plainPx[i]     * (1 - a);
