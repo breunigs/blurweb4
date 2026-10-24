@@ -100,9 +100,80 @@ export class FileManager {
    */
   async ensureFramePainted(item: MediaItem): Promise<void> {
     if (item.canvas.width > 0 && item.canvas.height > 0) return;
-    if (!item.loaded || !item.isVideo || !item.player) return;
-    await item.player.seekTo(item.player.currentTime);
+    if (!item.isVideo || !item.player) return;
+    await this.openVideo(item);
     item.canvas.dataset.loaded = 'true';
+  }
+
+  /**
+   * Incremented on every file switch. openVideo() captures the value and gives
+   * up if it has moved on, so quickly stepping through a list of videos leaves
+   * exactly one decoder open — the one for the file the user settled on.
+   */
+  private openGen = 0;
+
+  /** In-flight openVideo() calls, so two callers can't both start a load. */
+  private readonly opening = new WeakMap<MediaItem, Promise<void>>();
+
+  /**
+   * Open a video's decoder and paint its current frame, if it isn't open yet.
+   *
+   * Each open video holds a mediabunny Input, a VideoSampleSink and the
+   * underlying VideoDecoder, which on iOS carries several frame buffers and
+   * counts against a low cap on concurrent decode sessions. Keeping one per
+   * loaded file was a large part of the memory footprint, so only the file on
+   * screen gets one.
+   *
+   * Both the metadata callback and switchTo() can ask for the same video, so
+   * concurrent calls share one load rather than racing two on the same player.
+   */
+  private openVideo(item: MediaItem): Promise<void> {
+    if (!item.isVideo || !item.player || item.loaded) return Promise.resolve();
+    const existing = this.opening.get(item);
+    if (existing) return existing;
+    const p = this.doOpenVideo(item).finally(() => this.opening.delete(item));
+    this.opening.set(item, p);
+    return p;
+  }
+
+  private async doOpenVideo(item: MediaItem): Promise<void> {
+    const gen = ++this.openGen;
+    const player = item.player!;
+    try {
+      await player.load(item.file);
+      if (gen !== this.openGen) {
+        // Superseded: a newer switch has happened, so hand the decoder back
+        // rather than leaving it open for a file that is no longer shown.
+        player.dispose();
+        this.releasePixels(item);
+        return;
+      }
+      item.loaded = true;
+      item.width = item.canvas.width;
+      item.height = item.canvas.height;
+      item.canvas.dataset.loaded = 'true';
+      this.updateFileListMeta(item);
+      if (this.store.items[this.store.activeIndex] === item) {
+        this.updatePreviewAspectRatio();
+        this.playback.setupTrimSlider(item);
+      }
+      // Restore the playhead from before the decoder was closed.
+      if (item.lastTime !== undefined && item.lastTime > 0) {
+        await player.seekTo(item.lastTime);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`Failed to load video "${item.file.name}":`, err);
+      this.showError(item.wrapper, item.canvas, msg);
+    }
+  }
+
+  /** Close a video's decoder, remembering the playhead for the next open. */
+  private closeVideo(item: MediaItem): void {
+    if (!item.isVideo || !item.player || !item.loaded) return;
+    item.lastTime = item.player.currentTime;
+    item.player.dispose();
+    item.loaded = false;
   }
 
   clearExamplesLoading(): void {
@@ -258,10 +329,34 @@ export class FileManager {
 
     // Kick off metadata extraction fire-and-forget; cache result on item.
     if (isVideo) {
-      item.metaPromise = extractVideoMeta(file).then((m) => { item.meta = m; return m; }).catch((err) => {
-        console.warn(`[app] video meta extraction failed for "${file.name}":`, err);
-        return {};
-      });
+      item.metaPromise = extractVideoMeta(file)
+        .then((m) => {
+          item.meta = m;
+          // Dimensions, duration and trim all come from the container rather
+          // than from a decoded frame, so the file list and the trim UI are
+          // populated for videos that are never opened.
+          item.width = m.width;
+          item.height = m.height;
+          if (item.player && m.durationSec) item.player.duration = m.durationSec;
+          this.updateFileListMeta(item);
+          return m;
+        })
+        .then(async (m) => {
+          const saved = await loadTrim(`${file.name}|${file.size}`);
+          if (saved && m.durationSec) {
+            item.trimStart = Math.max(0, Math.min(saved.start, m.durationSec));
+            item.trimEnd = Math.max(item.trimStart, Math.min(saved.end, m.durationSec));
+          }
+          if (this.store.items[this.store.activeIndex] === item) {
+            this.updatePreviewAspectRatio();
+            void this.openVideo(item);
+          }
+          return m;
+        })
+        .catch((err) => {
+          console.warn(`[app] video meta extraction failed for "${file.name}":`, err);
+          return {};
+        });
     } else {
       item.metaPromise = extractImageMeta(file).then((m) => { item.meta = m; return m; }).catch((err) => {
         console.warn(`[app] image meta extraction failed for "${file.name}":`, err);
@@ -314,27 +409,8 @@ export class FileManager {
         if (this.store.items[this.store.activeIndex] === item) this.onOcrTextsAvailable(ocrTexts);
       };
 
-      player
-        .load(file)
-        .then(async () => {
-          item.loaded = true;
-          item.width = canvas.width;
-          item.height = canvas.height;
-          canvas.dataset.loaded = 'true';
-          if (this.store.items[this.store.activeIndex] === item) this.updatePreviewAspectRatio();
-          this.updateFileListMeta(item);
-          const saved = await loadTrim(`${file.name}|${file.size}`);
-          if (saved && item.player) {
-            const dur = item.player.duration;
-            item.trimStart = Math.max(0, Math.min(saved.start, dur));
-            item.trimEnd = Math.max(item.trimStart, Math.min(saved.end, dur));
-          }
-          if (this.store.items[this.store.activeIndex] === item) this.playback.setupTrimSlider(item);
-        })
-        .catch((err) => {
-          console.error(`Failed to load video "${file.name}":`, err);
-          this.showError(wrapper, canvas, err.message);
-        });
+      // The decoder is opened lazily — see openVideo(), called once metadata has
+      // been read for the active item, or on switching to this one.
     } else {
       renderImage(file, canvas)
         .then(async () => {
@@ -494,7 +570,10 @@ export class FileManager {
       const prev = this.store.items[this.store.activeIndex];
       prev.wrapper.classList.remove('active');
       prev.fileListRow.classList.remove('active-file');
-      if (prev !== this.store.items[index]) this.releasePixels(prev);
+      if (prev !== this.store.items[index]) {
+        this.closeVideo(prev);
+        this.releasePixels(prev);
+      }
     }
     this.store.activeIndex = index;
 
@@ -515,9 +594,12 @@ export class FileManager {
     this.exportManager.updateBtnState();
     this.updatePreviewAspectRatio();
     this.onAfterSwitchTo(index);
-    // The rerender repaints a canvas whose backing store was released on the
-    // way out, so data-loaded only goes back to true once pixels are present.
-    if (item.loaded) {
+    if (item.isVideo && !item.loaded) {
+      // Decoder was closed (or never opened); openVideo paints the frame.
+      void this.openVideo(item);
+    } else if (item.loaded) {
+      // The rerender repaints a canvas whose backing store was released on the
+      // way out, so data-loaded only goes back to true once pixels are present.
       void this.onRerenderActive().then(() => {
         item.canvas.dataset.loaded = 'true';
       });

@@ -11,6 +11,16 @@ export interface FileMeta {
   lat?: string;
   lon?: string;
   duration?: string;
+  /**
+   * Video duration in seconds, and display dimensions after aspect-ratio and
+   * rotation correction — the same values a decoded VideoSample reports.
+   *
+   * Read here because the file list and trim UI need them before (or without)
+   * ever opening a decoder for the file.
+   */
+  durationSec?: number;
+  width?: number;
+  height?: number;
 }
 
 /** Parse ISO 6709 decimal coordinate string, e.g. "+53.5616+009.9222+021.300/" */
@@ -121,11 +131,17 @@ export async function extractVideoMeta(file: File): Promise<FileMeta> {
   const input = new Input({ formats: ALL_FORMATS, source: new BlobSource(file) });
   try {
     const track = await input.getPrimaryVideoTrack();
-    const [tags, duration] = await Promise.all([
+    const [tags, duration, width, height] = await Promise.all([
       input.getMetadataTags(),
       track ? input.getDurationFromMetadata([track]) : Promise.resolve(null),
+      track ? track.getDisplayWidth() : Promise.resolve(null),
+      track ? track.getDisplayHeight() : Promise.resolve(null),
     ]);
     const meta: FileMeta = {};
+    if (width !== null && height !== null) {
+      meta.width = width;
+      meta.height = height;
+    }
 
     // Date from normalized tags (mediabunny returns UTC Date)
     if (tags.date instanceof Date && !isNaN(tags.date.getTime())) {
@@ -147,6 +163,7 @@ export async function extractVideoMeta(file: File): Promise<FileMeta> {
 
     // Duration formatted as hh:mm:ss
     if (typeof duration === 'number' && duration > 0) {
+      meta.durationSec = duration;
       const s = Math.round(duration);
       meta.duration = [Math.floor(s / 3600), Math.floor((s % 3600) / 60), s % 60]
         .map((v) => String(v).padStart(2, '0'))

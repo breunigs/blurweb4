@@ -17,6 +17,11 @@ export interface MediaItem {
    */
   width?: number;
   height?: number;
+  /**
+   * Playhead position carried across a decoder close/open cycle, since only the
+   * active video keeps its decoder open.
+   */
+  lastTime?: number;
   exported: boolean;
   trimStart?: number;
   trimEnd?: number;
