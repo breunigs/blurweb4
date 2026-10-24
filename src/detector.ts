@@ -14,6 +14,7 @@
 import { getConfig, type ModelChoice } from './config';
 import { idbGet, idbPut, idbClear } from './db';
 import { LruMap } from './lruMap';
+import { handleWorkerLogMessage } from './workerLog';
 
 declare const HASH_DETECTOR_WORKER: string;
 declare const HASH_MODEL_N: string;
@@ -434,6 +435,8 @@ function handleWorkerError(e: ErrorEvent): void {
 
 function handleWorkerMessage(e: MessageEvent): void {
   const msg = e.data as { type: string; ep?: string; detections?: Detection[]; message?: string; [k: string]: unknown };
+  // Worker console output, re-logged here so debugLog captures it.
+  if (handleWorkerLogMessage(msg, 'worker')) return;
   // Route OCR messages to registered handler
   if (typeof msg.type === 'string' && (msg.type.startsWith('ocr-') || msg.type === 'debug-image')) {
     ocrHandler?.(msg);

@@ -19,3 +19,6 @@ release
 sw.js
 test-results
 models/*zst
+
+# Local OCR regression suite: real-world photos, not for committing
+regression
