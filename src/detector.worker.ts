@@ -17,7 +17,8 @@
  *  Worker → Main  { type:'ready', ep: string }
  *
  *  Main → Worker  { type:'infer', pixels: ArrayBuffer (transferred),
- *                   scale, padX, padY }
+ *                   scale, padX, padY, pano?: PanoLayout }
+ *                 (pano set → 360° panorama stacked twice, see panoramaDetect.ts)
  *  Worker → Main  { type:'result', detections: Detection[] }
  *
  * OCR protocol:
@@ -39,6 +40,7 @@
 
 import * as ort from 'onnxruntime-web';
 import { forwardWorkerLogs } from './workerLog';
+import { postprocessPanorama, type PanoLayout } from './panoramaDetect';
 
 // Mirror this worker's console to the main thread, so the in-app debug panel
 // (the only log available on a phone) shows OCR and inference diagnostics.
@@ -292,7 +294,7 @@ interface Detection {
   h: number;
 }
 
-function postprocess(output: ort.Tensor, scale: number, padX: number, padY: number): Detection[] {
+function postprocess(output: ort.Tensor, scale: number, padX: number, padY: number, pano?: PanoLayout): Detection[] {
   const data = output.data as Float32Array;
   const [, rows, cols] = output.dims as [number, number, number];
 
@@ -309,13 +311,19 @@ function postprocess(output: ort.Tensor, scale: number, padX: number, padY: numb
     }
   }
 
-  const kept: RawBox[] = [];
   for (const classRaw of rawByClass) {
     classRaw.sort((a, b) => b.conf - a.conf);
     if (classRaw.length > MAX_NMS_CANDIDATES_PER_CLASS) {
       console.log(`[detector worker] capping ${classRaw[0].label} candidates ${classRaw.length} → ${MAX_NMS_CANDIDATES_PER_CLASS}`);
       classRaw.splice(MAX_NMS_CANDIDATES_PER_CLASS);
     }
+  }
+
+  // 360° panorama: the input holds two stacked copies (see panoramaDetect.ts).
+  if (pano) return postprocessPanorama(rawByClass.flat(), pano, scale, THRESHOLD_IOU);
+
+  const kept: RawBox[] = [];
+  for (const classRaw of rawByClass) {
     const sup = new Uint8Array(classRaw.length);
     for (let i = 0; i < classRaw.length; i++) {
       if (sup[i]) continue;
@@ -753,6 +761,7 @@ async function handleMessage(msg: Record<string, any>): Promise<void> {
         msg.scale as number,
         msg.padX as number,
         msg.padY as number,
+        msg.pano as PanoLayout | undefined,
       );
       self.postMessage({ type: 'result', detections });
 

@@ -9,6 +9,12 @@
  * the box is extended flush to that border and the adjacent corners become
  * square (radius 0) so no rounded gap appears at the image edge.
  *
+ * 360° panoramas (`wrap`): the left and right borders are one seam on the
+ * sphere, so boxes are not snapped to them. A box may cross the seam; its
+ * pixels are read and written in two parts (see panorama.ts), and the blur
+ * samples real neighbours on the other side. The result does not depend on
+ * where the seam is, so no line shows in a 360° viewer.
+ *
  * Blur masks are LRU-cached keyed by shape, position, feather, and snap flags,
  * under a byte budget rather than an entry count — mask size scales with the
  * detection box, so counting entries left the cache unbounded in practice.
@@ -18,6 +24,7 @@
  */
 
 import type { Detection } from './detector';
+import { readWrapped, writeWrapped, wrapX } from './panorama';
 
 declare const HASH_BLUR_WORKER: string;
 
@@ -49,11 +56,26 @@ interface ClippedBox {
   snapT: boolean;
   snapR: boolean;
   snapB: boolean;
+  /** 360° panorama: x is in [0, cw) and the box may extend past the right edge onto the left. */
+  wrap: boolean;
 }
 
 // ── Edge clamping ─────────────────────────────────────────────────────────────
 
-function clipToEdges(x: number, y: number, w: number, h: number, r: number, cw: number, ch: number): ClippedBox {
+/** Feather width of the blur mask for a box of the given size. */
+function featherFor(w: number, h: number): number {
+  return Math.round(Math.max(3, Math.max(w, h) / 12));
+}
+
+function clipToEdges(x: number, y: number, w: number, h: number, r: number, cw: number, ch: number, wrap = false): ClippedBox {
+  if (wrap) {
+    // The blur's sampling region (box + 2×feather each side, rounded up to a
+    // multiple of 5) must fit in one turn, or the region would overlap itself.
+    // A box that wide covers nearly the whole panorama: treat it as full width.
+    if (w + 4 * featherFor(w, h) + 8 <= cw) return clipToEdgesWrapped(x, y, w, h, r, cw, ch);
+    x = 0;
+    w = cw;
+  }
   const thX = cw * EDGE_THRESHOLD;
   const thY = ch * EDGE_THRESHOLD;
   let bx = x,
@@ -99,6 +121,38 @@ function clipToEdges(x: number, y: number, w: number, h: number, r: number, cw: 
     snapT,
     snapR,
     snapB,
+    wrap: false,
+  };
+}
+
+/** clipToEdges() for a 360° panorama: only the top and bottom edges snap. */
+function clipToEdgesWrapped(x: number, y: number, w: number, h: number, r: number, cw: number, ch: number): ClippedBox {
+  const thY = ch * EDGE_THRESHOLD;
+  let by = y,
+    bh = h;
+  const snapT = y < thY;
+  if (snapT) {
+    bh += by;
+    by = 0;
+  }
+  const snapB = y + h > ch - thY;
+  if (snapB) bh = ch - by;
+  return {
+    x: wrapX(x, cw),
+    y: by,
+    w,
+    h: bh,
+    corners: {
+      tl: snapT ? 0 : r,
+      tr: snapT ? 0 : r,
+      br: snapB ? 0 : r,
+      bl: snapB ? 0 : r,
+    },
+    snapL: false,
+    snapT,
+    snapR: false,
+    snapB,
+    wrap: true,
   };
 }
 
@@ -331,7 +385,11 @@ export class Blurrer {
     this.#maxCacheBytes = maxCacheBytes;
   }
 
-  async apply(ctx: AnyCtx, detections: Detection[], mode: 'blur' | 'solidcolor' | 'pixelate', color = '#000000'): Promise<void> {
+  /**
+   * @param wrap The canvas is a 360° panorama whose left and right edges meet
+   *   (see panorama.ts). Boxes may then have x < 0 or x + w > canvas width.
+   */
+  async apply(ctx: AnyCtx, detections: Detection[], mode: 'blur' | 'solidcolor' | 'pixelate', color = '#000000', wrap = false): Promise<void> {
     const canvas = (ctx as CanvasRenderingContext2D).canvas;
     const version = (this.#canvasVersions.get(canvas) ?? 0) + 1;
     this.#canvasVersions.set(canvas, version);
@@ -341,7 +399,7 @@ export class Blurrer {
     if (mode !== 'blur') {
       for (const d of detections) {
         const r = Math.round((Math.min(d.w, d.h) / 2) * CORNER_RATIOS[d.label]);
-        const box = clipToEdges(d.x, d.y, d.w, d.h, r, cw, ch);
+        const box = clipToEdges(d.x, d.y, d.w, d.h, r, cw, ch, wrap);
         if (mode === 'solidcolor') this.#solidArea(ctx, box, color);
         else this.#pixelateArea(ctx, box, cw);
       }
@@ -355,16 +413,21 @@ export class Blurrer {
     type BlurItem = { box: ClippedBox; xi: number; yi: number; xe: number; ye: number };
     const items: BlurItem[] = detections.map(d => {
       const r = Math.round((Math.min(d.w, d.h) / 2) * CORNER_RATIOS[d.label]);
-      const box = clipToEdges(d.x, d.y, d.w, d.h, r, cw, ch);
-      const feather = Math.round(Math.max(3, Math.max(box.w, box.h) / 12));
+      const box = clipToEdges(d.x, d.y, d.w, d.h, r, cw, ch, wrap);
+      const feather = featherFor(box.w, box.h);
       return {
         box,
-        xi: Math.max(0, Math.floor(box.x - feather * 2)),
+        // Wrapped boxes keep an unclamped x range; it may cross the seam.
+        xi: box.wrap ? Math.floor(box.x - feather * 2) : Math.max(0, Math.floor(box.x - feather * 2)),
         yi: Math.max(0, Math.floor(box.y - feather * 2)),
-        xe: Math.min(cw, Math.ceil(box.x + box.w + feather * 2)),
+        xe: box.wrap ? Math.ceil(box.x + box.w + feather * 2) : Math.min(cw, Math.ceil(box.x + box.w + feather * 2)),
         ye: Math.min(ch, Math.ceil(box.y + box.h + feather * 2)),
       };
     });
+    // On a panorama, two regions also overlap if they meet across the seam.
+    const shifts = wrap ? [-cw, 0, cw] : [0];
+    const disjoint = (a: BlurItem, b: BlurItem) =>
+      a.ye <= b.yi || b.ye <= a.yi || shifts.every((s) => a.xe <= b.xi + s || b.xe + s <= a.xi);
 
     // Greedy batch grouping: pack as many non-overlapping detections as possible
     // into each batch.  Batches run sequentially; within a batch, blurs run in
@@ -374,10 +437,7 @@ export class Blurrer {
       const a = items[i];
       let placed = false;
       for (const batch of batches) {
-        const fits = batch.every(j => {
-          const b = items[j];
-          return a.xe <= b.xi || b.xe <= a.xi || a.ye <= b.yi || b.ye <= a.yi;
-        });
+        const fits = batch.every(j => disjoint(a, items[j]));
         if (fits) { batch.push(i); placed = true; break; }
       }
       if (!placed) batches.push([i]);
@@ -410,10 +470,16 @@ export class Blurrer {
   // ── Solid color ─────────────────────────────────────────────────────────────
 
   #solidArea(ctx: AnyCtx, box: ClippedBox, color: string): void {
+    // A wrapped box crossing the seam is drawn a second time one turn to the
+    // left; the canvas clips each copy to its own side.
+    const cw = ctx.canvas.width;
+    const offsets = box.wrap && box.x + box.w > cw ? [0, -cw] : [0];
     ctx.save();
-    roundedRectPath(ctx, box.x, box.y, box.w, box.h, box.corners);
     ctx.fillStyle = color;
-    ctx.fill();
+    for (const dx of offsets) {
+      roundedRectPath(ctx, box.x + dx, box.y, box.w, box.h, box.corners);
+      ctx.fill();
+    }
     ctx.restore();
   }
 
@@ -425,6 +491,17 @@ export class Blurrer {
     const w = Math.round(box.w);
     const h = Math.round(box.h);
     if (w <= 0 || h <= 0) return;
+
+    if (box.wrap && x + w > cw) {
+      // Crosses the seam: pixelate a joined copy of the region, so the block
+      // grid runs on unbroken, then write it back in two parts.
+      const tmp = new OffscreenCanvas(w, h);
+      const tmpCtx = tmp.getContext('2d')!;
+      tmpCtx.putImageData(readWrapped(ctx, x, y, w, h), 0, 0);
+      this.#pixelateArea(tmpCtx, { ...box, x: 0, y: 0, w, h, wrap: false }, cw);
+      writeWrapped(ctx, tmpCtx.getImageData(0, 0, w, h), x, y);
+      return;
+    }
 
     // Block size scales with detection size and image resolution so pixelation
     // looks visually similar regardless of canvas resolution.
@@ -452,20 +529,22 @@ export class Blurrer {
   // ── Blur ────────────────────────────────────────────────────────────────────
 
   async #blurArea(ctx: AnyCtx, canvas: HTMLCanvasElement | OffscreenCanvas, box: ClippedBox, cw: number, ch: number, version: number): Promise<void> {
-    const { x, y, w, h, corners, snapL, snapT, snapR, snapB } = box;
-    const feather = Math.round(Math.max(3, Math.max(w, h) / 12));
+    const { x, y, w, h, corners, snapL, snapT, snapR, snapB, wrap } = box;
+    const feather = featherFor(w, h);
 
-    // Sampling region: extend 2×feather outside the detection box, clamped to canvas.
-    const xi = Math.max(0, Math.floor(x - feather * 2));
+    // Sampling region: extend 2×feather outside the detection box, clamped to
+    // canvas. On a panorama x is not clamped: the region may cross the seam,
+    // and clipToEdges() guaranteed it fits in one turn.
+    const xi = wrap ? Math.floor(x - feather * 2) : Math.max(0, Math.floor(x - feather * 2));
     const yi = Math.max(0, Math.floor(y - feather * 2));
-    const xe = Math.min(cw, Math.ceil(x + w + feather * 2));
+    const xe = wrap ? Math.ceil(x + w + feather * 2) : Math.min(cw, Math.ceil(x + w + feather * 2));
     const ye = Math.min(ch, Math.ceil(y + h + feather * 2));
     let wi = xe - xi;
     let hi = ye - yi;
 
     // Snap dimensions to nearest 5 for better cache hit rate.
     const mod = 5;
-    wi = Math.min(wi + mod - (wi % mod), cw - xi);
+    wi = wrap ? Math.min(wi + mod - (wi % mod), cw) : Math.min(wi + mod - (wi % mod), cw - xi);
     hi = Math.min(hi + mod - (hi % mod), ch - yi);
     if (wi <= 0 || hi <= 0) return;
 
@@ -480,7 +559,7 @@ export class Blurrer {
     // still holds these pixels, so the plain copy the blend needs can be read
     // back afterwards. Cloning kept two region-sized buffers alive on the main
     // thread on top of the worker's, for no benefit.
-    const source = ctx.getImageData(xi, yi, wi, hi);
+    const source = readWrapped(ctx, xi, yi, wi, hi);
 
     // StackBlur runs in the worker; the main thread is free during this await.
     let blurredBuf: ArrayBuffer;
@@ -490,7 +569,7 @@ export class Blurrer {
       // Worker failure: fall back to synchronous StackBlur in the main thread.
       // This avoids a visible glitch at the cost of a temporary frame hang.
       const { imageDataRGB } = await import('stackblur-canvas');
-      const fallback = ctx.getImageData(xi, yi, wi, hi);
+      const fallback = readWrapped(ctx, xi, yi, wi, hi);
       imageDataRGB(fallback, 0, 0, wi, hi, strength);
       blurredBuf = fallback.data.buffer;
     }
@@ -504,14 +583,14 @@ export class Blurrer {
     // overlap, so nothing has written to this region while the worker ran.
     const mask = this.#getMask(wi, hi, feather, ox, oy, w, h, corners, snapL, snapT, snapR, snapB);
     const blurredPx = new Uint8ClampedArray(blurredBuf);
-    const plainPx = ctx.getImageData(xi, yi, wi, hi).data;
+    const plainPx = readWrapped(ctx, xi, yi, wi, hi).data;
     for (let i = 0; i < blurredPx.length; i += 4) {
       const a = mask[i >> 2] * INV_ALPHA_MAX;
       blurredPx[i]     = blurredPx[i]     * a + plainPx[i]     * (1 - a);
       blurredPx[i + 1] = blurredPx[i + 1] * a + plainPx[i + 1] * (1 - a);
       blurredPx[i + 2] = blurredPx[i + 2] * a + plainPx[i + 2] * (1 - a);
     }
-    ctx.putImageData(new ImageData(blurredPx, wi, hi), xi, yi);
+    writeWrapped(ctx, new ImageData(blurredPx, wi, hi), xi, yi);
   }
 
   // ── SDF mask cache ──────────────────────────────────────────────────────────

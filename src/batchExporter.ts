@@ -5,6 +5,7 @@ import { getConfig } from './config';
 import { jpegQualityFor } from './exportUtils';
 import { detectForExport, makeImageKey, applyFiltersWithOcr } from './detector';
 import { applyDetections } from './detectionDrawer';
+import { isWrapPanorama } from './panorama';
 import { parseKeepPlates } from './config';
 import type { FileMeta } from './fileMeta';
 
@@ -80,10 +81,11 @@ export async function runBatch(
           const keepPlates = parseKeepPlates(cfg);
           const allDets = await detectForExport(item.canvas, key);
           const result = await applyFiltersWithOcr(allDets, cfg.minConfidence, cfg.enabledLabels, keepPlates, ctx, item.file, 'img');
+          const wrap = await isWrapPanorama(item.file);
           if (cfg.drawMode === 'outline') {
-            await applyDetections(ctx, result.allDetections, cfg.drawMode, cfg.solidColor, cfg.expansionFraction, result.ocrTexts, result.excludedKeys);
+            await applyDetections(ctx, result.allDetections, cfg.drawMode, cfg.solidColor, cfg.expansionFraction, result.ocrTexts, result.excludedKeys, wrap);
           } else {
-            await applyDetections(ctx, result.detections, cfg.drawMode, cfg.solidColor, cfg.expansionFraction);
+            await applyDetections(ctx, result.detections, cfg.drawMode, cfg.solidColor, cfg.expansionFraction, undefined, undefined, wrap);
           }
         }
         cb.onFileProgress(i, 1);

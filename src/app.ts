@@ -10,6 +10,7 @@ import {
   type OcrFilterResult,
 } from './detector';
 import { applyDetections } from './detectionDrawer';
+import { isWrapPanorama } from './panorama';
 import { getConfig, setConfig, confirmLargeModelOk, parseKeepPlates, DEFAULTS, type AppConfig, type ModelChoice } from './config';
 import { applyPattern } from './naming';
 import { t, tpl, applyTranslations } from './i18n';
@@ -555,10 +556,11 @@ export class App {
     const cfg = getConfig();
     const keepPlates = parseKeepPlates(cfg);
     const result = await applyFiltersWithOcr(dets, cfg.minConfidence, cfg.enabledLabels, keepPlates, ctx, file, frameRef);
+    const wrap = await isWrapPanorama(file);
     if (cfg.drawMode === 'outline') {
-      await applyDetections(ctx, result.allDetections, cfg.drawMode, cfg.solidColor, cfg.expansionFraction, result.ocrTexts, result.excludedKeys);
+      await applyDetections(ctx, result.allDetections, cfg.drawMode, cfg.solidColor, cfg.expansionFraction, result.ocrTexts, result.excludedKeys, wrap);
     } else {
-      await applyDetections(ctx, result.detections, cfg.drawMode, cfg.solidColor, cfg.expansionFraction);
+      await applyDetections(ctx, result.detections, cfg.drawMode, cfg.solidColor, cfg.expansionFraction, undefined, undefined, wrap);
     }
     return result;
   }

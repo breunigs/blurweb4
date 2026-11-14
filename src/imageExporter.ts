@@ -1,4 +1,4 @@
-import { findJpegApp1 } from './jpegUtils';
+import { buildXmpApp1, findJpegApp1, findJpegXmp, parseGPano, GPANO_NS } from './jpegUtils';
 
 export interface ImageExportResult {
   blob: Blob;
@@ -250,10 +250,51 @@ function stripOrientationTag(app1: Uint8Array): Uint8Array {
 }
 
 /**
- * Return a new JPEG buffer with all APPn segments from the canvas-produced
- * JPEG replaced by the given EXIF APP1 segment.
+ * GPano properties that describe how the pixels map onto the sphere and how a
+ * viewer should open the image. Panorama viewers need them to show a 360°
+ * photo as such. They carry no capture time, place, or device, so they are
+ * kept in every metadata mode, including "strip".
  */
-function injectExif(canvasJpeg: Uint8Array, exifSegment: Uint8Array): Uint8Array<ArrayBuffer> {
+const GPANO_GEOMETRY_KEYS = [
+  'UsePanoramaViewer', 'ProjectionType',
+  'PoseHeadingDegrees', 'PosePitchDegrees', 'PoseRollDegrees',
+  'InitialViewHeadingDegrees', 'InitialViewPitchDegrees', 'InitialViewRollDegrees',
+  'InitialHorizontalFOVDegrees', 'InitialVerticalFOVDegrees', 'InitialCameraDolly',
+  'CroppedAreaLeftPixels', 'CroppedAreaTopPixels',
+  'CroppedAreaImageWidthPixels', 'CroppedAreaImageHeightPixels',
+  'FullPanoWidthPixels', 'FullPanoHeightPixels',
+] as const;
+
+/**
+ * Build a fresh XMP APP1 segment holding only the GPano geometry of the source
+ * (see GPANO_GEOMETRY_KEYS), or null if the source is not a GPano panorama.
+ * The source XMP is never copied: it can hold GPS, dates, and edit history.
+ */
+function extractPanoramaXmp(jpeg: Uint8Array): Uint8Array | null {
+  const xmp = findJpegXmp(jpeg);
+  const gpano = xmp ? parseGPano(xmp) : null;
+  if (!gpano?.has('ProjectionType')) return null;
+  const props: string[] = [];
+  for (const key of GPANO_GEOMETRY_KEYS) {
+    const value = gpano.get(key);
+    // Values are numbers, booleans, or a projection name; reject anything else.
+    if (value !== undefined && /^[\w.+-]+$/.test(value)) {
+      props.push(`<GPano:${key}>${value}</GPano:${key}>`);
+    }
+  }
+  return buildXmpApp1(
+    '<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">' +
+      `<rdf:Description rdf:about="" xmlns:GPano="${GPANO_NS}">` +
+      props.join('') +
+      '</rdf:Description></rdf:RDF></x:xmpmeta>',
+  );
+}
+
+/**
+ * Return a new JPEG buffer with all APPn segments from the canvas-produced
+ * JPEG replaced by the given segments (EXIF APP1 first, then XMP APP1).
+ */
+function injectSegments(canvasJpeg: Uint8Array, segments: Uint8Array[]): Uint8Array<ArrayBuffer> {
   // Skip over all existing APP0..APP15 segments (markers E0..EF).
   let pos = 2; // skip SOI
   while (pos + 4 <= canvasJpeg.length) {
@@ -266,11 +307,16 @@ function injectExif(canvasJpeg: Uint8Array, exifSegment: Uint8Array): Uint8Array
       break;
     }
   }
-  // Output: SOI + exifSegment + remainder (everything after the old APPn block)
-  const result = new Uint8Array(2 + exifSegment.length + (canvasJpeg.length - pos));
+  // Output: SOI + segments + remainder (everything after the old APPn block)
+  const segBytes = segments.reduce((n, seg) => n + seg.length, 0);
+  const result = new Uint8Array(2 + segBytes + (canvasJpeg.length - pos));
   result.set(canvasJpeg.subarray(0, 2)); // SOI
-  result.set(exifSegment, 2); // original EXIF APP1
-  result.set(canvasJpeg.subarray(pos), 2 + exifSegment.length);
+  let off = 2;
+  for (const seg of segments) {
+    result.set(seg, off);
+    off += seg.length;
+  }
+  result.set(canvasJpeg.subarray(pos), off);
   return result;
 }
 
@@ -283,7 +329,8 @@ export async function exportAsJpeg(
   quality = 0.92,
   outputStem?: string,
 ): Promise<ImageExportResult> {
-  const needsSource = keepMetadata !== 'strip' && sourceFile?.type === 'image/jpeg';
+  // Even "strip" reads the source: panorama geometry is kept in every mode.
+  const needsSource = sourceFile?.type === 'image/jpeg';
   console.log(`[export] metadata=${keepMetadata} file=${sourceFilename} type=${sourceFile?.type ?? 'none'} needsSource=${needsSource}`);
   const [canvasBlob, sourceBytes] = await Promise.all([
     new Promise<Blob>((resolve, reject) => {
@@ -294,19 +341,26 @@ export async function exportAsJpeg(
 
   let finalBlob = canvasBlob;
   if (sourceBytes) {
-    let exifSegment =
-      keepMetadata === 'gps' ? extractGpsOnlyExif(sourceBytes) : findJpegApp1(sourceBytes);
-    console.log(`[export] EXIF APP1 ${exifSegment ? `found (${exifSegment.length} bytes)` : 'not found'}`);
-    if (exifSegment) {
-      exifSegment = stripOrientationTag(exifSegment);
+    const segments: Uint8Array[] = [];
+    if (keepMetadata !== 'strip') {
+      const exifSegment =
+        keepMetadata === 'gps' ? extractGpsOnlyExif(sourceBytes) : findJpegApp1(sourceBytes);
+      console.log(`[export] EXIF APP1 ${exifSegment ? `found (${exifSegment.length} bytes)` : 'not found'}`);
+      if (exifSegment) segments.push(stripOrientationTag(exifSegment));
+    }
+    const panoXmp = extractPanoramaXmp(sourceBytes);
+    if (panoXmp) {
+      console.log(`[export] panorama XMP kept (${panoXmp.length} bytes)`);
+      segments.push(panoXmp);
+    }
+    if (segments.length) {
       const canvasBytes = new Uint8Array(await canvasBlob.arrayBuffer());
-      const injected = injectExif(canvasBytes, exifSegment);
+      const injected = injectSegments(canvasBytes, segments);
       finalBlob = new Blob([injected], { type: 'image/jpeg' });
-      // Verify: first bytes should be FF D8 FF E1, followed by "Exif\0\0"
       const hdr = Array.from(injected.subarray(0, 12))
         .map((b) => b.toString(16).padStart(2, '0'))
         .join(' ');
-      console.log(`[export] injected EXIF into output (${finalBlob.size} bytes), header: ${hdr}`);
+      console.log(`[export] injected ${segments.length} metadata segment(s) (${finalBlob.size} bytes), header: ${hdr}`);
     }
   } else if (keepMetadata !== 'strip') {
     console.log(`[export] no source bytes — metadata not preserved (type=${sourceFile?.type ?? 'no file'})`);

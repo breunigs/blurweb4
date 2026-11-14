@@ -8,6 +8,7 @@ import {
 } from './detector';
 import { loadTrim } from './trimStorage';
 import { applyDetections } from './detectionDrawer';
+import { isWrapPanorama } from './panorama';
 import { renderImage } from './imageRenderer';
 import { CanvasZoom } from './canvasZoom';
 import { getConfig, parseKeepPlates } from './config';
@@ -42,6 +43,24 @@ export function clearAllHdrPreferences(): void {
     }
     for (const k of keys) localStorage.removeItem(k);
   } catch { /* ignore */ }
+}
+
+/** Extensions browsers do not know, mapped to the MIME type of their content. */
+const EXTRA_MIME_TYPES: Record<string, string> = {
+  // GoPro MAX / MAX2 360° photo: a plain equirectangular JPEG.
+  '36p': 'image/jpeg',
+};
+
+/**
+ * Browsers report unknown extensions as `''` or `application/octet-stream`, and
+ * the rest of the app dispatches on `File.type`. Re-label such files; the new
+ * File shares the bytes.
+ */
+function withKnownMimeType(file: File): File {
+  if (file.type && file.type !== 'application/octet-stream') return file;
+  const ext = file.name.slice(file.name.lastIndexOf('.') + 1).toLowerCase();
+  const type = EXTRA_MIME_TYPES[ext];
+  return type ? new File([file], file.name, { type, lastModified: file.lastModified }) : file;
 }
 
 export class FileManager {
@@ -212,7 +231,8 @@ export class FileManager {
 
   addFiles(files: FileList): void {
     let switchedToFirst = false;
-    for (const file of files) {
+    for (const rawFile of files) {
+      const file = withKnownMimeType(rawFile);
       if (file.type.startsWith('image/') || file.type.startsWith('video/')) {
         const alreadyLoaded = this.store.items.some(
           (it) => it.file.name === file.name && it.file.size === file.size,
@@ -422,15 +442,16 @@ export class FileManager {
           this.updateFileListMeta(item);
           const ctx = canvas.getContext('2d')!;
           const key = await makeImageKey(file, canvas.width, canvas.height);
+          const wrap = await isWrapPanorama(file);
           const cached = await getCachedDetections(key);
           if (cached !== null) {
             const cfg = getConfig();
             const keepPlates = parseKeepPlates(cfg);
             const result = await applyFiltersWithOcr(cached, cfg.minConfidence, cfg.enabledLabels, keepPlates, ctx, file, 'img');
             if (cfg.drawMode === 'outline') {
-              await applyDetections(ctx, result.allDetections, cfg.drawMode, cfg.solidColor, cfg.expansionFraction, result.ocrTexts, result.excludedKeys);
+              await applyDetections(ctx, result.allDetections, cfg.drawMode, cfg.solidColor, cfg.expansionFraction, result.ocrTexts, result.excludedKeys, wrap);
             } else {
-              await applyDetections(ctx, result.detections, cfg.drawMode, cfg.solidColor, cfg.expansionFraction);
+              await applyDetections(ctx, result.detections, cfg.drawMode, cfg.solidColor, cfg.expansionFraction, undefined, undefined, wrap);
             }
             item.detectionsDone = true;
             if (this.store.items[this.store.activeIndex] === item) {
@@ -455,9 +476,9 @@ export class FileManager {
                 applyFiltersWithOcr(dets, cfg2.minConfidence, cfg2.enabledLabels, keepPlates2, ctx, file, 'img')
                   .then(async (result) => {
                     if (cfg2.drawMode === 'outline') {
-                      await applyDetections(ctx, result.allDetections, cfg2.drawMode, cfg2.solidColor, cfg2.expansionFraction, result.ocrTexts, result.excludedKeys);
+                      await applyDetections(ctx, result.allDetections, cfg2.drawMode, cfg2.solidColor, cfg2.expansionFraction, result.ocrTexts, result.excludedKeys, wrap);
                     } else {
-                      await applyDetections(ctx, result.detections, cfg2.drawMode, cfg2.solidColor, cfg2.expansionFraction);
+                      await applyDetections(ctx, result.detections, cfg2.drawMode, cfg2.solidColor, cfg2.expansionFraction, undefined, undefined, wrap);
                     }
                     item.detectionsDone = true;
                     if (this.store.items[this.store.activeIndex] === item) {

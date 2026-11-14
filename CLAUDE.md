@@ -25,6 +25,8 @@ blurweb4/
 │   ├── debugLog.ts       in-memory ring buffer capturing all console output
 │   ├── lruMap.ts         fixed-capacity LRU Map used by detector + OCR caches
 │   ├── canvasZoom.ts     touch pinch-zoom / pan / double-tap-to-fit for the preview
+│   ├── panorama.ts       360° panorama detection (GPano XMP) + seam-crossing canvas reads/writes
+│   ├── panoramaDetect.ts stacked-copy postprocessing + seam-aware NMS for 360° panoramas
 │   ├── imageRenderer.ts  createImageBitmap → canvas (renders bitmap only, no detection)
 │   ├── videoPlayer.ts    mediabunny VideoSampleSink wrapper with play/pause/seek
 │   ├── hevcDecoder.ts    libav.js WASM fallback decoder for HEVC (registered at startup)
@@ -53,7 +55,8 @@ blurweb4/
 │   ├── jpeg.jpg        2704×1521 JPEG
 │   ├── x264.mp4        2704×1520 coded, H.264, ~1 s
 │   ├── x265.mp4        2704×1520 coded, H.265/HEVC, ~1 s
-│   └── av1.mp4         2704×1520 coded, AV1, ~1 s
+│   ├── av1.mp4         2704×1520 coded, AV1, ~1 s
+│   └── GSAD9038.36P    7680×3840 GoPro MAX2 360° photo (equirectangular JPEG + GPano XMP)
 └── dist/               esbuild output (gitignore-worthy, not committed)
     ├── bundle.js
     └── ort/            onnxruntime-web WASM files (copied by build.mjs, not committed)
@@ -606,6 +609,46 @@ practical cases while avoiding loading large image data into memory.
 
 `FileMeta` fields are used by `naming.ts` for template substitution and shown in the
 file list UI.
+
+## 360° panoramas (src/panorama.ts + src/panoramaDetect.ts)
+
+GoPro `.36P` files are plain equirectangular JPEGs. Browsers report the
+extension as `''` or `application/octet-stream`, so `FileManager.addFiles`
+re-labels them `image/jpeg` before anything dispatches on `File.type`.
+
+**Wrapping is enabled from metadata only.** `isWrapPanorama(file)` walks the
+JPEG segment headers to the XMP packet (not limited to the first 64 KB) and
+returns true for GPano `ProjectionType=equirectangular` that is not cropped
+horizontally. Never guess from a 2:1 aspect ratio: wrapping a normal photo would
+blend its two edges. The result is cached per `File`.
+
+**Detection: two stacked copies.** A 2:1 panorama letterboxed alone fills only
+1280×640 of the model input. For panoramas `capturePanoramaSnapshot` fills the
+other half with the panorama rolled by half a turn, so whatever the seam cuts in
+one copy is whole in the other, at no extra inference cost. The image cache key
+gets a `|pano` suffix, which is also how `resolveDetections` picks this path.
+In the worker, `postprocessPanorama` maps both copies into periodic coordinates
+and runs NMS that wraps at the seam. Boxes cut by a copy edge rank lower, and a
+cut box mostly inside a whole one is dropped. Two halves cut at the same copy
+seam are joined. A lone half is extended across the seam by a guessed amount
+(`max(w, 0.4h)`, at most a quarter turn). Suppression never lowers confidence:
+the kept box inherits the highest confidence it absorbed. On GSAD9038 recall
+matched the single-image path (16 vs 16 boxes at conf ≥ 0.3).
+
+**Detections may cross the seam.** For a panorama, `x` is in `[0, W)` and
+`x + w` may exceed `W`. Everything that draws them takes a `wrap` flag:
+`applyDetections` → `expandDetections` (no x clamp), `drawOutline` (draws at ±W),
+and `Blurrer.apply`. There, `clipToEdges` snaps only top/bottom. Blur and
+pixelate read and write their region through `readWrapped` / `writeWrapped`,
+so StackBlur samples real pixels from across the seam. Solid colour fills the
+path twice. The result does not depend on where the seam is. The rendering
+test checks exactly that: render, or roll → render → roll back, gives the same
+pixels.
+
+**Not handled:** the poles (wrapping over the top or bottom edge), and OCR on a
+plate that crosses the seam. OCR gets a partial crop, so such a plate stays
+blurred, which is the safe outcome. GoPro `.360` videos use a cube-map layout,
+not equirectangular, and are not treated as panoramas.
 
 ## Trim persistence (src/trimStorage.ts)
 

@@ -22,9 +22,14 @@ function drawOutline(
   origDetections: Detection[],
   ocrTexts?: Map<string, string>,
   excludedKeys?: Set<string>,
+  wrap = false,
 ): void {
   if (detections.length === 0) return;
   ctx.save();
+  // On a 360° panorama a box may cross the seam: draw it a turn to the left
+  // and right as well, the canvas clips whatever falls outside.
+  const cw = ctx.canvas.width;
+  const offsets = wrap ? [-cw, 0, cw] : [0];
   // Scale font to the shorter canvas dimension so labels are readable regardless
   // of canvas resolution or CSS zoom. Use pixel dimensions (not clientWidth) so
   // this works even when the canvas is display:none (e.g. loaded in background).
@@ -39,62 +44,89 @@ function drawOutline(
     const idx = labelIdx[d.label] ?? 0;
     labelIdx[d.label] = idx + 1;
     const color = palette[idx % palette.length];
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 2;
-    ctx.strokeRect(d.x, d.y, d.w, d.h);
-    const label = `${d.label} ${Math.round(d.conf * 100)}%`;
-    const tw = ctx.measureText(label).width;
-    ctx.fillStyle = 'rgba(0,0,0,0.72)';
-    ctx.fillRect(d.x, d.y - fontSize - 3, tw + 4, fontSize + 3);
-    ctx.fillStyle = color;
-    ctx.fillText(label, d.x + 2, d.y - 5);
-
-    // OCR/exclusion keys use original (pre-expansion) coordinates to match the OCR cache
-    const bk = `${Math.round(orig.x)},${Math.round(orig.y)},${Math.round(orig.w)},${Math.round(orig.h)}`;
-    const ocrText = ocrTexts?.get(bk);
-    if (ocrText) {
-      const ocrLabel = `OCR: ${ocrText}`;
-      const otw = ctx.measureText(ocrLabel).width;
-      ctx.fillStyle = 'rgba(0,0,0,0.72)';
-      ctx.fillRect(d.x, d.y + d.h, otw + 4, fontSize + 3);
-      ctx.fillStyle = '#00ff88';
-      ctx.fillText(ocrLabel, d.x + 2, d.y + d.h + fontSize - 2);
-    }
-
-    // Exclusion cross — diagonal X over plates that will be kept unblurred
-    if (excludedKeys?.has(bk)) {
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(d.x, d.y);
-      ctx.lineTo(d.x + d.w, d.y + d.h);
-      ctx.moveTo(d.x + d.w, d.y);
-      ctx.lineTo(d.x, d.y + d.h);
-      ctx.stroke();
+    for (const dx of offsets) {
+      if (d.x + dx >= cw || d.x + d.w + dx <= 0) continue;
+      ctx.save();
+      ctx.translate(dx, 0);
+      drawOutlineBox(ctx, d, orig, color, fontSize, ocrTexts, excludedKeys);
+      ctx.restore();
     }
   }
   ctx.restore();
 }
 
+function drawOutlineBox(
+  ctx: AnyCtx,
+  d: Detection,
+  orig: Detection,
+  color: string,
+  fontSize: number,
+  ocrTexts?: Map<string, string>,
+  excludedKeys?: Set<string>,
+): void {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  ctx.strokeRect(d.x, d.y, d.w, d.h);
+  const label = `${d.label} ${Math.round(d.conf * 100)}%`;
+  const tw = ctx.measureText(label).width;
+  ctx.fillStyle = 'rgba(0,0,0,0.72)';
+  ctx.fillRect(d.x, d.y - fontSize - 3, tw + 4, fontSize + 3);
+  ctx.fillStyle = color;
+  ctx.fillText(label, d.x + 2, d.y - 5);
+
+  // OCR/exclusion keys use original (pre-expansion) coordinates to match the OCR cache
+  const bk = `${Math.round(orig.x)},${Math.round(orig.y)},${Math.round(orig.w)},${Math.round(orig.h)}`;
+  const ocrText = ocrTexts?.get(bk);
+  if (ocrText) {
+    const ocrLabel = `OCR: ${ocrText}`;
+    const otw = ctx.measureText(ocrLabel).width;
+    ctx.fillStyle = 'rgba(0,0,0,0.72)';
+    ctx.fillRect(d.x, d.y + d.h, otw + 4, fontSize + 3);
+    ctx.fillStyle = '#00ff88';
+    ctx.fillText(ocrLabel, d.x + 2, d.y + d.h + fontSize - 2);
+  }
+
+  // Exclusion cross — diagonal X over plates that will be kept unblurred
+  if (excludedKeys?.has(bk)) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(d.x, d.y);
+    ctx.lineTo(d.x + d.w, d.y + d.h);
+    ctx.moveTo(d.x + d.w, d.y);
+    ctx.lineTo(d.x, d.y + d.h);
+    ctx.stroke();
+  }
+}
+
 /**
  * Expand each detection box by `fraction` of its own size on every side.
  * fraction=0 → no change; fraction=1 → 50% pad on each side (box 2× larger).
- * Boxes are clamped to [0, canvas dimension].
+ * Boxes are clamped to [0, canvas dimension]. On a 360° panorama (`wrap`) x is
+ * not clamped, since the padding may continue across the seam.
  */
-export function expandDetections(detections: Detection[], fraction: number, cw: number, ch: number): Detection[] {
+export function expandDetections(detections: Detection[], fraction: number, cw: number, ch: number, wrap = false): Detection[] {
   if (fraction <= 0) return detections;
   return detections.map((d) => {
     const padX = d.w * fraction * 0.5;
     const padY = d.h * fraction * 0.5;
-    const x = Math.max(0, d.x - padX);
     const y = Math.max(0, d.y - padY);
-    const x2 = Math.min(cw, d.x + d.w + padX);
     const y2 = Math.min(ch, d.y + d.h + padY);
+    if (wrap) {
+      const w = Math.min(cw, d.w + 2 * padX);
+      return { ...d, x: d.x - (w - d.w) / 2, y, w, h: y2 - y };
+    }
+    const x = Math.max(0, d.x - padX);
+    const x2 = Math.min(cw, d.x + d.w + padX);
     return { ...d, x, y, w: x2 - x, h: y2 - y };
   });
 }
 
-/** Apply detections to the canvas using the current draw mode. */
+/**
+ * Apply detections to the canvas using the current draw mode.
+ * @param wrap The canvas is a 360° panorama whose left and right edges meet
+ *   (see panorama.ts): redactions continue across the seam.
+ */
 export async function applyDetections(
   ctx: AnyCtx,
   detections: Detection[],
@@ -103,15 +135,16 @@ export async function applyDetections(
   expansionFraction = 0,
   ocrTexts?: Map<string, string>,
   excludedKeys?: Set<string>,
+  wrap = false,
 ): Promise<void> {
   if (detections.length === 0) return;
   const cw = (ctx as CanvasRenderingContext2D).canvas.width;
   const ch = (ctx as CanvasRenderingContext2D).canvas.height;
-  const expanded = expandDetections(detections, expansionFraction, cw, ch);
+  const expanded = expandDetections(detections, expansionFraction, cw, ch, wrap);
   if (mode === 'outline') {
-    drawOutline(ctx, expanded, detections, ocrTexts, excludedKeys);
+    drawOutline(ctx, expanded, detections, ocrTexts, excludedKeys, wrap);
   } else {
-    await blurrer.apply(ctx, expanded, mode, color);
+    await blurrer.apply(ctx, expanded, mode, color, wrap);
   }
 }
 

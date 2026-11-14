@@ -15,6 +15,8 @@ import { getConfig, type ModelChoice } from './config';
 import { idbGet, idbPut, idbClear } from './db';
 import { LruMap } from './lruMap';
 import { handleWorkerLogMessage } from './workerLog';
+import { isWrapPanorama } from './panorama';
+import type { PanoLayout } from './panoramaDetect';
 
 declare const HASH_DETECTOR_WORKER: string;
 declare const HASH_MODEL_N: string;
@@ -72,6 +74,7 @@ interface Snapshot {
   scale: number; // uniform scale applied to fit content into MODEL_W×MODEL_H
   padX: number; // horizontal padding added on each side (letterbox)
   padY: number; // vertical padding added on each side (letterbox)
+  pano?: PanoLayout; // set for a 360° panorama stacked twice (see panoramaDetect.ts)
 }
 
 interface PendingItem {
@@ -110,8 +113,16 @@ export async function getFileHash(file: File): Promise<string> {
   return hash;
 }
 
+const PANO_KEY_SUFFIX = '|pano';
+
+/**
+ * Cache key for an image. 360° panoramas get a `|pano` suffix: they are
+ * inferred differently (see captureSnapshot), and resolveDetections reads the
+ * suffix to choose that path.
+ */
 export async function makeImageKey(file: File, width: number, height: number): Promise<string> {
-  return `${getModelName()}|${await getFileHash(file)}|${file.name}|${file.size}|${width}x${height}|img`;
+  const [hash, pano] = await Promise.all([getFileHash(file), isWrapPanorama(file)]);
+  return `${getModelName()}|${hash}|${file.name}|${file.size}|${width}x${height}|img${pano ? PANO_KEY_SUFFIX : ''}`;
 }
 
 export async function makeVideoKey(file: File, width: number, height: number, microsecondTimestamp: number): Promise<string> {
@@ -527,6 +538,37 @@ const LETTERBOX_FILL = 'rgb(114,114,114)';
 const _snapshotCanvas = new OffscreenCanvas(MODEL_W, MODEL_H);
 const _snapshotCtx = _snapshotCanvas.getContext('2d')!;
 
+/**
+ * Model input for a 360° panorama: the image twice, stacked — as is on top,
+ * rolled by half a turn below — so that whatever the seam cuts in one copy is
+ * whole in the other. A 2:1 panorama letterboxed alone would leave that half
+ * of the input as grey padding, so this costs no resolution.
+ */
+function capturePanoramaSnapshot(source: HTMLCanvasElement | OffscreenCanvas): Snapshot {
+  const t0 = performance.now();
+  const srcW = source.width,
+    srcH = source.height;
+  const scale = Math.min(MODEL_W / srcW, MODEL_H / 2 / srcH);
+  const copyW = Math.round(srcW * scale),
+    copyH = Math.round(srcH * scale);
+  const half = Math.round(copyW / 2);
+  const ctx = _snapshotCtx;
+  ctx.fillStyle = LETTERBOX_FILL;
+  ctx.fillRect(0, 0, MODEL_W, MODEL_H);
+  ctx.drawImage(source as CanvasImageSource, 0, 0, copyW, copyH);
+  // Copy 1: column u shows panorama column (u + half) mod copyW.
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, copyH, copyW, copyH);
+  ctx.clip();
+  ctx.drawImage(source as CanvasImageSource, -half, copyH, copyW, copyH);
+  ctx.drawImage(source as CanvasImageSource, copyW - half, copyH, copyW, copyH);
+  ctx.restore();
+  const data = ctx.getImageData(0, 0, MODEL_W, MODEL_H).data;
+  console.log(`[detector] capturePanoramaSnapshot ${(performance.now() - t0).toFixed(1)}ms copies=${copyW}×${copyH}`);
+  return { data, origW: srcW, origH: srcH, scale, padX: 0, padY: 0, pano: { copyW, copyH, half } };
+}
+
 function captureSnapshot(source: HTMLCanvasElement | OffscreenCanvas): Snapshot {
   const t0 = performance.now();
   const srcW = source.width,
@@ -568,7 +610,7 @@ async function runOnnx(snap: Snapshot): Promise<Detection[]> {
       // the only consumer.
       const pixelBuffer = snap.data.buffer;
       worker!.postMessage(
-        { type: 'infer', pixels: pixelBuffer, scale: snap.scale, padX: snap.padX, padY: snap.padY },
+        { type: 'infer', pixels: pixelBuffer, scale: snap.scale, padX: snap.padX, padY: snap.padY, pano: snap.pano },
         { transfer: [pixelBuffer] },
       );
     });
@@ -627,7 +669,8 @@ async function resolveDetections(
   }
 
   const t0 = performance.now();
-  const detections = await runOnnx(captureSnapshot(source));
+  const pano = key.endsWith(PANO_KEY_SUFFIX);
+  const detections = await runOnnx(pano ? capturePanoramaSnapshot(source) : captureSnapshot(source));
   const ms = performance.now() - t0;
   inferenceStats[currentModel].count++;
   inferenceStats[currentModel].totalMs += ms;

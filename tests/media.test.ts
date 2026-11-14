@@ -312,6 +312,59 @@ test.describe('JPEG export — EXIF preservation', () => {
   });
 });
 
+// ── GoPro .36P 360° photos ───────────────────────────────────────────────────
+// A .36P file is a plain equirectangular JPEG with GPano XMP. Browsers do not
+// know the extension, so the app must re-label it as image/jpeg. The export
+// must keep the GPano geometry (else viewers show a flat image) in every
+// metadata mode, but never the GPano dates or software names.
+
+test.describe('GoPro .36P panorama', () => {
+  test('loads as an image and export keeps only GPano geometry', async ({ page }) => {
+    const { readFileSync } = await import('fs');
+    const jpeg = readFileSync(path.join(EXAMPLES, 'jpeg.jpg'));
+    const xmp =
+      'http://ns.adobe.com/xap/1.0/\0' +
+      '<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">' +
+      '<rdf:Description rdf:about="" xmlns:GPano="http://ns.google.com/photos/1.0/panorama/">' +
+      '<GPano:UsePanoramaViewer>True</GPano:UsePanoramaViewer>' +
+      '<GPano:CaptureSoftware>MAX2</GPano:CaptureSoftware>' +
+      '<GPano:ProjectionType>equirectangular</GPano:ProjectionType>' +
+      '<GPano:PosePitchDegrees>-15.2</GPano:PosePitchDegrees>' +
+      '<GPano:FirstPhotoDate>2026:11:14 11:48:06</GPano:FirstPhotoDate>' +
+      '</rdf:Description></rdf:RDF></x:xmpmeta>';
+    const xmpBody = Buffer.from(xmp, 'latin1');
+    const app1 = Buffer.concat([Buffer.from([0xff, 0xe1, (xmpBody.length + 2) >> 8, (xmpBody.length + 2) & 0xff]), xmpBody]);
+    const pano = Buffer.concat([jpeg.subarray(0, 2), app1, jpeg.subarray(2)]);
+
+    await injectDetections(page, JPEG_INJECT_DETECTIONS);
+    await page.goto('http://localhost:3100');
+    await page.locator('#file-input').setInputFiles({ name: 'pano.36P', mimeType: 'application/octet-stream', buffer: pano });
+    await waitForCanvas(page);
+    await waitForDetections(page);
+
+    await page.evaluate(() => {
+      (document.querySelector('input[name="keepMetadata"][value="strip"]') as HTMLInputElement).click();
+    });
+    const downloadPromise = page.waitForEvent('download', { timeout: 60_000 });
+    await page.locator('#export-btn').click();
+    const download = await downloadPromise;
+    expect(download.suggestedFilename()).toBe('pano.jpg');
+
+    const tmpPath = path.join(path.dirname(fileURLToPath(import.meta.url)), '../.tmp-pano-strip.jpg');
+    await download.saveAs(tmpPath);
+    try {
+      const out = readFileSync(tmpPath).toString('latin1');
+      expect(out).toContain('<GPano:ProjectionType>equirectangular</GPano:ProjectionType>');
+      expect(out).toContain('<GPano:PosePitchDegrees>-15.2</GPano:PosePitchDegrees>');
+      expect(out).not.toContain('FirstPhotoDate');
+      expect(out).not.toContain('CaptureSoftware');
+      expect(hasExifGps(readFileSync(tmpPath)), 'strip must still drop EXIF').toBe(false);
+    } finally {
+      import('fs').then((fs) => fs.unlinkSync(tmpPath)).catch(() => {});
+    }
+  });
+});
+
 // ── EXIF orientation handling ─────────────────────────────────────────────────
 // examples/rotated.jpg is a 16×8 coded JPEG with EXIF orientation=6 (90° CW).
 // After rotation it should display as 8×16, with top half red and bottom half blue.
@@ -2763,5 +2816,175 @@ test.describe('Video OCR suggestions', () => {
       chipTexts.some((t) => /\d/.test(t)),
       `Suggestion chips should contain plate text with digits, got: ${chipTexts}`,
     ).toBe(true);
+  });
+});
+
+// ── 360° panoramas: no visible seam ──────────────────────────────────────────
+// The left and right edges of an equirectangular panorama meet on the sphere.
+// Detection must not cut objects on the seam in two, and redaction must look
+// the same no matter where the seam is.
+
+test.describe('360° panorama seam — detection postprocessing', () => {
+  // One full turn is 1280 model px; copy 1 is rolled by half a turn.
+  const L = { copyW: 1280, copyH: 640, half: 640 };
+  const scale = 1280 / 7680;
+  const toSrc = (v: number) => Math.round(v / scale);
+  type Cand = { label: 'plate' | 'person'; conf: number; cx: number; cy: number; w: number; h: number };
+
+  test('object cut in copy 0 but whole in copy 1 becomes one box across the seam', async () => {
+    const { postprocessPanorama } = await import('../src/panoramaDetect');
+    const cands: Cand[] = [
+      // copy 0: right half of the person, cut by the left edge (x 0..20)
+      { label: 'person', conf: 0.9, cx: 10, cy: 300, w: 20, h: 60 },
+      // copy 1: the whole person around its middle column 640 (= seam), x 620..660
+      { label: 'person', conf: 0.6, cx: 640, cy: 640 + 300, w: 40, h: 60 },
+    ];
+    const out = postprocessPanorama(cands, L, scale, 0.45);
+    expect(out).toHaveLength(1);
+    // Starts 20 model px left of the seam and continues 20 px past it.
+    expect(out[0].x).toBe(toSrc(1260));
+    expect(out[0].x + out[0].w).toBe(toSrc(1300));
+    // The suppressed half was more confident: the kept box inherits that.
+    expect(out[0].conf).toBeCloseTo(0.9);
+  });
+
+  test('two halves in one copy are joined across its seam', async () => {
+    const { postprocessPanorama } = await import('../src/panoramaDetect');
+    const cands: Cand[] = [
+      { label: 'person', conf: 0.7, cx: 1270, cy: 300, w: 20, h: 60 }, // x 1260..1280, cut right
+      { label: 'person', conf: 0.5, cx: 15, cy: 305, w: 30, h: 60 }, // x 0..30, cut left
+    ];
+    const out = postprocessPanorama(cands, L, scale, 0.45);
+    expect(out).toHaveLength(1);
+    expect(out[0].x).toBe(toSrc(1260));
+    expect(out[0].w).toBe(toSrc(50));
+    expect(out[0].y).toBe(toSrc(270));
+    expect(out[0].h).toBe(toSrc(65));
+  });
+
+  test('a lone half is extended across the seam', async () => {
+    const { postprocessPanorama } = await import('../src/panoramaDetect');
+    const cands: Cand[] = [{ label: 'plate', conf: 0.8, cx: 10, cy: 300, w: 20, h: 10 }]; // x 0..20, cut left
+    const out = postprocessPanorama(cands, L, scale, 0.45);
+    expect(out).toHaveLength(1);
+    // Extended left past the seam by its own width: x 1260..1300 (periodic).
+    expect(out[0].x).toBe(toSrc(1260));
+    expect(out[0].w).toBe(toSrc(40));
+  });
+
+  test('a box spilling into the other copy is dropped', async () => {
+    const { postprocessPanorama } = await import('../src/panoramaDetect');
+    const cands: Cand[] = [{ label: 'person', conf: 0.8, cx: 400, cy: 640, w: 40, h: 100 }]; // half in each copy
+    expect(postprocessPanorama(cands, L, scale, 0.45)).toHaveLength(0);
+  });
+});
+
+test.describe('360° panorama seam — rendering', () => {
+  // Redacting a box, or redacting the same box on the image rolled by k and
+  // rolling back, must give the same pixels: then nothing depends on where
+  // the seam is, and no line can show in a 360° viewer.
+  for (const mode of ['blur', 'pixelate', 'solidcolor'] as const) {
+    test(`${mode}: result does not depend on the seam position`, async ({ page }) => {
+      await page.goto('http://localhost:3100');
+      const res = await page.evaluate(async (mode) => {
+        const blurrer = (window as any).__blurrer;
+        const W = 400, H = 200, K = 150;
+        // Deterministic noise, smoothed a little so blur and pixelate have structure.
+        let seed = 12345;
+        const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff) * 255;
+        const base = new ImageData(W, H);
+        for (let i = 0; i < W * H; i++) {
+          base.data[i * 4] = rnd(); base.data[i * 4 + 1] = rnd(); base.data[i * 4 + 2] = rnd(); base.data[i * 4 + 3] = 255;
+        }
+        const roll = (img: ImageData, k: number) => {
+          const out = new ImageData(W, H);
+          for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+            const s = (y * W + x) * 4, d = (y * W + ((x + k) % W + W) % W) * 4;
+            out.data.set(img.data.subarray(s, s + 4), d);
+          }
+          return out;
+        };
+        const render = async (img: ImageData, x: number, wrap: boolean) => {
+          const c = new OffscreenCanvas(W, H);
+          const ctx = c.getContext('2d', { willReadFrequently: true })!;
+          ctx.putImageData(img, 0, 0);
+          await blurrer.apply(ctx, [{ label: 'person', conf: 0.9, x, y: 60, w: 60, h: 80 }], mode, '#000000', wrap);
+          return ctx.getImageData(0, 0, W, H);
+        };
+        const maxDiff = (a: ImageData, b: ImageData) => {
+          let m = 0;
+          for (let i = 0; i < a.data.length; i++) m = Math.max(m, Math.abs(a.data[i] - b.data[i]));
+          return m;
+        };
+        // Pixels differing by more than 2 in any channel.
+        const badPixels = (a: ImageData, b: ImageData) => {
+          let n = 0;
+          for (let i = 0; i < a.data.length; i += 4) {
+            if (Math.max(Math.abs(a.data[i] - b.data[i]), Math.abs(a.data[i + 1] - b.data[i + 1]), Math.abs(a.data[i + 2] - b.data[i + 2])) > 2) n++;
+          }
+          return n;
+        };
+        // The box crosses the seam (x 370..430 → 370..400 and 0..30).
+        const direct = await render(base, 370, true);
+        // Rolled by K the box sits at 120..180, far from the seam.
+        const viaRoll = roll(await render(roll(base, K), 370 + K - W, true), -K);
+        // Without wrapping the seam shows: proves the comparison can fail.
+        const flat = await render(base, 370, false);
+        // Check that the box area changed at all.
+        return { wrapBad: badPixels(direct, viaRoll), flatDiff: maxDiff(flat, viaRoll), changed: maxDiff(direct, base) };
+      }, mode);
+      expect(res.changed, 'redaction should change pixels').toBeGreaterThan(20);
+      // Skia anti-aliases a path edge slightly differently at different absolute
+      // positions, so allow a few corner pixels; a seam would differ in dozens.
+      expect(res.wrapBad, 'wrapped redaction must not depend on the seam position').toBeLessThanOrEqual(4);
+      expect(res.flatDiff, 'unwrapped redaction should differ (test sensitivity)').toBeGreaterThan(20);
+    });
+  }
+});
+
+test.describe('360° panorama seam — GoPro MAX2 photo (GSAD9038.36P)', () => {
+  // examples/GSAD9038.36P: 7680×3840 equirectangular JPEG with GPano XMP.
+  // A person stands behind the one in the yellow beanie, right on the seam.
+  // Measured identically in Chromium and Firefox with detect_n_2026_08.
+  const SEAM_PERSON = { x: 7620, y: 1679, w: 120, h: 127, conf_min: 0.34 };
+  const BOX_TOL = 5;
+
+  test('a person on the seam is one box across it, and the blur shows no seam', async ({ page }) => {
+    test.setTimeout(240_000);
+    await loadFile(page, path.join(EXAMPLES, 'GSAD9038.36P'));
+    await waitForCanvas(page);
+    const dets = await waitForDetections(page, 200_000);
+
+    const seam = dets.find(
+      (d) =>
+        d.label === 'person' &&
+        Math.abs(d.x - SEAM_PERSON.x) <= BOX_TOL && Math.abs(d.y - SEAM_PERSON.y) <= BOX_TOL &&
+        Math.abs(d.w - SEAM_PERSON.w) <= BOX_TOL && Math.abs(d.h - SEAM_PERSON.h) <= BOX_TOL,
+    );
+    expect(seam, `seam person not found in ${JSON.stringify(dets)}`).toBeDefined();
+    expect(seam!.conf).toBeGreaterThanOrEqual(SEAM_PERSON.conf_min);
+    expect(seam!.x + seam!.w, 'box should continue past the right edge').toBeGreaterThan(7680);
+
+    // Default draw mode is blur, painted before __lastDetections is set. Across
+    // the seam (column W-1 → 0) the colour should change no more than between
+    // neighbouring columns inside the blur.
+    const diffs = await page.evaluate(({ y0, h }) => {
+      const c = document.querySelector<HTMLCanvasElement>('.canvas-wrapper.active canvas')!;
+      const ctx = c.getContext('2d')!;
+      const W = c.width;
+      const col = (x: number) => ctx.getImageData(x, y0, 1, h).data;
+      const meanDiff = (a: Uint8ClampedArray, b: Uint8ClampedArray) => {
+        let s = 0;
+        for (let i = 0; i < a.length; i += 4) s += Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]);
+        return s / (a.length / 4) / 3;
+      };
+      return {
+        seam: meanDiff(col(W - 1), col(0)),
+        left: meanDiff(col(W - 2), col(W - 1)),
+        right: meanDiff(col(0), col(1)),
+      };
+    }, { y0: SEAM_PERSON.y + 20, h: SEAM_PERSON.h - 40 });
+    expect(diffs.seam, `seam step ${diffs.seam.toFixed(2)} vs neighbours ${diffs.left.toFixed(2)} / ${diffs.right.toFixed(2)}`)
+      .toBeLessThanOrEqual(Math.max(diffs.left, diffs.right) * 2 + 1);
   });
 });
