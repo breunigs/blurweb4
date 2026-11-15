@@ -815,29 +815,32 @@ interface RefDetection {
 }
 
 // Reference detections for examples/jpeg.jpg (Hamburg street scene with GPS, 1429×497).
-// At the default minConfidence (0.05) the model returns 17 boxes; 16 of those are
-// seen by both Chromium and Firefox, and 16 survive a 0.10 confidence floor.
+// At the default minConfidence (0.05) the model returns 21 boxes; all 21 are seen by
+// both Chromium and Firefox, and 18 survive a 0.10 confidence floor.
 //
-// Calibrated against models/detect_n_2026_08.onnx by intersecting the Chromium and
+// Calibrated against models/detect_n_2026_11.onnx by intersecting the Chromium and
 // Firefox results within BOX_TOL, then setting conf_min 0.03 below the lowest
 // confidence either browser reported — margin for decoder pixel differences on
 // platforms not measured here.
 const JPEG_REF_DETECTIONS: RefDetection[] = [
-  { label: 'plate',  conf_min: 0.81, x: 1317, y: 322, w: 60, h: 16 },
-  { label: 'plate',  conf_min: 0.77, x: 1024, y: 330, w: 34, h: 12 },
-  { label: 'person', conf_min: 0.77, x:  595, y: 257, w: 13, h: 22 },
-  { label: 'person', conf_min: 0.72, x:  525, y: 264, w: 11, h: 20 },
-  { label: 'person', conf_min: 0.71, x:  631, y: 257, w: 12, h: 21 },
-  { label: 'person', conf_min: 0.65, x:  761, y: 255, w: 10, h: 18 },
-  { label: 'person', conf_min: 0.58, x:  570, y: 259, w: 14, h: 23 },
-  { label: 'person', conf_min: 0.54, x:  617, y: 267, w:  9, h: 16 },
-  { label: 'person', conf_min: 0.52, x:  728, y: 258, w: 10, h: 19 },
-  { label: 'person', conf_min: 0.31, x:  959, y: 246, w:  9, h: 16 },
-  { label: 'person', conf_min: 0.24, x:  947, y: 246, w:  9, h: 16 },
-  { label: 'person', conf_min: 0.19, x:  775, y: 248, w:  9, h: 17 },
-  { label: 'person', conf_min: 0.17, x:  507, y: 259, w: 11, h: 20 },
-  { label: 'person', conf_min: 0.16, x:  505, y: 267, w: 12, h: 24 },
-  { label: 'person', conf_min: 0.14, x:  784, y: 247, w: 10, h: 18 },
+  { label: 'plate',  conf_min: 0.85, x: 1318, y: 321, w: 57, h: 16 },
+  { label: 'plate',  conf_min: 0.83, x: 1024, y: 330, w: 33, h: 12 },
+  { label: 'person', conf_min: 0.80, x:  595, y: 258, w: 13, h: 21 },
+  { label: 'person', conf_min: 0.79, x:  524, y: 264, w: 11, h: 20 },
+  { label: 'person', conf_min: 0.71, x:  761, y: 256, w:  9, h: 16 },
+  { label: 'person', conf_min: 0.69, x:  631, y: 258, w: 12, h: 19 },
+  { label: 'person', conf_min: 0.68, x:  617, y: 267, w: 10, h: 16 },
+  { label: 'person', conf_min: 0.67, x:  727, y: 257, w: 10, h: 18 },
+  { label: 'person', conf_min: 0.63, x:  571, y: 259, w: 13, h: 21 },
+  { label: 'person', conf_min: 0.59, x:  774, y: 249, w: 10, h: 16 },
+  { label: 'person', conf_min: 0.48, x:  960, y: 246, w: 10, h: 17 },
+  { label: 'person', conf_min: 0.48, x:  784, y: 247, w:  9, h: 17 },
+  { label: 'person', conf_min: 0.45, x:  565, y: 261, w: 13, h: 19 },
+  { label: 'person', conf_min: 0.34, x:  948, y: 244, w: 10, h: 17 },
+  { label: 'person', conf_min: 0.26, x:  509, y: 259, w: 10, h: 17 },
+  { label: 'person', conf_min: 0.25, x:  501, y: 284, w: 11, h: 17 },
+  { label: 'person', conf_min: 0.21, x:  505, y: 269, w: 11, h: 22 },
+  { label: 'person', conf_min: 0.15, x:  686, y: 264, w:  8, h: 15 },
 ];
 
 // Reference detections for the three test videos (Hamburg street scene, display 1920×1080).
@@ -849,17 +852,22 @@ const JPEG_REF_DETECTIONS: RefDetection[] = [
 // codec-independent, no per-codec exclusion lists are needed.
 //
 // assertDetectionsMatch is called with minConf=0.30 for video tests, which keeps
-// the 8 boxes below while discarding the marginal tail where NMS is sensitive to
+// the 6 boxes below while discarding the marginal tail where NMS is sensitive to
 // decoder pixel differences.
+//
+// detect_n_2026_11 detects more people in this frame than its predecessor, but
+// several of them sit in a cluster where NMS merges neighbours differently per
+// decoder — the same person comes back as a 13 px or a 40 px box depending on
+// the codec, up to 24 px apart. Those boxes are high-confidence yet unstable in
+// extent, so they are intentionally absent from this list even though every
+// browser sees a person there.
 const VIDEO_REF_DETECTIONS: RefDetection[] = [
-  { label: 'plate',  conf_min: 0.74, x: 1602, y: 459, w: 63, h: 18 },
-  { label: 'person', conf_min: 0.73, x:  282, y: 390, w: 16, h: 27 },
-  { label: 'person', conf_min: 0.58, x:   19, y: 400, w: 18, h: 33 },
-  { label: 'person', conf_min: 0.53, x:  458, y: 390, w: 13, h: 21 },
-  { label: 'person', conf_min: 0.51, x:  506, y: 381, w: 14, h: 25 },
-  { label: 'person', conf_min: 0.47, x:  435, y: 385, w: 14, h: 23 },
-  { label: 'person', conf_min: 0.46, x:  313, y: 388, w: 15, h: 25 },
-  { label: 'person', conf_min: 0.33, x:   87, y: 431, w: 15, h: 23 },
+  { label: 'plate',  conf_min: 0.76, x: 1603, y: 459, w: 61, h: 19 },
+  { label: 'person', conf_min: 0.73, x:  282, y: 390, w: 16, h: 26 },
+  { label: 'person', conf_min: 0.58, x:  506, y: 382, w: 13, h: 23 },
+  { label: 'person', conf_min: 0.46, x:  227, y: 378, w: 17, h: 28 },
+  { label: 'person', conf_min: 0.43, x:  199, y: 379, w: 19, h: 27 },
+  { label: 'person', conf_min: 0.39, x:  313, y: 388, w: 14, h: 24 },
 ];
 
 // Properly-shaped Detection[] arrays for injectDetections() — used to pre-populate
@@ -941,24 +949,25 @@ test.describe('Object detection — JPEG first frame', () => {
     assertDetectionsMatch(detections, JPEG_REF_DETECTIONS);
   });
 
-  // Actual confidences: 2 plates (~0.84, ~0.80); persons ranging from ~0.81 down to ~0.18.
-  // At 0.10 all 16 detections pass; at 0.80 only the two plates and the top person pass.
-  test('minConfidence=0.10 shows all 16 detections', async ({ page }) => {
+  // Actual confidences: 2 plates (~0.88, ~0.86); persons ranging from ~0.83 down to ~0.06.
+  // At 0.10 18 of the 21 detections pass; at 0.80 only the two plates and the top
+  // two persons pass.
+  test('minConfidence=0.10 shows all 18 detections', async ({ page }) => {
     await loadFile(page, path.join(EXAMPLES, 'jpeg.jpg'));
     await waitForCanvas(page);
     await waitForDetections(page);
     await page.evaluate(() => (window as any).__setMinConfidence(0.1));
     const detections = await waitForDetections(page);
-    expect(detections.length).toBe(16);
+    expect(detections.length).toBe(18);
   });
 
-  test('minConfidence=0.80 shows 3 detections', async ({ page }) => {
+  test('minConfidence=0.80 shows 4 detections', async ({ page }) => {
     await loadFile(page, path.join(EXAMPLES, 'jpeg.jpg'));
     await waitForCanvas(page);
     await waitForDetections(page);
     await page.evaluate(() => (window as any).__setMinConfidence(0.8));
     const detections = await waitForDetections(page);
-    expect(detections.length).toBe(3);
+    expect(detections.length).toBe(4);
     expect(detections.every((d: any) => d.conf >= 0.8)).toBe(true);
   });
 });
@@ -2945,8 +2954,10 @@ test.describe('360° panorama seam — rendering', () => {
 test.describe('360° panorama seam — GoPro MAX2 photo (GSAD9038.36P)', () => {
   // examples/GSAD9038.36P: 7680×3840 equirectangular JPEG with GPano XMP.
   // A person stands behind the one in the yellow beanie, right on the seam.
-  // Measured identically in Chromium and Firefox with detect_n_2026_08.
-  const SEAM_PERSON = { x: 7620, y: 1679, w: 120, h: 127, conf_min: 0.34 };
+  // Measured identically in Chromium and Firefox with detect_n_2026_11, which
+  // scores this box far lower than its predecessor did (0.13 vs 0.37) while
+  // placing it within a few pixels of the same spot.
+  const SEAM_PERSON = { x: 7627, y: 1672, w: 105, h: 119, conf_min: 0.10 };
   const BOX_TOL = 5;
 
   test('a person on the seam is one box across it, and the blur shows no seam', async ({ page }) => {

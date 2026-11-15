@@ -42,7 +42,7 @@ blurweb4/
 │   ├── imageExporter.ts  canvas.toBlob → JPEG download
 │   └── batchExporter.ts  sequential multi-file export with progress callbacks
 ├── models/
-│   └── detect_n_2026_08.onnx   YOLOv5n model (~9 MB), labels: plate, person
+│   └── detect_n_2026_11.onnx   YOLOv5n model (~9 MB), labels: plate, person
 ├── vendor/
 │   ├── libav-hevc/       pre-built libav.js hevc-aac WASM variant (not bundled by esbuild)
 │   │   ├── libav-6.8.8.0-hevc-aac.wasm.mjs   ES module wrapper (~260 KB)
@@ -482,7 +482,7 @@ it (a memory-capped renderer, or a real iOS device).
 
 ## YOLOv5 object detection (src/detector.ts + src/detector.worker.ts)
 
-Model: `models/detect_n_2026_08.onnx` (9 MB) or `detect_x` (178 MB), labels: `plate`, `person`.
+Model: `models/detect_n_2026_11.onnx` (9 MB) or `detect_x` (178 MB), labels: `plate`, `person`.
 Input: `[1, 3, 1280, 1280]` float32 RGB CHW tensor normalized to [0, 1].
 Output: `[1, N, 7]` — rows of `[cx, cy, w, h, obj_conf, plate_conf, person_conf]`
 in model-pixel coordinates (0..1280, 0..1280).
@@ -546,9 +546,9 @@ and `hash8` is the first 8 hex bytes of a SHA-256 over the file's first 8 KB
 **Status bar:** `.detect-status` div inside each `.canvas-wrapper`, shown at top
 with spinner while inference is pending, hidden on completion or cache hit.
 
-**Test reference detections** (from `detect_n_2026_08.onnx` on `jpeg.jpg`
+**Test reference detections** (from `detect_n_2026_11.onnx` on `jpeg.jpg`
 at display size 1429×497, Hamburg street scene with GPS EXIF):
-At the default `minConfidence` of 0.05 the model returns 17 boxes; 16 pass a 0.10
+At the default `minConfidence` of 0.05 the model returns 21 boxes; 18 pass a 0.10
 confidence floor. See `JPEG_REF_DETECTIONS` in `media.test.ts` for the full list.
 Note: `jpeg.jpg` is a different scene from the three test videos — video first-frame
 detection tests have separate reference values in `media.test.ts`.
@@ -562,7 +562,10 @@ different pixel values, shifting marginal-confidence boxes across the threshold)
 only when every measured (browser × codec) combination reports it — Chromium and
 Firefox, each decoding H.264, AV1 and H.265. `conf_min` sits 0.05 below the lowest
 confidence any combination reported, so no per-codec exclusion lists are needed.
-The video tests assert at `minConf=0.30`.
+The video tests assert at `minConf=0.30`. The list is short (6 boxes) because the
+video frame has a cluster of adjacent people where NMS merges neighbours
+differently per decoder — the same person comes back as a 13 px or a 40 px box,
+up to 24 px apart — so those boxes are excluded despite being high-confidence.
 
 Tolerance: ±5 pixels per coordinate. ONNX/WASM inference itself is deterministic;
 variance comes from decoder pixel differences, not ONNX.
@@ -570,7 +573,9 @@ variance comes from decoder pixel differences, not ONNX.
 **Recalibrating after a model swap:** replacing the `.onnx` weights invalidates these
 arrays. Regenerate them by dumping `window.__lastDetections` for `jpeg.jpg` and each
 test video in both browsers at the default config, intersecting the results within
-±5 px, and subtracting the confidence margin above.
+±5 px, and subtracting the confidence margin above. Also recalibrate the two exact
+JPEG counts (`minConfidence=0.10` / `=0.80` tests) and `SEAM_PERSON` in the
+GSAD9038.36P panorama test, which are model-dependent too.
 
 **Debug flag:** Set `window.__detectDebug = true` in the browser console before
 opening a file (with cold IDB cache) to log preprocessing params, per-channel

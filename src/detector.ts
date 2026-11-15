@@ -27,7 +27,7 @@ declare const HASH_MODEL_X: string;
 const MODEL_W = 1280;
 const MODEL_H = 1280;
 const MODEL_NAMES: Record<ModelChoice, string> = {
-  detect_n: 'detect_n_2026_08',
+  detect_n: 'detect_n_2026_11',
   detect_x: 'detect_l_2026_08',
 };
 const DETECT_X_CHUNKS = 9;
@@ -333,7 +333,7 @@ async function loadModelBuffer(
   onProgress?: (done: number, total: number) => void,
 ): Promise<string | ArrayBuffer> {
   if (model === 'detect_n') {
-    const u = new URL('../models/detect_n_2026_08.onnx', import.meta.url);
+    const u = new URL('../models/detect_n_2026_11.onnx', import.meta.url);
     u.searchParams.set('v', HASH_MODEL_N);
     return u.href;
   }
